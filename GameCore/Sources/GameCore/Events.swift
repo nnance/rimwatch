@@ -9,6 +9,8 @@ public enum GameEvent: Sendable, Equatable {
     case playerOverheated
     case playerBlinked(from: Vec2, to: Vec2)
     case shockwave(at: Vec2)
+    /// Bringing colonists home filled the shield: it will absorb the next hit.
+    case shieldCharged
     /// The shield absorbed a hit and is now empty.
     case shieldBroken
     case playerDestroyed(at: Vec2, livesLeft: Int)

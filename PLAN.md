@@ -29,29 +29,66 @@ sprites, sounds, names or screen layout.
 Tick each item when it is built and verified. Continue from the first unticked one.
 
 - [x] Step 0: plan saved here, `CLAUDE.md` written, folder renamed to `rimwatch` (2026-11-16)
-- [ ] Prerequisites done by the user (see below); needed from build step 2 onward. The project
-      moved to the user's Mac mini on 2026-11-16, which they say already meets the macOS and
-      Xcode requirements (prerequisites 1 and 2). Confirm with `xcodebuild -version` and
-      `xcrun simctl list devicetypes | grep -i duo`, then do prerequisites 3 to 6 there. Run
-      `swift test` in `GameCore/` first to confirm the code arrived intact (expect 63 passing).
+- [x] Prerequisites (2026-11-16): macOS 26.6.2, Xcode 27.2, `xcode-select` on Xcode, the `xcode`
+      MCP server connected. The Duo simulator needs its own runtime: the ordinary iOS 27.2 runtime
+      (24B8117) refuses the Duo, and build 24B91016s (installed with
+      `xcodebuild -downloadPlatform iOS -buildVersion 24B91016s`) is restricted to it. Device
+      "iPhone Duo", UDID 523C696B-F865-4583-88F2-7EE9DDA6A72E. Xcode 27 has no Simulator.app;
+      simulators show in DeviceHub.app.
 - [x] 1. `GameCore` package: world, player flight, projectiles, collisions, Harvester/colonist
       loop, session states, tests passing with `swift test` (2026-11-16)
-- [ ] 2. Xcode project and app shell on the Duo simulator: scene, glow renderer, terrain, camera,
-      touch. Also add `Theme.swift` and `Themes/AlienFrontier.swift` to `GameCore` here; they were
-      left out of step 1 because nothing consumes them until there is a renderer.
-- [ ] 3. Fold gate and pause menu on both displays, options, orientation switching
-- [ ] 4. Remaining enemies, wave director, Shockwave, Blink, Blackout, scoring and lives
+- [x] 2. Xcode project and app shell: scene, glow renderer, terrain, camera, touch, plus
+      `Theme.swift` and `Themes/AlienFrontier.swift` in `GameCore` (2026-11-16). One target,
+      `Rimwatch` (iPhone only, Swift 6, iOS 27.1, synchronized folder `Rimwatch/`), linking
+      `GameCore` as a local package. Independently verified on the iPhone 18 Pro simulator: clean
+      build, real multi-touch input, a full lap of the world across the seam, game over and
+      restart, no node leak over 3 minutes. Not verified: the Duo's inner display (nobody has found
+      a way to unfold the Duo simulator from the command line; it boots closed and the game lays
+      out correctly on the outer display), 120 Hz pacing (the simulator caps at 60), and the Lancer
+      telegraph, outpost ruin and Husk-forming burst on screen. DEBUG launch arguments:
+      `-autopilot` (scripted input) and `-showStats`.
+- [x] 3. Fold gate and pause menu on both displays, options, orientation switching (2026-11-16).
+      Also a minimal title screen, game-over screen, pause button, persisted options and a top-10
+      high-score table. The menu model, options, high scores and screen-choice logic (`FrontEnd`)
+      live in `GameCore` with tests. Hinge API confirmed in the iOS 27.2 SDK: `UIHingeInteraction`
+      (status unknown / closed / partiallyOpen / fullyOpen, plus angle) and
+      `UIView.reservedRegions(kind:options:)` with kinds `.occlusion` and `.division`. No API says
+      which display the app is on. Independently verified by real touch on the iPhone 18 Pro
+      simulator (with the debug hinge override) and on the Duo simulator's outer display (real
+      hinge API reports closed). DEBUG hooks: `-hinge open|closed|none`, `-resetSettings`, Darwin
+      notifications `com.rimwatch.debug.hinge.{open,closed,none}` and
+      `com.rimwatch.debug.menu.{up,down,left,right,activate,back,pause}` (post with
+      `xcrun simctl spawn <udid> notifyutil -p <name>`). Not verified: anything on the Duo's open
+      inner display (crease regions, inner layout, partial open). `UIRequiresFullScreen` is
+      deprecated since iOS 26 and builds with a warning.
+- [x] 4. Remaining enemies, wave director, Shockwave, Blink, Blackout, scoring and lives
   - [x] 4a. Game logic in `GameCore`, done ahead of order because it needs no Xcode: Sower and
         mines, Brood and Motes, Lancer, Anchor and outpost destruction, Shockwave, Blink, shield,
         Blackout and supply drops, extra lives, wave bonus, wave makeup (2026-11-16)
-  - [ ] 4b. Drawing, sound hooks and touch/gamepad buttons for all of the above in the app
-- [ ] 5. Scanner, HUD, title and game-over screens, high scores
+  - [x] 4b. On-screen feedback for every `GameEvent` and every piece of entity state (banners,
+        notices with off-screen pointers, stacked popups, tow lines, tethers, beams), button
+        states on the touch controls, and sound and haptic routing (2026-11-16). Every event maps
+        to a theme sound patch and a `HapticCue`; `Rimwatch/Feedback/FeedbackRouter.swift` has the
+        `SoundOutput` and `HapticOutput` protocols with silent players for steps 6 and 7 to
+        replace. `GameCore` gained `GameEvent.shieldCharged` and `Simulation.colonistsSaved`.
+- [x] 5. Scanner, HUD, title and game-over screens, high scores (2026-11-16). The scanner is
+      centred on the camera and sits left of the crease, with the HUD right of it; they stack in
+      portrait. `ScannerProjection`, `HUDReadout` and the high-score table logic live in
+      `GameCore` with tests. Steps 4b and 5 were independently verified together on the iPhone 18
+      Pro simulator (`-hinge open` letterbox) and the Duo simulator's outer display, by real touch
+      and autopilot. Later waves were reached only in the verifier's modified copy of the game,
+      because autopilot does not survive past wave 3. Known cosmetic leftovers: popups can sit
+      under the touch-control rings at the bottom corners, and the ship can pass over the lowest
+      popup line. DEBUG extras: `-logFeedback` logs routed sounds and haptics.
 - [ ] 6. Gamepad input (gameplay and menus), haptics
 - [ ] 7. Synthesised audio, particle polish, difficulty tuning
 
-State of `GameCore` on 2026-11-16: 63 tests pass. Every number in `Tuning.swift` is a first guess
-that has never been seen on screen, so expect to retune flight, enemy speeds and wave makeup in
-step 7. Two details differ from the design text below: the shield starts empty (two deliveries
+State of `GameCore` on 2026-11-16: 120 tests pass. Every number in `Tuning.swift` is a first guess
+that has not been tuned, so expect to retune flight, enemy speeds and wave makeup in step 7.
+Noted so far for step 7: holding Fire overheats the lance about every 3.3 s with a 1.6 s
+lockout (`heatPerShot` 0.07 against `coolingRate` 0.4); `harvesterFireRange` 500 lets Harvesters
+fire from the screen edge; `safeFallHeight` 150 means most colonists dropped from height die
+unless caught; an idle ship loses all three lives in about 25 s. Two details differ from the design text below: the shield starts empty (two deliveries
 fill it), and a supply drop comes on a 25-second timer when there are no colonists or no outposts
 left, not as something the player collects.
 

@@ -21,6 +21,8 @@ public struct Simulation: Sendable {
     /// Husks, and the app should darken the terrain and switch the scanner off.
     public internal(set) var isBlackout = false
     public internal(set) var isGameOver = false
+    /// Colonists brought home to an outpost this run.
+    public internal(set) var colonistsSaved = 0
 
     var rng: SeededRNG
     var events: [GameEvent] = []
@@ -198,7 +200,9 @@ public struct Simulation: Sendable {
             let aim = move.length > 0.3 ? move * (1 / move.length) : Vec2(player.facing, 0)
             let from = player.pos
             player.pos.x = world.wrap(player.pos.x + aim.x * tuning.blinkDistance)
-            player.pos.y += aim.y * tuning.blinkDistance
+            // Land within the flying band, so the event reports where the ship really is.
+            let blinkFloor = world.groundHeight(at: player.pos.x) + tuning.playerRadius + 2
+            player.pos.y = clamp(player.pos.y + aim.y * tuning.blinkDistance, blinkFloor, world.ceiling)
             player.blinkCooldown = tuning.blinkCooldown
             player.invulnerableTimer = max(player.invulnerableTimer, tuning.blinkInvulnerability)
             events.append(.playerBlinked(from: from, to: player.pos))
@@ -465,9 +469,14 @@ public struct Simulation: Sendable {
             colonists[index].pos = Vec2(x, world.groundHeight(at: x))
             colonists[index].state = .grounded
             colonists[index].home = outpost.id
+            let wasCharged = player.shield >= 1
             player.shield = min(1, player.shield + tuning.shieldPerDelivery)
+            colonistsSaved += 1
             addScore(points)
             events.append(.colonistDelivered(id: id, outpost: outpost.id, points: points))
+            if !wasCharged, player.shield >= 1 {
+                events.append(.shieldCharged)
+            }
         }
         player.carried.removeAll()
     }

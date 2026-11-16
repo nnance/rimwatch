@@ -32,5 +32,12 @@ and tick items as they are built and verified.
   `claude mcp add --transport stdio xcode -- xcrun mcpbridge`). The project must be open in Xcode.
   If the `xcode` tools are missing, check `claude mcp list` and the "Prerequisites" in `PLAN.md`
   before falling back to `xcodebuild`.
+- Xcode's DeviceInteraction MCP tools drop their sessions here ("Session not found"). Run and
+  screenshot with `xcrun simctl` instead, and build with `xcodebuild` when the MCP build tools
+  are not enough.
+- The iPhone Duo simulator needs its own runtime build (see "Progress" in `PLAN.md`). It boots
+  closed and cannot be unfolded from the command line, so fold behaviour is tested on an ordinary
+  iPhone simulator with the DEBUG launch argument `-hinge open|closed|none` and the Darwin
+  notifications listed in `PLAN.md`. Never use `simctl io ... screenConfig` on it.
 - The iPhone Duo SDK and simulator need Xcode 27.1 or later. The Duo API names in `PLAN.md` are
   secondhand; confirm them against the installed SDK before using them.
