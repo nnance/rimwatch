@@ -80,10 +80,24 @@ Tick each item when it is built and verified. Continue from the first unticked o
       because autopilot does not survive past wave 3. Known cosmetic leftovers: popups can sit
       under the touch-control rings at the bottom corners, and the ship can pass over the lowest
       popup line. DEBUG extras: `-logFeedback` logs routed sounds and haptics.
-- [ ] 6. Gamepad input (gameplay and menus), haptics
+- [x] 6. Gamepad input (gameplay and menus), haptics (2026-11-16). The pad logic (`PadSnapshot`,
+      `PadMapping`, `PadReader`, `MenuDirectionTracker`, `MenuCommand`) is in `GameCore` with
+      tests; `Rimwatch/Input/GamepadInput.swift` is a thin `GCController` adapter. The touch stick
+      and buttons hide while a controller is connected, and a disconnect mid-game pauses. Menus
+      ignore activation for 0.35 s after they appear (1.2 s on game over), and a button held when
+      play starts is ignored until released. A pause menu with Resume disabled selects Options by
+      default. `Rimwatch/Feedback/Haptics.swift` plays one Core Haptics pattern per `HapticCue`,
+      on the controller if it has haptics, otherwise on the phone. Independently verified with a
+      DEBUG simulated controller (Darwin notifications `com.rimwatch.debug.pad.*`, listed in
+      `Rimwatch/Input/DebugPadCommands.swift`) and by real touch. The iOS simulator reports a
+      phantom "Gamepad" controller with nothing attached, so DEBUG simulator builds ignore real
+      controllers unless launched with `-realPads`. Not verified: real controller hardware and
+      real haptics (Core Haptics does not run in the simulator). Known defect, to fix in step 7:
+      a stick or D-pad held on a diagonal makes the menu selection chatter (`Gamepad.swift`,
+      the axis choice has no hysteresis).
 - [ ] 7. Synthesised audio, particle polish, difficulty tuning
 
-State of `GameCore` on 2026-11-16: 120 tests pass. Every number in `Tuning.swift` is a first guess
+State of `GameCore` on 2026-11-16: 163 tests pass. Every number in `Tuning.swift` is a first guess
 that has not been tuned, so expect to retune flight, enemy speeds and wave makeup in step 7.
 Noted so far for step 7: holding Fire overheats the lance about every 3.3 s with a 1.6 s
 lockout (`heatPerShot` 0.07 against `coolingRate` 0.4); `harvesterFireRange` 500 lets Harvesters

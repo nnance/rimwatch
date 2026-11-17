@@ -48,7 +48,13 @@ final class GameScene: SKScene {
     private let countdown: CountdownNode
     private let madeForDuo: MadeForDuoNode
     private let feedback: FeedbackRouter
+    private let hapticRouter: HapticRouter
+    private let gamepad = GamepadInput()
+    /// A short line saying a controller connected or disconnected.
+    private let padHint = SKNode()
     private var pauseTouch: UITouch?
+    /// The front end's screen the gamepad last saw.
+    private var padScreenID = -1
 
     private final class EntitySprite: SKSpriteNode {
         var role: EntityRole = .player
@@ -121,7 +127,8 @@ final class GameScene: SKScene {
         pauseButton = PauseButton(theme: theme)
         countdown = CountdownNode(theme: theme)
         madeForDuo = MadeForDuoNode(theme: theme)
-        feedback = FeedbackRouter(theme: theme, options: options)
+        hapticRouter = HapticRouter()
+        feedback = FeedbackRouter(theme: theme, options: options, haptics: hapticRouter)
         super.init(size: size)
         backgroundColor = theme.palette.background.uiColor()
         anchorPoint = .zero
@@ -137,14 +144,18 @@ final class GameScene: SKScene {
 
         starLayer.zPosition = 0
         worldLayer.zPosition = 10
-        callouts.zPosition = 60
         scanner.zPosition = 80
         hud.zPosition = 80
         controls.zPosition = 100
+        // Popups, banners and notices draw over the ship and the touch-control rings, so they
+        // stay readable wherever they land.
+        callouts.zPosition = 105
         pauseButton.zPosition = 110
         countdown.zPosition = 120
         menuNode.zPosition = 200
         madeForDuo.zPosition = 200
+        padHint.zPosition = 210
+        addChild(padHint)
         addChild(starLayer)
         addChild(worldLayer)
         for node in [callouts, scanner, hud, controls, pauseButton, countdown, menuNode, madeForDuo] as [SKNode] {
@@ -169,25 +180,112 @@ final class GameScene: SKScene {
         layoutForSize()
         presentScreen()
         #if DEBUG
-        DebugMenuCommands.listen { [weak self] command in self?.debugMenu(command) }
+        DebugMenuCommands.listen { [weak self] command in self?.runMenuCommand(command) }
         #endif
+        gamepad.onChange = { [weak self] change in self?.gamepadChanged(change) }
+        gamepad.start()
     }
 
-    #if DEBUG
-    private func debugMenu(_ command: DebugMenuCommands.Command) {
+    // MARK: Gamepad and menu commands
+
+    /// A device-neutral menu command, from the gamepad or the debug notifications. Gives a light
+    /// haptic tick when the selection or an option moves and a tap when an item is activated.
+    private func runMenuCommand(_ command: MenuCommand) {
         guard isPoseKnown else { return }
-        switch command {
-        case .up: frontEnd.moveSelection(by: -1)
-        case .down: frontEnd.moveSelection(by: 1)
-        case .left: apply(frontEnd.adjust(by: -1))
-        case .right: apply(frontEnd.adjust(by: 1))
-        case .activate: apply(frontEnd.activate())
-        case .back: frontEnd.back()
-        case .pause: frontEnd.requestPause()
+        let wasInPlay = isInPlay
+        let result = frontEnd.handle(command)
+        apply(result.effects)
+        if !wasInPlay { menuActivationMayHaveStartedPlay() }
+        noteScreenForGamepad()
+        // Only commands that did something are confirmed; one held back by the activation grace
+        // (or with nothing to do) stays silent.
+        if result.accepted {
+            switch command {
+            case .up, .down, .left, .right, .back: feedback.menu(.tick)
+            case .activate: feedback.menu(.tap)
+            case .pause: break
+            }
         }
         presentScreen()
     }
-    #endif
+
+    private var isInPlay: Bool {
+        switch frontEnd.screen {
+        case .playing, .countdown: true
+        default: false
+        }
+    }
+
+    /// After a menu activation (Play, Resume, by pad or touch): if it started play or the
+    /// countdown, the buttons that made the choice are not also gameplay presses. Buttons
+    /// pressed later, during the countdown, are, so the end of the countdown suppresses nothing.
+    private func menuActivationMayHaveStartedPlay() {
+        if isInPlay { gamepad.reader.suppressHeldButtons() }
+    }
+
+    /// Reads the controller's presses for this frame: the menu button during play, menu commands
+    /// on a menu.
+    private func readGamepad(elapsed: Double) {
+        gamepad.poll()
+        noteScreenForGamepad()
+        guard gamepad.isConnected else { return }
+        switch frontEnd.screen {
+        case .playing, .countdown:
+            if gamepad.reader.takePausePress() { runMenuCommand(.pause) }
+        default:
+            if frontEnd.menu != nil {
+                for command in gamepad.reader.menuCommands(elapsed: elapsed) { runMenuCommand(command) }
+            } else {
+                _ = gamepad.reader.takePausePress()
+            }
+        }
+    }
+
+    /// Tells the gamepad reader when the screen changed, so presses made on the old screen are
+    /// dropped.
+    private func noteScreenForGamepad() {
+        guard frontEnd.screenID != padScreenID else { return }
+        padScreenID = frontEnd.screenID
+        gamepad.reader.screenChanged()
+    }
+
+    private func gamepadChanged(_ change: GamepadInput.Change) {
+        controls.releaseAll()
+        switch change {
+        case .connected(let name, _):
+            hapticRouter.setController(connected: true, player: gamepad.haptics)
+            NSLog("[Rimwatch pad] connected: %@", name)
+            showPadHint("Controller connected")
+        case .disconnected(let name):
+            hapticRouter.setController(connected: false, player: nil)
+            NSLog("[Rimwatch pad] disconnected: %@", name)
+            // The player has lost their controls: pause, and the touch controls come back.
+            frontEnd.controllerDisconnected()
+            showPadHint("Controller disconnected")
+        }
+        presentScreen()
+    }
+
+    private func showPadHint(_ text: String) {
+        padHint.removeAllActions()
+        padHint.removeAllChildren()
+        guard size.width > 0 else { return }
+        let landscape = size.width > size.height
+        let textSize = min(max(min(size.width, size.height) * 0.034, 11), 16)
+        let sprite = GlowText.sprite(text, style: .item(textSize), color: theme.palette.hud)
+        padHint.addChild(sprite)
+        // Low down, in the left half when open so it stays clear of the crease.
+        let leftHalf = (keepClear?.lowerBound ?? size.width / 2) - safeAreaInsets.left
+        let x = landscape ? safeAreaInsets.left + leftHalf / 2 : size.width / 2
+        padHint.position = CGPoint(x: x, y: safeAreaInsets.bottom + 14 + sprite.size.height / 2)
+        padHint.alpha = 0
+        padHint.run(.sequence([
+            .fadeIn(withDuration: 0.15),
+            .wait(forDuration: 2.2),
+            .fadeOut(withDuration: 0.5),
+            .run { [weak padHint] in padHint?.removeAllChildren() },
+        ]))
+    }
 
     /// The fold gate's verdict. The first call reveals the game.
     func setPose(_ pose: FoldPose) {
@@ -332,9 +430,10 @@ final class GameScene: SKScene {
         hud.isHidden = !inPlay
         callouts.isHidden = !inPlay
 
-        let playing = screen == .playing
-        if !playing, !controls.isHidden { controls.releaseAll() }
-        controls.isHidden = !playing
+        // The touch controls show during play, except while a controller is connected.
+        let touchControls = screen == .playing && !gamepad.isConnected
+        if !touchControls, !controls.isHidden { controls.releaseAll() }
+        controls.isHidden = !touchControls
         if case .countdown(let remaining) = screen {
             countdown.isHidden = false
             countdown.show(remaining: remaining, size: size)
@@ -465,10 +564,16 @@ final class GameScene: SKScene {
         runAutopilotMenus()
         #endif
 
+        readGamepad(elapsed: elapsed)
         let tickBefore = session.simulation.tick
         let frame = frontEnd.update(elapsed: elapsed, input: currentInput())
         // A tap that came and went between frames has now reached a simulation step.
-        if session.simulation.tick != tickBefore { controls.consumePresses() }
+        if session.simulation.tick != tickBefore {
+            controls.consumePresses()
+            gamepad.reader.consumePlayPresses()
+        }
+        // Presses made in a menu or during the countdown are not shots or Blinks.
+        if frontEnd.screen != .playing { gamepad.reader.consumePlayPresses() }
         apply(frame.effects)
         feedback.route(frame.events) { [unowned self] event in pan(for: event) }
         if showsBackdrop {
@@ -496,6 +601,7 @@ final class GameScene: SKScene {
                               fire: true, blink: t.truncatingRemainder(dividingBy: 6) < 0.1)
         }
         #endif
+        if gamepad.isConnected { return gamepad.reader.input(layout: frontEnd.options.gamepadLayout) }
         return controls.input
     }
 
@@ -1192,10 +1298,16 @@ final class GameScene: SKScene {
                 }
             } else if let choice = menuNode.touchEnded(touch, cancelled: cancelled) {
                 if !menuNode.isAdjustable(choice.index) {
+                    // Ignored just after game over or a forced pause (see acceptsTouchActivation).
+                    guard frontEnd.acceptsTouchActivation else { continue }
+                    let wasInPlay = isInPlay
                     apply(frontEnd.choose(choice.index))
+                    if !wasInPlay { menuActivationMayHaveStartedPlay() }
+                    feedback.menu(.tap)
                 } else if frontEnd.select(choice.index), choice.step != 0 {
                     // An arrow steps the option like a gamepad's left and right.
                     apply(frontEnd.adjust(by: choice.step))
+                    feedback.menu(.tick)
                 }
             }
         }

@@ -52,6 +52,34 @@ public struct FrontEnd: Sendable {
 
     private var overlay: Overlay?
 
+    /// How long a screen must have been showing before a gamepad press activates or backs out
+    /// of it, so a player still pressing fire when a menu appears doesn't choose something.
+    public static let activationGrace = 0.35
+    /// The game-over screen's longer hold-off: the summary stays up through a burst of fire
+    /// presses at the moment of death, and Continue is dimmed until it is live.
+    public static let gameOverGrace = 1.2
+
+    /// The activation grace of a screen.
+    public static func activationGrace(for screen: Screen) -> Double {
+        if case .gameOver = screen { return gameOverGrace }
+        return activationGrace
+    }
+
+    /// The current screen has shown long enough for an activation (by pad, or on game over by
+    /// touch too).
+    public var isActivationLive: Bool {
+        screenTime >= Self.activationGrace(for: screen)
+    }
+    /// Changes each time the screen changes (the countdown's ticking aside). Input sources use it
+    /// to drop presses made on the previous screen.
+    public private(set) var screenID = 0
+    /// Seconds the current screen has been showing.
+    public private(set) var screenTime = 0.0
+    /// The pause menu on show appeared without the player asking (the phone closed, the app lost
+    /// focus, the controller went away).
+    public private(set) var isUnrequestedPause = false
+    private var screenKey = ""
+
     public init(session: GameSession, pose: FoldPose, options: GameOptions = GameOptions(),
                 highScores: HighScoreTable = HighScoreTable()) {
         self.session = session
@@ -60,6 +88,7 @@ public struct FrontEnd: Sendable {
         self.highScores = highScores
         self.session.setPlayfieldAvailable(pose.isPlayfieldAvailable)
         refreshMenu()
+        screenKey = Self.key(of: screen)
     }
 
     public var screen: Screen {
@@ -82,22 +111,27 @@ public struct FrontEnd: Sendable {
 
     /// The phone was opened, closed or turned out to have no hinge. Closing pauses at once.
     public mutating func setPose(_ newPose: FoldPose) {
+        let wasInPlay = isInPlay
         pose = newPose
         session.setPlayfieldAvailable(newPose.isPlayfieldAvailable)
         refreshMenu()
+        noteScreen(unrequestedPause: wasInPlay && screen == .paused)
     }
 
     /// The app is losing focus or going to the background: pause like a fold. Coming back shows
     /// the pause menu; nothing resumes by itself.
     public mutating func appWillResignActive() {
+        let wasInPlay = isInPlay
         session.pause()
         refreshMenu()
+        noteScreen(unrequestedPause: wasInPlay)
     }
 
     /// The pause button (or a gamepad's menu button) during play or the countdown.
     public mutating func requestPause() {
         session.pause()
         refreshMenu()
+        noteScreen()
     }
 
     /// Advances the game by real time. Records the score when a run ends in game over.
@@ -112,10 +146,86 @@ public struct FrontEnd: Sendable {
         } else if wasCountingDown != isCountingDown {
             refreshMenu()
         }
+        if !noteScreen() {
+            let wasLive = isActivationLive
+            screenTime += elapsed
+            // Continue lights up when the game-over hold-off ends.
+            if !wasLive, isActivationLive, case .gameOver = screen { refreshMenu() }
+        }
         return (events, effects)
     }
 
     // MARK: Menu input
+
+    /// What a menu command did.
+    public struct CommandResult: Sendable, Equatable {
+        /// False when the command was ignored (nothing to move to, held back by the activation
+        /// grace, nothing to go back to). Only accepted commands should be confirmed with a sound
+        /// or a haptic.
+        public var accepted: Bool
+        public var effects: [Effect]
+
+        public init(accepted: Bool, effects: [Effect] = []) {
+            self.accepted = accepted
+            self.effects = effects
+        }
+
+        public static let ignored = CommandResult(accepted: false)
+    }
+
+    /// A device-neutral menu command (gamepad, debug notifications). Up and down move the
+    /// selection, left and right step an option, activate and back act once the screen's
+    /// activation grace has passed. Pause pauses during play or the countdown, and resumes from
+    /// the pause menu when Resume is allowed; elsewhere it does nothing.
+    @discardableResult
+    public mutating func handle(_ command: MenuCommand) -> CommandResult {
+        switch command {
+        case .up, .down:
+            let before = menu?.selection
+            moveSelection(by: command == .up ? -1 : 1)
+            return CommandResult(accepted: menu?.selection != before)
+        case .left, .right:
+            let before = options
+            let effects = adjust(by: command == .left ? -1 : 1)
+            return CommandResult(accepted: options != before, effects: effects)
+        case .activate:
+            guard isActivationLive, menu?.selectedItem != nil else { return .ignored }
+            return CommandResult(accepted: true, effects: activate())
+        case .back:
+            guard isActivationLive, back() else { return .ignored }
+            return CommandResult(accepted: true)
+        case .pause:
+            switch screen {
+            case .playing, .countdown:
+                requestPause()
+                return CommandResult(accepted: true)
+            case .paused where session.canResume:
+                return CommandResult(accepted: true, effects: perform(.resume))
+            default:
+                return .ignored
+            }
+        }
+    }
+
+    /// The game controller went away. During play or the countdown the player has lost their
+    /// controls, so the game pauses.
+    public mutating func controllerDisconnected() {
+        guard isInPlay else { return }
+        session.pause()
+        refreshMenu()
+        noteScreen(unrequestedPause: true)
+    }
+
+    /// Whether a touch may activate an item now. On game over, and on a pause menu the player
+    /// didn't ask for, a touch inside the screen's activation grace is ignored: the thumb was
+    /// probably still on a fire button.
+    public var acceptsTouchActivation: Bool {
+        switch screen {
+        case .gameOver: return isActivationLive
+        case .paused: return !isUnrequestedPause || isActivationLive
+        default: return true
+        }
+    }
 
     public mutating func moveSelection(by step: Int) {
         menu?.moveSelection(by: step)
@@ -143,10 +253,11 @@ public struct FrontEnd: Sendable {
     }
 
     /// A touch on item `index`: selects it and acts. `step` is -1 for a touch on an option's
-    /// down arrow. A disabled item ignores the touch.
+    /// down arrow. A disabled item ignores the touch, and so does any item while
+    /// `acceptsTouchActivation` is false.
     @discardableResult
     public mutating func choose(_ index: Int, step: Int = 1) -> [Effect] {
-        guard menu?.select(index) == true, let item = menu?.selectedItem else { return [] }
+        guard acceptsTouchActivation, menu?.select(index) == true, let item = menu?.selectedItem else { return [] }
         return perform(item.command, step: step, wrap: step > 0)
     }
 
@@ -156,6 +267,7 @@ public struct FrontEnd: Sendable {
         guard overlay != nil else { return false }
         overlay = nil
         refreshMenu()
+        noteScreen()
         return true
     }
 
@@ -191,10 +303,36 @@ public struct FrontEnd: Sendable {
             effects.append(.optionsChanged)
         }
         refreshMenu()
+        noteScreen()
         return effects
     }
 
     // MARK: Private
+
+    private var isInPlay: Bool {
+        switch screen {
+        case .playing, .countdown: true
+        default: false
+        }
+    }
+
+    private static func key(of screen: Screen) -> String {
+        if case .countdown = screen { return "countdown" }
+        return "\(screen)"
+    }
+
+    /// Restarts the screen clock when the screen changed, or when a pause was forced on the
+    /// player. Returns true if it restarted.
+    @discardableResult
+    private mutating func noteScreen(unrequestedPause: Bool = false) -> Bool {
+        let key = Self.key(of: screen)
+        guard key != screenKey || unrequestedPause else { return false }
+        screenKey = key
+        screenID &+= 1
+        screenTime = 0
+        isUnrequestedPause = unrequestedPause && screen == .paused
+        return true
+    }
 
     private var isCountingDown: Bool {
         if case .countdown = session.phase { true } else { false }
@@ -209,8 +347,10 @@ public struct FrontEnd: Sendable {
 
     /// Rebuilds the menu for the current screen. Keeps the selection when the screen is the same.
     private mutating func refreshMenu() {
+        // A screen that is only now appearing has not served its grace yet.
+        let live = Self.key(of: screen) == screenKey && isActivationLive
         guard let fresh = Self.menu(for: screen, session: session, pose: pose, options: options,
-                                    highScores: highScores, lastRank: lastRank) else {
+                                    highScores: highScores, lastRank: lastRank, gameOverLive: live) else {
             menu = nil
             return
         }
@@ -245,8 +385,9 @@ public struct FrontEnd: Sendable {
     }
 
     /// The menu each screen shows. Pure, so it can be checked on its own.
+    /// `gameOverLive` is false during the game-over hold-off, when Continue shows dimmed.
     public static func menu(for screen: Screen, session: GameSession, pose: FoldPose, options: GameOptions,
-                            highScores: HighScoreTable, lastRank: Int? = nil) -> Menu? {
+                            highScores: HighScoreTable, lastRank: Int? = nil, gameOverLive: Bool = true) -> Menu? {
         let open = pose.isPlayfieldAvailable
         switch screen {
         case .madeForDuo, .playing, .countdown:
@@ -270,7 +411,10 @@ public struct FrontEnd: Sendable {
                 MenuItem(.endGame, "End game"),
                 MenuItem(.options, "Options"),
                 MenuItem(.highScores, "High scores"),
-            ])
+            ],
+            // Never default to a destructive item: with Resume unavailable, Options is selected,
+            // so a player still pressing fire as the phone closes doesn't throw the run away.
+            preferredDefaults: [.resume, .options])
 
         case .gameOver(let score):
             let sim = session.simulation
@@ -281,7 +425,7 @@ public struct FrontEnd: Sendable {
             ]
             if let lastRank { lines.append("New high score: #\(lastRank + 1)") }
             return Menu(kind: .gameOver, heading: "Game over", lines: lines, items: [
-                MenuItem(.proceed, "Continue"),
+                MenuItem(.proceed, "Continue", isEnabled: gameOverLive),
             ])
 
         case .options:

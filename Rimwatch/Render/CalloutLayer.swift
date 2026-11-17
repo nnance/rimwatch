@@ -22,6 +22,8 @@ final class CalloutLayer: SKNode {
         let followID: Int?
         /// Half the text's width, to keep it inside the playfield's sides.
         let halfWidth: CGFloat
+        /// How long it rises and shows.
+        let life: TimeInterval
     }
 
     var world: World
@@ -104,6 +106,16 @@ final class CalloutLayer: SKNode {
         let sprite = GlowText.sprite(text, style: .item(textSize * scale), color: color)
         // Measured before the pop-in scale below, which `size` would include.
         let textWidth = sprite.size.width - 2 * GlowText.padding
+        // A dark silhouette of the text behind it, so it reads over the ship's glow and the
+        // touch-control rings it may sit on.
+        let backing = SKSpriteNode(texture: sprite.texture, size: sprite.size)
+        backing.color = .black
+        backing.colorBlendFactor = 1
+        backing.blendMode = .alpha
+        backing.alpha = 0.8
+        backing.setScale(1.06)
+        backing.zPosition = -0.1
+        sprite.addChild(backing)
         let container = SKNode()
         container.addChild(sprite)
         let rise = SKAction.moveBy(x: 0, y: textSize * Self.riseLines, duration: life)
@@ -115,8 +127,8 @@ final class CalloutLayer: SKNode {
         container.run(.sequence([.wait(forDuration: life + 0.05), .removeFromParent()]))
         let base = anchor(worldX: pos.x, worldY: pos.y)
         let popup = Popup(node: container, worldX: pos.x, worldY: pos.y,
-                          lift: freeLift(at: base, worldX: pos.x, width: textWidth), born: clock, followID: followID,
-                          halfWidth: textWidth * 1.05 / 2)
+                          lift: freeLift(at: base, worldX: pos.x, width: textWidth, life: life), born: clock,
+                          followID: followID, halfWidth: textWidth * 1.05 / 2, life: life)
         popups.append(popup)
         place(popup)
     }
@@ -147,27 +159,52 @@ final class CalloutLayer: SKNode {
         return CGPoint(x: size.width / 2 + CGFloat(dx) * pointsPerUnit, y: y)
     }
 
-    /// The first stacking offset whose spot is not taken by a popup that appeared there recently.
-    /// Stacks go upward first; a slot is only used below the anchor when there is no room above,
-    /// and never below the local ground line.
-    private func freeLift(at base: CGPoint, worldX: Double, width: CGFloat) -> CGFloat {
-        let recent = popups.filter { $0.node.parent != nil && clock - $0.born < 0.8 }
-        let taken = recent.map { popup -> (x: CGFloat, y: CGFloat, half: CGFloat) in
+    /// How far a popup's text has risen `age` seconds into a `life`-second rise (the rise eases
+    /// out, like the action that moves it).
+    private func rise(age: TimeInterval, life: TimeInterval) -> CGFloat {
+        let u = CGFloat(min(max(age / life, 0), 1))
+        return textSize * Self.riseLines * (1 - (1 - u) * (1 - u))
+    }
+
+    /// The first stacking offset whose spot stays clear of every popup still showing nearby,
+    /// for as long as both are visible. Both rise, the older one slowing as the new one starts,
+    /// so the check runs over their whole shared time, not just the moment of appearing. Stacks
+    /// go upward first; a slot is only used below the anchor when there is no room above, and
+    /// never below the local ground line.
+    private func freeLift(at base: CGPoint, worldX: Double, width: CGFloat, life: TimeInterval) -> CGFloat {
+        let showing = popups.filter { $0.node.parent != nil && clock - $0.born < $0.life * Self.visibleFraction }
+        let taken = showing.map { popup -> (x: CGFloat, y: CGFloat, half: CGFloat, age: TimeInterval,
+                                            life: TimeInterval) in
             let p = anchor(worldX: popup.worldX, worldY: popup.worldY)
-            return (clampedX(p.x, halfWidth: popup.halfWidth), p.y + popup.lift, popup.halfWidth)
+            return (clampedX(p.x, halfWidth: popup.halfWidth), p.y + popup.lift, popup.halfWidth,
+                    clock - popup.born, popup.life)
         }
         let half = width * 1.05 / 2
         let x = clampedX(base.x, halfWidth: half)
-        let candidates: [CGFloat] = [0, 1, 2, 3, 4, -1, -2].map { $0 * slot }
+        let candidates: [CGFloat] = [0, 1, 2, 3, 4, 5, -1, -2].map { $0 * slot }
         let lowest = groundLimit(at: worldX)
+        let samples = stride(from: 0.0, through: life * Self.visibleFraction, by: 0.05).map { $0 }
+        func clashes(_ y: CGFloat) -> Bool {
+            taken.contains { other in
+                guard abs(other.x - x) < other.half + half + 6 else { return false }
+                return samples.contains { t in
+                    guard other.age + t < other.life * Self.visibleFraction else { return false }
+                    let mine = y + rise(age: t, life: life)
+                    let theirs = other.y + rise(age: other.age + t, life: other.life)
+                    return abs(mine - theirs) < slot * 0.95
+                }
+            }
+        }
         for lift in candidates {
             let y = base.y + lift
             guard y >= lowest - 0.5, y <= anchorRange.upperBound + 0.5 else { continue }
-            let clash = taken.contains { abs($0.x - x) < $0.half + half + 6 && abs($0.y - y) < slot * 0.95 }
-            if !clash { return lift }
+            if !clashes(y) { return lift }
         }
         return 0
     }
+
+    /// The part of a popup's life it is clearly visible (it fades out after that).
+    private static let visibleFraction = 0.8
 
     /// A large announcement with an optional second line. Replaces any banner already showing.
     func banner(_ title: String, subtitle: String? = nil, color: RGB, subtitleColor: RGB? = nil,

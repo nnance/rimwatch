@@ -9,10 +9,12 @@ protocol SoundOutput: AnyObject {
     func play(_ patch: SoundPatch, volume: Double, pan: Double)
 }
 
-/// Plays a haptic cue. Step 6 provides Core Haptics; until then `SilentHapticOutput` does nothing.
+/// Plays a haptic cue. `HapticRouter` plays it with Core Haptics on a controller or the phone;
+/// `SilentHapticOutput` does nothing. Returns where the cue went, for the debug log.
 @MainActor
 protocol HapticOutput: AnyObject {
-    func play(_ cue: HapticCue)
+    @discardableResult
+    func play(_ cue: HapticCue) -> HapticRoute
 }
 
 @MainActor
@@ -22,7 +24,7 @@ final class SilentSoundOutput: SoundOutput {
 
 @MainActor
 final class SilentHapticOutput: HapticOutput {
-    func play(_ cue: HapticCue) {}
+    func play(_ cue: HapticCue) -> HapticRoute { HapticRoute(device: "none", note: "silent") }
 }
 
 /// Routes simulation events to sound and haptics: the theme names the sound for each event,
@@ -60,12 +62,38 @@ final class FeedbackRouter {
                 }
                 #endif
             }
-            if options.hapticsEnabled, let cue = HapticCue.cue(for: event) {
-                haptics.play(cue)
-                #if DEBUG
-                if Self.logs { NSLog("[Rimwatch feedback] haptic %@", cue.rawValue) }
-                #endif
-            }
+            if let cue = HapticCue.cue(for: event) { feel(cue, for: "\(event)") }
         }
     }
+
+    /// A haptic for the menus: a tick when the selection or an option moves, a tap on activation.
+    func menu(_ cue: HapticCue) {
+        feel(cue, for: "menu")
+    }
+
+    private func feel(_ cue: HapticCue, for reason: @autoclosure () -> String) {
+        guard options.hapticsEnabled else {
+            #if DEBUG
+            if Self.logs {
+                NSLog("[Rimwatch feedback] haptic %@ -> none (option off) [%@]", cue.rawValue, Self.short(reason()))
+            }
+            #endif
+            return
+        }
+        let route = haptics.play(cue)
+        #if DEBUG
+        if Self.logs {
+            NSLog("[Rimwatch feedback] haptic %@ -> %@ [%@]", cue.rawValue, route.description, Self.short(reason()))
+        }
+        #else
+        _ = route
+        #endif
+    }
+
+    #if DEBUG
+    /// An event's case name without its payload.
+    private static func short(_ text: String) -> String {
+        String(text.prefix { $0 != "(" })
+    }
+    #endif
 }

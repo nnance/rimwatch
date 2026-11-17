@@ -206,7 +206,8 @@ import Testing
         #expect(commands(fe) == [.resume, .startOver, .endGame, .options, .highScores])
         #expect(item(fe, .resume)?.isEnabled == false)
         #expect(item(fe, .resume)?.label == "Open to resume")
-        #expect(fe.menu?.selectedItem?.command == .startOver)
+        // Not Start over: a destructive item is never the default.
+        #expect(fe.menu?.selectedItem?.command == .options)
 
         // Activating Resume by touch does nothing while closed.
         fe.choose(0)
@@ -282,6 +283,12 @@ import Testing
         #expect(fe.menu?.lines.contains("New high score: #1") == true)
         _ = fe.update(elapsed: 0.05, input: idle)
         #expect(fe.highScores.entries.count == 1)
+        // Continue is dimmed through the game-over hold-off.
+        #expect(fe.menu?.items.first?.isEnabled == false)
+        #expect(fe.activate().isEmpty)
+        #expect(fe.screen == .gameOver(score: 250))
+        _ = fe.update(elapsed: FrontEnd.gameOverGrace, input: idle)
+        #expect(fe.menu?.selectedItem?.command == .proceed)
 
         #expect(fe.activate().isEmpty)
         #expect(fe.screen == .title)

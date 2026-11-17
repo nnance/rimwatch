@@ -1,5 +1,5 @@
-/// A physical cue for an event. Step 6 turns these into Core Haptics patterns; until then the app
-/// routes them to a player that does nothing.
+/// A physical cue for an event. The app turns each into a Core Haptics pattern, on the phone or on
+/// a game controller.
 public enum HapticCue: String, Sendable, CaseIterable {
     /// The lightest tick, for things that happen often.
     case tick
@@ -9,8 +9,10 @@ public enum HapticCue: String, Sendable, CaseIterable {
     case doubleTap
     /// A sharp knock: a warning (overheat, Lancer wind-up, outpost under attack).
     case warning
-    /// A heavy thud: the shield breaking, a Shockwave.
+    /// A heavy thud: the shield breaking, an outpost lost.
     case impact
+    /// A strong blast that sweeps outward and fades: a Shockwave.
+    case sweep
     /// A long rumble: losing the ship, Blackout.
     case rumble
 
@@ -31,7 +33,9 @@ public enum HapticCue: String, Sendable, CaseIterable {
         case .playerOverheated, .lancerTelegraph, .anchorLanded, .colonistGrabbed, .colonistDropped,
              .huskFormed:
             .warning
-        case .shockwave, .shieldBroken, .lancerCharged, .colonistLost, .outpostDestroyed:
+        case .shockwave:
+            .sweep
+        case .shieldBroken, .lancerCharged, .colonistLost, .outpostDestroyed:
             .impact
         case .playerDestroyed, .blackoutBegan, .gameOver:
             .rumble

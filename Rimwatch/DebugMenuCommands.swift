@@ -1,17 +1,17 @@
 #if DEBUG
 import Foundation
+import GameCore
 
-/// DEBUG only: drives menus from the command line through the same device-neutral calls a gamepad
-/// will use, so menu flows can be checked on a simulator without synthesised touches:
+/// DEBUG only: drives menus from the command line through the same device-neutral `MenuCommand`
+/// path the gamepad uses, so menu flows can be checked on a simulator without synthesised touches:
 ///
 ///     xcrun simctl spawn <udid> notifyutil -p com.rimwatch.debug.menu.down
 ///
-/// Commands: up, down, left, right, activate, back, pause.
+/// Commands: up, down, left, right, activate, back, pause (pause also resumes from the pause menu
+/// when Resume is allowed, like a gamepad's menu button).
 @MainActor
 enum DebugMenuCommands {
-    enum Command: String, CaseIterable {
-        case up, down, left, right, activate, back, pause
-    }
+    typealias Command = MenuCommand
 
     static let prefix = "com.rimwatch.debug.menu."
     private static var handler: ((Command) -> Void)?

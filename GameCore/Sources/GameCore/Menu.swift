@@ -15,14 +15,26 @@ public struct Menu: Sendable, Equatable {
     public private(set) var items: [MenuItem]
     /// Index of the selected item. Always an enabled item, or nil when none is enabled.
     public private(set) var selection: Int?
+    /// Commands to select first when the menu opens or its enabled items change, best first.
+    /// When none of them is enabled the first enabled item is selected.
+    public let preferredDefaults: [MenuItem.Command]
 
-    public init(kind: Kind, heading: String, lines: [String] = [], table: MenuTable? = nil, items: [MenuItem]) {
+    public init(kind: Kind, heading: String, lines: [String] = [], table: MenuTable? = nil, items: [MenuItem],
+                preferredDefaults: [MenuItem.Command] = []) {
         self.kind = kind
         self.heading = heading
         self.lines = lines
         self.table = table
         self.items = items
-        selection = items.firstIndex { $0.isEnabled }
+        self.preferredDefaults = preferredDefaults
+        selection = Self.defaultSelection(items, preferredDefaults)
+    }
+
+    private static func defaultSelection(_ items: [MenuItem], _ preferred: [MenuItem.Command]) -> Int? {
+        for command in preferred {
+            if let index = items.firstIndex(where: { $0.command == command && $0.isEnabled }) { return index }
+        }
+        return items.firstIndex { $0.isEnabled }
     }
 
     public var selectedItem: MenuItem? {
@@ -69,7 +81,7 @@ public struct Menu: Sendable, Equatable {
            let index = items.firstIndex(where: { $0.command == previous && $0.isEnabled }) {
             selection = index
         } else {
-            selection = items.firstIndex { $0.isEnabled }
+            selection = Self.defaultSelection(items, preferredDefaults)
         }
     }
 }
