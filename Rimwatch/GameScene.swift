@@ -48,7 +48,29 @@ final class GameScene: SKScene {
     private let countdown: CountdownNode
     private let madeForDuo: MadeForDuoNode
     private let feedback: FeedbackRouter
+    private let synth: Synth
     private let hapticRouter: HapticRouter
+    /// The input used for the last frame, for the engine exhaust.
+    private var lastInput = InputState()
+    /// Screen shake: current strength in points, decaying. Off with Reduce Motion.
+    private var shake: CGFloat = 0
+    /// 0 lit ... 1 Blackout, gliding so the lights go down and come back rather than switch.
+    private var blackoutMix = 0.0
+    /// A bright line that sweeps across the playfield when a wave starts or the power returns.
+    private let sweep = SKSpriteNode()
+    /// Covers the band above the playfield so effects never show behind the scanner and HUD.
+    private let bandMask = SKSpriteNode(color: .black, size: .zero)
+    /// The next run's ground, drawn ahead of time, and the one being drawn now.
+    private var preparedTerrain: (seed: UInt64, art: PreparedTerrain)?
+    /// Until when play-only layers are drawn faintly to warm the renderer (see warmRenderer).
+    private var warmUntil: TimeInterval = 0
+    /// Layers dimmed for the warm-up, with the alpha each had before.
+    private var warmDimmed: [ObjectIdentifier: CGFloat] = [:]
+    /// Set when the display scale changed: glyphs and text are rendered again before play.
+    private var needsPrewarm = false
+    private var preparingTerrain: (seed: UInt64, ppu: CGFloat)?
+    /// Decides calm or tension (or Blackout) from the state of play.
+    private var moodDirector = MusicMoodDirector()
     private let gamepad = GamepadInput()
     /// A short line saying a controller connected or disconnected.
     private let padHint = SKNode()
@@ -74,6 +96,10 @@ final class GameScene: SKScene {
     private var links: [String: SKSpriteNode] = [:]
     /// Which Sower laid each mine (the simulation doesn't need to know; the tether shows it).
     private var mineOwners: [Int: Int] = [:]
+    /// Colonists being pulled in after a catch: where the catch happened and when.
+    private var catchBeams: [Int: (from: Vec2, at: TimeInterval)] = [:]
+    /// How long a caught colonist takes to be drawn in to the ship.
+    private static let catchPull = 0.35
     /// Where carried colonists are drawn: trailing behind the ship, easing into place.
     private var trailPositions: [Int: Vec2] = [:]
     private let multiplierLabel = SKSpriteNode()
@@ -81,6 +107,8 @@ final class GameScene: SKScene {
     private var lastDrillSpark: [Int: TimeInterval] = [:]
     /// This frame's enemy positions by id, for links and for popups that follow an enemy.
     private var enemyPositions: [Int: Vec2] = [:]
+    /// Last frame's enemy velocities, so debris can keep an enemy's heading.
+    private var enemyVelocities: [Int: Vec2] = [:]
 
     private var playerNode: EntitySprite?
     private var enemyNodes: [Int: EntitySprite] = [:]
@@ -88,7 +116,12 @@ final class GameScene: SKScene {
     private var projectileNodes: [Int: EntitySprite] = [:]
     private var decorNodes: [(sprite: SKSpriteNode, kind: EntityRole, phase: Double, speed: Double)] = []
 
-    private var stars: [(u: CGFloat, y: CGFloat, node: SKSpriteNode)] = []
+    /// Stars at three depths: `depth` is how fast each drifts against the camera.
+    private var stars: [(u: CGFloat, y: CGFloat, depth: CGFloat, node: SKSpriteNode)] = []
+    /// A faint far-off mountain line behind the terrain, two copies side by side so it wraps.
+    private var ridges: [SKShapeNode] = []
+    private var ridgeSpan: CGFloat = 1
+    private static let ridgeDepth: CGFloat = 0.3
     private var starScroll: CGFloat = 0
 
     private var pointsPerUnit: CGFloat = 0
@@ -128,7 +161,8 @@ final class GameScene: SKScene {
         countdown = CountdownNode(theme: theme)
         madeForDuo = MadeForDuoNode(theme: theme)
         hapticRouter = HapticRouter()
-        feedback = FeedbackRouter(theme: theme, options: options, haptics: hapticRouter)
+        synth = Synth(theme: theme, options: options)
+        feedback = FeedbackRouter(theme: theme, options: options, sound: synth, haptics: hapticRouter)
         super.init(size: size)
         backgroundColor = theme.palette.background.uiColor()
         anchorPoint = .zero
@@ -157,6 +191,13 @@ final class GameScene: SKScene {
         padHint.zPosition = 210
         addChild(padHint)
         addChild(starLayer)
+        sweep.zPosition = 30
+        sweep.blendMode = .add
+        sweep.isHidden = true
+        addChild(sweep)
+        bandMask.zPosition = 70
+        bandMask.anchorPoint = .zero
+        addChild(bandMask)
         addChild(worldLayer)
         for node in [callouts, scanner, hud, controls, pauseButton, countdown, menuNode, madeForDuo] as [SKNode] {
             node.isHidden = true
@@ -201,8 +242,10 @@ final class GameScene: SKScene {
         // (or with nothing to do) stays silent.
         if result.accepted {
             switch command {
-            case .up, .down, .left, .right, .back: feedback.menu(.tick)
-            case .activate: feedback.menu(.tap)
+            case .up, .down: feedback.menu(.tick, sound: .move)
+            case .left, .right: feedback.menu(.tick, sound: .change)
+            case .back: feedback.menu(.tick, sound: .back)
+            case .activate: feedback.menu(.tap, sound: .activate)
             case .pause: break
             }
         }
@@ -254,11 +297,11 @@ final class GameScene: SKScene {
         switch change {
         case .connected(let name, _):
             hapticRouter.setController(connected: true, player: gamepad.haptics)
-            NSLog("[Rimwatch pad] connected: %@", name)
+            debugLog("[Rimwatch pad] connected: \(name)")
             showPadHint("Controller connected")
         case .disconnected(let name):
             hapticRouter.setController(connected: false, player: nil)
-            NSLog("[Rimwatch pad] disconnected: %@", name)
+            debugLog("[Rimwatch pad] disconnected: \(name)")
             // The player has lost their controls: pause, and the touch controls come back.
             frontEnd.controllerDisconnected()
             showPadHint("Controller disconnected")
@@ -350,10 +393,15 @@ final class GameScene: SKScene {
             pointsPerUnit = ppu
             factory.clear()
             terrain.rebuild(pointsPerUnit: ppu, screenScale: view?.contentScaleFactor ?? 2)
+            preparedTerrain = nil
+            prepareNextTerrain()
             effects.setPointsPerUnit(ppu)
             removeAllEntityNodes()
             buildDecor()
+            needsPrewarm = true
         }
+        bandMask.position = CGPoint(x: 0, y: size.height - bandHeight)
+        bandMask.size = CGSize(width: size.width, height: bandHeight)
         controls.layout(size: size, safeArea: safeAreaInsets, keepClear: keepClear)
         pauseButton.layout(size: size, safeArea: safeAreaInsets, topY: size.height - bandHeight)
         scanner.layout(in: layout.scanner, world: world, worldID: runID)
@@ -364,7 +412,12 @@ final class GameScene: SKScene {
         for star in stars {
             star.node.position.y = star.y * size.height
         }
+        buildRidges(playHeight: size.height - bandHeight)
         placeStars()
+        if needsPrewarm {
+            needsPrewarm = false
+            prewarmGlyphs()
+        }
         presentScreen()
     }
 
@@ -421,6 +474,7 @@ final class GameScene: SKScene {
                 worldLayer.isHidden = true
             }
         }
+        bandMask.isHidden = worldLayer.isHidden || showsBackdrop
         entityLayer.isHidden = showsBackdrop
         linkLayer.isHidden = showsBackdrop
         effects.isHidden = showsBackdrop
@@ -450,6 +504,8 @@ final class GameScene: SKScene {
         madeForDuo.isHidden = screen != .madeForDuo
         if screen == .madeForDuo { madeForDuo.layout(size: size) }
 
+        // The far mountains step back behind a menu.
+        for ridge in ridges { ridge.alpha = frontEnd.menu == nil ? 1 : 0.35 }
         if let menu = frontEnd.menu {
             menuNode.isHidden = false
             menuNode.show(menu, size: size, safeArea: safeAreaInsets, keepClear: keepClear)
@@ -457,6 +513,7 @@ final class GameScene: SKScene {
             menuNode.isHidden = true
             menuNode.hide()
         }
+        applyWarmUp()
     }
 
     private func apply(_ effects: [FrontEnd.Effect]) {
@@ -477,6 +534,13 @@ final class GameScene: SKScene {
     /// A new simulation: new terrain (each run has its own seed), no leftover nodes.
     private func startRunVisuals() {
         runID += 1
+        moodDirector.reset()
+        #if DEBUG
+        runStartedAt = clock
+        #endif
+        #if DEBUG
+        autopilotBot = Autopilot(skill: Self.autopilotSkill, seed: UInt64(runID))
+        #endif
         replaceTerrain()
         self.effects.removeAll()
         callouts.removeAll()
@@ -495,19 +559,222 @@ final class GameScene: SKScene {
         worldLayer.addChild(terrain)
         effects.world = world
         if pointsPerUnit > 0 {
-            terrain.rebuild(pointsPerUnit: pointsPerUnit, screenScale: view?.contentScaleFactor ?? 2)
+            // Normally the ground for this run was drawn in the background while the last one
+            // was on (see prepareNextTerrain); drawing it here would stall the first frames.
+            let ready = preparedTerrain.flatMap { $0.seed == session.runSeed ? $0.art : nil }
+            terrain.rebuild(pointsPerUnit: pointsPerUnit, screenScale: view?.contentScaleFactor ?? 2, prepared: ready)
+            preparedTerrain = nil
+        }
+        prepareNextTerrain()
+    }
+
+    /// Renders every entity glyph (and the tinted ones) now, while a menu is up, so the first
+    /// enemy, falling colonist or Lancer wind-up of a run doesn't stall a frame drawing it.
+    private func prewarmGlyphs() {
+        let palette = theme.palette
+        for role in EntityRole.allCases {
+            _ = factory.glyph(for: role, pointsPerUnit: pointsPerUnit)
+            _ = factory.glyph(for: role, tint: palette.warning, pointsPerUnit: pointsPerUnit)
+        }
+        _ = factory.glyph(for: .colonist, tint: palette.falling, pointsPerUnit: pointsPerUnit)
+        // The first banner and popup also pay for loading the font.
+        _ = GlowText.texture("WAVE 1", style: .heading(24), color: palette.hud)
+        callouts.prewarm(colors: [palette.falling, palette.warning, palette.hud]
+            + EnemyKind.allCases.map { color(of: .enemy($0)).lightened(0.35) })
+        // The popups every game shows early on, in the sizes and colours they use.
+        let colonist = color(of: .colonist)
+        callouts.prewarm(popups: [
+            ("SAVED", 0.9, colonist), ("+500", 1.25, palette.falling), ("+1,000", 1.25, palette.falling),
+            ("2 SAVED ×2", 0.9, colonist), ("+250", 0.9, palette.falling), ("CATCH!", 0.8, palette.falling),
+            ("HELP!", 0.8, palette.warning), ("LOST", 0.8, palette.warning), ("OVERHEAT", 0.9, palette.warning),
+            ("SHIELD READY", 0.95, palette.shield), ("SHIELD DOWN", 0.95, palette.warning), ("1UP", 1, palette.falling),
+            ("HUSK", 0.9, color(of: .enemy(.husk))), ("!", 1.4, palette.warning),
+        ])
+        // Banners and the game-over screen that appear mid-play.
+        callouts.prewarmBanner("BLACKOUT", subtitle: "Every colonist lost. Hold out for supplies.",
+                               color: palette.warning)
+        callouts.prewarmBanner("POWER RESTORED", subtitle: "Supplies landed", color: color(of: .outpost))
+        callouts.prewarmBanner("WAVE 1 CLEAR", subtitle: "Survivor bonus +1,000", color: palette.hud,
+                               subtitleColor: palette.falling)
+        callouts.prewarmBanner("WAVE 1", subtitle: "10 colonists to protect", color: theme.terrain.ridge)
+        let menus = MenuNode(theme: theme)
+        for live in [false, true] {
+            if let menu = FrontEnd.menu(for: .gameOver(score: 0), session: session, pose: .open,
+                                        options: frontEnd.options, highScores: frontEnd.highScores,
+                                        gameOverLive: live) {
+                menus.show(menu, size: size, safeArea: safeAreaInsets, keepClear: keepClear)
+            }
+        }
+        // The HUD and scanner make their textures on first update; do it now, hidden.
+        let sim = session.simulation
+        hud.update(HUDReadout(sim), time: clock)
+        scanner.update(sim, cameraX: cameraX, halfWidth: halfWidth, time: clock)
+        // Made is not uploaded: send them all to the GPU now, so their first draw is free.
+        SKTexture.preload(factory.cachedTextures + GlowText.cachedTextures) {}
+        warmRenderer()
+    }
+
+    /// SpriteKit builds a render pipeline the first time it draws each kind of node (tinted
+    /// additive sprites, alpha-blended plates, stroked shapes...), and hidden nodes never do.
+    /// Draw one of each, almost invisibly, for a moment while a menu is up, so the first frame of
+    /// play doesn't pay for them.
+    private func warmRenderer() {
+        let warm = SKNode()
+        warm.alpha = 0.02
+        warm.zPosition = -1
+        warm.position = CGPoint(x: 4, y: 4)
+        let palette = theme.palette
+        var sprites: [SKNode] = []
+        for (role, blend) in [(EntityRole.player, SKBlendMode.add), (.colonist, .alpha), (.enemy(.harvester), .add)] {
+            let sprite = SKSpriteNode()
+            factory.apply(factory.glyph(for: role, pointsPerUnit: pointsPerUnit), to: sprite)
+            sprite.blendMode = blend
+            sprites.append(sprite)
+        }
+        let tinted = SKSpriteNode()
+        factory.apply(factory.glyph(for: .player, pointsPerUnit: pointsPerUnit), to: tinted)
+        tinted.blendMode = .add
+        tinted.color = palette.shield.uiColor()
+        tinted.colorBlendFactor = 1
+        sprites.append(tinted)
+        let flat = SKSpriteNode(color: palette.warning.uiColor(), size: CGSize(width: 4, height: 4))
+        flat.blendMode = .add
+        sprites.append(flat)
+        let plate = SKSpriteNode(color: .black, size: CGSize(width: 4, height: 4))
+        plate.blendMode = .alpha
+        sprites.append(plate)
+        let ring = SKShapeNode(circleOfRadius: 3)
+        ring.strokeColor = palette.shield.uiColor()
+        ring.fillColor = .clear
+        ring.blendMode = .add
+        sprites.append(ring)
+        let text = GlowText.sprite("+150", style: .item(12), color: palette.falling)
+        sprites.append(text)
+        for node in sprites {
+            node.setScale(0.2)
+            warm.addChild(node)
+        }
+        addChild(warm)
+        warm.run(.sequence([.wait(forDuration: 0.5), .removeFromParent()]))
+        // And the play-only layers (HUD, scanner, controls), which draw shapes and textures of
+        // their own: presentScreen shows them faintly until this time.
+        warmUntil = clock + 0.4
+    }
+
+    /// While warming, play-only layers that would be hidden are drawn at a trace of alpha.
+    /// `presentScreen` decides each layer's real visibility first; this only ever dims a layer it
+    /// would have hidden, and remembers the alpha it had, so the layer is put back exactly as it
+    /// was the moment warming ends (never by comparing alphas, which SpriteKit rounds).
+    private func applyWarmUp() {
+        let warming = clock < warmUntil
+        for node in [scanner, hud, controls, pauseButton] as [SKNode] {
+            let key = ObjectIdentifier(node)
+            if warming, node.isHidden {
+                if warmDimmed[key] == nil { warmDimmed[key] = node.alpha }
+                node.isHidden = false
+                node.alpha = Self.warmAlpha
+            } else if let original = warmDimmed.removeValue(forKey: key) {
+                // Warming is over, or the layer is really wanted now: back to its own alpha,
+                // with the visibility presentScreen just gave it.
+                node.alpha = original
+            }
+        }
+    }
+
+    private static let warmAlpha: CGFloat = 0.02
+
+    #if DEBUG
+    private var finishedAt: CFTimeInterval = 0
+    override func didFinishUpdate() {
+        finishedAt = CACurrentMediaTime()
+    }
+    #endif
+
+    /// Draws the ground for the next run in the background. The next run's seed is known in
+    /// advance, so starting it only swaps in textures that are already made and uploaded.
+    private func prepareNextTerrain() {
+        guard pointsPerUnit > 0 else { return }
+        let seed = session.nextRunSeed
+        let ppu = pointsPerUnit
+        if let ready = preparedTerrain, ready.seed == seed, ready.art.pointsPerUnit == ppu { return }
+        if let pending = preparingTerrain, pending.seed == seed, pending.ppu == ppu { return }
+        preparingTerrain = (seed, ppu)
+        let tuning = session.tuning
+        let style = theme.terrain
+        let scale = view?.contentScaleFactor ?? 2
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let art = TerrainArt.render(world: World(tuning: tuning, seed: seed), style: style,
+                                        pointsPerUnit: ppu, screenScale: scale)
+            let prepared = PreparedTerrain(art)
+            prepared.preload {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard let self, self.preparingTerrain?.seed == seed, self.preparingTerrain?.ppu == ppu else {
+                            return
+                        }
+                        self.preparingTerrain = nil
+                        self.preparedTerrain = (seed, prepared)
+                    }
+                }
+            }
         }
     }
 
     private func makeStars() {
         var rng = SeededRNG(seed: 42)
-        for _ in 0..<90 {
-            let node = SKSpriteNode(color: theme.palette.stars.uiColor(), size: CGSize(width: 1.5, height: 1.5))
-            node.alpha = CGFloat(rng.range(0.15...0.7))
-            node.blendMode = .add
-            if rng.chance(0.15) { node.size = CGSize(width: 2.2, height: 2.2) }
-            starLayer.addChild(node)
-            stars.append((CGFloat(rng.range(0...1)), CGFloat(rng.range(0.12...1)), node))
+        // Far: many, faint and nearly still. Mid: the old field. Near: a few brighter motes.
+        let layers: [(count: Int, depth: CGFloat, size: CGFloat, alpha: ClosedRange<Double>)] = [
+            (70, 0.04, 1.2, 0.12...0.4), (40, 0.12, 1.6, 0.25...0.65), (14, 0.45, 2.4, 0.35...0.8),
+        ]
+        for layer in layers {
+            for _ in 0..<layer.count {
+                let node = SKSpriteNode(color: theme.palette.stars.uiColor(),
+                                        size: CGSize(width: layer.size, height: layer.size))
+                node.alpha = CGFloat(rng.range(layer.alpha))
+                node.blendMode = .add
+                starLayer.addChild(node)
+                stars.append((CGFloat(rng.range(0...1)), CGFloat(rng.range(0.12...1)), layer.depth, node))
+            }
+        }
+    }
+
+    /// Distant mountains: a periodic ridge line, filled black below so the stars sit behind it.
+    private func buildRidges(playHeight: CGFloat) {
+        ridges.forEach { $0.removeFromParent() }
+        ridges = []
+        guard playHeight > 0, size.width > 0 else { return }
+        ridgeSpan = size.width * 2
+        var rng = SeededRNG(seed: 77)
+        let waves: [(amplitude: CGFloat, cycles: CGFloat, phase: CGFloat)] = [(0.07, 3, 0), (0.04, 7, 0), (0.02, 17, 0)]
+            .map { ($0.0, $0.1, CGFloat(rng.range(0...(2 * .pi)))) }
+        let base = playHeight * 0.3
+        let line = CGMutablePath()
+        let steps = 160
+        for i in 0...steps {
+            let x = ridgeSpan * CGFloat(i) / CGFloat(steps)
+            var y = base
+            for w in waves { y += w.amplitude * playHeight * sin(2 * .pi * w.cycles * x / ridgeSpan + w.phase) }
+            if i == 0 { line.move(to: CGPoint(x: x, y: y)) } else { line.addLine(to: CGPoint(x: x, y: y)) }
+        }
+        // The fill (no outline, so its sides never show) hides the stars behind the mountains;
+        // only the open ridge line is stroked.
+        let fill = CGMutablePath()
+        fill.addPath(line)
+        fill.addLine(to: CGPoint(x: ridgeSpan, y: 0))
+        fill.addLine(to: CGPoint(x: 0, y: 0))
+        fill.closeSubpath()
+        for _ in 0..<2 {
+            let ridge = SKShapeNode(path: fill)
+            ridge.fillColor = .black
+            ridge.strokeColor = .clear
+            ridge.lineWidth = 0
+            ridge.zPosition = 1
+            let edge = SKShapeNode(path: line)
+            edge.strokeColor = theme.terrain.strata.uiColor(alpha: 0.3)
+            edge.lineWidth = 1
+            ridge.addChild(edge)
+            starLayer.addChild(ridge)
+            ridges.append(ridge)
         }
     }
 
@@ -534,10 +801,10 @@ final class GameScene: SKScene {
     private func updateBackdrop(_ dt: Double) {
         let previous = cameraX
         cameraX = world.wrap(cameraX + Self.titleDrift * dt)
-        starScroll += CGFloat(world.delta(from: previous, to: cameraX)) * pointsPerUnit * 0.15
+        starScroll += CGFloat(world.delta(from: previous, to: cameraX)) * pointsPerUnit
         placeStars()
         terrain.update(cameraX: cameraX, halfWidth: halfWidth,
-                       integrity: Array(repeating: 1, count: world.outposts.count), isBlackout: false, time: clock)
+                       integrity: Array(repeating: 1, count: world.outposts.count), blackout: 0, time: clock)
         let span = halfWidth * 2 + 200
         for decor in decorNodes {
             // Each crosses the screen on its own slow loop, bobbing gently.
@@ -555,6 +822,20 @@ final class GameScene: SKScene {
     // MARK: Frame
 
     override func update(_ currentTime: TimeInterval) {
+        #if DEBUG
+        let began = CACurrentMediaTime()
+        if Self.logsPerformance, finishedAt > 0, began - finishedAt > 0.02 {
+            NSLog("[Rimwatch perf] SpriteKit took %.1f ms between frames on %@", (began - finishedAt) * 1000,
+                  "\(frontEnd.screen)".components(separatedBy: "(").first ?? "")
+        }
+        defer {
+            let spent = CACurrentMediaTime() - began
+            if Self.logsPerformance, spent > 0.02 {
+                NSLog("[Rimwatch perf] update took %.1f ms on %@", spent * 1000,
+                      "\(frontEnd.screen)".components(separatedBy: "(").first ?? "")
+            }
+        }
+        #endif
         let elapsed = lastTime.map { currentTime - $0 } ?? 0
         lastTime = currentTime
         clock += elapsed
@@ -562,11 +843,13 @@ final class GameScene: SKScene {
         guard isPoseKnown else { return }
         #if DEBUG
         runAutopilotMenus()
+        logPerformance(elapsed)
         #endif
 
         readGamepad(elapsed: elapsed)
         let tickBefore = session.simulation.tick
-        let frame = frontEnd.update(elapsed: elapsed, input: currentInput())
+        lastInput = currentInput()
+        let frame = frontEnd.update(elapsed: elapsed, input: lastInput)
         // A tap that came and went between frames has now reached a simulation step.
         if session.simulation.tick != tickBefore {
             controls.consumePresses()
@@ -575,7 +858,8 @@ final class GameScene: SKScene {
         // Presses made in a menu or during the countdown are not shots or Blinks.
         if frontEnd.screen != .playing { gamepad.reader.consumePlayPresses() }
         apply(frame.effects)
-        feedback.route(frame.events) { [unowned self] event in pan(for: event) }
+        updateAudio(elapsed: elapsed)
+        feedback.route(frame.events) { [unowned self] event in placement(for: event) }
         if showsBackdrop {
             updateBackdrop(min(elapsed, 0.1))
         } else if !worldLayer.isHidden {
@@ -596,9 +880,8 @@ final class GameScene: SKScene {
         #if DEBUG
         // Launch with -autopilot to fly and fire without touches (for simulator checks).
         if Self.autopilot {
-            let t = clock
-            return InputState(move: Vec2(t.truncatingRemainder(dividingBy: 8) < 5 ? 1 : -1, sin(t * 0.9)),
-                              fire: true, blink: t.truncatingRemainder(dividingBy: 6) < 0.1)
+            // The competent test bot from GameCore flies the ship.
+            return autopilotBot.input(for: session.simulation)
         }
         #endif
         if gamepad.isConnected { return gamepad.reader.input(layout: frontEnd.options.gamepadLayout) }
@@ -606,7 +889,52 @@ final class GameScene: SKScene {
     }
 
     #if DEBUG
+    private static let logsPerformance = ProcessInfo.processInfo.arguments.contains("-showStats")
+    private var runStartedAt: TimeInterval = 0
+    private var perfFrames = 0
+    private var perfTime = 0.0
+    private var perfWorst = 0.0
+
+    /// With -showStats: every 10 seconds, the frame rate, the slowest frame, the node count and
+    /// the particles in use, for checking stability from the log.
+    private func logPerformance(_ elapsed: Double) {
+        guard Self.logsPerformance, elapsed > 0 else { return }
+        // Any frame over two refreshes is logged with what was on screen.
+        if elapsed > 0.034, lastTime != nil {
+            NSLog("[Rimwatch perf] slow frame %.1f ms on %@, %.2f s into the run", elapsed * 1000,
+                  "\(frontEnd.screen)".components(separatedBy: "(").first ?? "", clock - runStartedAt)
+        }
+        perfFrames += 1
+        perfTime += elapsed
+        perfWorst = max(perfWorst, elapsed)
+        guard perfTime >= 10 else { return }
+        var nodes = 0
+        func count(_ node: SKNode) {
+            nodes += 1
+            for child in node.children { count(child) }
+        }
+        count(self)
+        let sim = session.simulation
+        NSLog("[Rimwatch perf] %.1f fps, worst frame %.1f ms, %d nodes, %d particles, wave %d, enemies %d, score %d, lives %d",
+              Double(perfFrames) / perfTime, perfWorst * 1000, nodes, effects.activeParticles, sim.wave,
+              sim.enemies.count, sim.score, sim.player.lives)
+        perfFrames = 0
+        perfTime = 0
+        perfWorst = 0
+    }
+
     private static let autopilot = ProcessInfo.processInfo.arguments.contains("-autopilot")
+    /// `-autopilot shooter` flies a pilot who fights well but never rescues anyone (it runs into
+    /// Blackout); plain `-autopilot` flies the competent rescuer.
+    private static let autopilotSkill: Autopilot.Skill = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flag = arguments.firstIndex(of: "-autopilot"), arguments.indices.contains(flag + 1) else {
+            return .competent
+        }
+        return arguments[flag + 1] == "shooter" ? .shooter : .competent
+    }()
+    private var autopilotBot = Autopilot(skill: GameScene.autopilotSkill, seed: 1)
+    private var titleSince: TimeInterval?
 
     /// With -autopilot: go straight from the title into a game, and from game over back to the
     /// title after a few seconds. The pause menu is left alone, so fold tests see it.
@@ -614,7 +942,12 @@ final class GameScene: SKScene {
         guard Self.autopilot else { return }
         switch frontEnd.screen {
         case .title:
-            if frontEnd.pose == .open { apply(frontEnd.perform(.play)) }
+            // Waits for the next run's ground to be ready, as a person reading the title would.
+            if titleSince == nil { titleSince = clock }
+            if frontEnd.pose == .open, preparedTerrain != nil, clock - (titleSince ?? clock) > 1.5 {
+                titleSince = nil
+                apply(frontEnd.perform(.play))
+            }
         case .gameOver:
             if gameOverAt == nil { gameOverAt = clock }
             if let start = gameOverAt, clock - start > 5 {
@@ -639,16 +972,52 @@ final class GameScene: SKScene {
         if offset < -limit { cameraX = world.wrap(player.pos.x + limit) }
 
         // Distant stars drift slowly against the camera.
-        starScroll += CGFloat(world.delta(from: previous, to: cameraX)) * pointsPerUnit * 0.15
+        starScroll += CGFloat(world.delta(from: previous, to: cameraX)) * pointsPerUnit
         placeStars()
+
+        // Shake moves only the world, never the HUD, and settles in about a third of a second.
+        shake *= CGFloat(exp(-9 * dt))
+        if shake < 0.2 { shake = 0 }
+        let jolt = shake > 0
+            ? CGPoint(x: CGFloat.random(in: -1...1) * shake, y: CGFloat.random(in: -1...1) * shake) : .zero
+        worldLayer.position = CGPoint(x: size.width / 2 + jolt.x, y: jolt.y)
+    }
+
+    /// A jolt for a big moment, in points. Restrained, and nothing with Reduce Motion on.
+    private func addShake(_ amount: CGFloat) {
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        shake = min(max(shake, amount), 8)
+    }
+
+    /// A bright line that crosses the playfield: a wave arriving, the power coming back.
+    private func sweepAcross(_ color: RGB, duration: TimeInterval = 0.7) {
+        let playHeight = size.height - bandHeight
+        guard playHeight > 0, !UIAccessibility.isReduceMotionEnabled else { return }
+        sweep.removeAllActions()
+        sweep.color = color.uiColor()
+        sweep.size = CGSize(width: 3, height: playHeight)
+        sweep.anchorPoint = CGPoint(x: 0.5, y: 0)
+        sweep.position = CGPoint(x: -10, y: 0)
+        sweep.alpha = 0.7
+        sweep.isHidden = false
+        let move = SKAction.moveTo(x: size.width + 10, duration: duration)
+        move.timingMode = .easeInEaseOut
+        sweep.run(.sequence([.group([move, .sequence([.wait(forDuration: duration * 0.6),
+                                                      .fadeOut(withDuration: duration * 0.4)])]),
+                             .hide()]))
     }
 
     private func placeStars() {
         let span = size.width * 1.4
         for star in stars {
-            var x = (star.u * span - starScroll).truncatingRemainder(dividingBy: span)
+            var x = (star.u * span - starScroll * star.depth).truncatingRemainder(dividingBy: span)
             if x < 0 { x += span }
             star.node.position.x = x - (span - size.width) / 2
+        }
+        var offset = (-starScroll * Self.ridgeDepth).truncatingRemainder(dividingBy: ridgeSpan)
+        if offset > 0 { offset -= ridgeSpan }
+        for (index, ridge) in ridges.enumerated() {
+            ridge.position = CGPoint(x: offset + CGFloat(index) * ridgeSpan, y: 0)
         }
     }
 
@@ -687,11 +1056,46 @@ final class GameScene: SKScene {
         }
     }
 
-    /// Stereo position for an event: -1 at the left edge of the view, 1 at the right.
-    private func pan(for event: GameEvent) -> Double {
-        guard let pos = position(of: event), halfWidth > 0 else { return 0 }
-        return min(max(world.delta(from: cameraX, to: pos.x) / halfWidth, -1), 1)
+    /// Stereo position for an event (-1 at the left edge of the view, 1 at the right) and its
+    /// loudness for where it happened: full in view, fading to 30% two screens away.
+    private func placement(for event: GameEvent) -> (pan: Double, gain: Double) {
+        guard let pos = position(of: event), halfWidth > 0 else { return (0, 1) }
+        let offset = world.delta(from: cameraX, to: pos.x) / halfWidth
+        let beyond = max(abs(offset) - 1, 0)
+        return (min(max(offset, -1), 1), max(0.3, 1 - beyond * 0.35))
     }
+
+    // MARK: Audio state
+
+    /// Gameplay sounds only during play (and the game-over sting); music by screen and game
+    /// state. Called each frame before the frame's events are routed.
+    private func updateAudio(elapsed: Double) {
+        let gameplay: Bool
+        let music: MusicMood?
+        switch frontEnd.screen {
+        case .playing:
+            gameplay = true
+            music = moodDirector.update(elapsed: min(elapsed, 0.1), sim: session.simulation)
+        case .countdown:
+            // Coming back from a pause: the music fades in under the countdown, as it was.
+            gameplay = false
+            music = moodDirector.mood
+        case .gameOver:
+            // Let the last sounds and the game-over sting ring out; the music falls away.
+            gameplay = true
+            music = nil
+        case .title, .options, .highScores:
+            gameplay = false
+            music = session.isInGame ? nil : .title
+        case .paused, .madeForDuo:
+            gameplay = false
+            music = nil
+        }
+        synth.setGameplayActive(gameplay)
+        synth.setMusic(music)
+        synth.update(elapsed: elapsed)
+    }
+
 
     private func isOnScreen(_ pos: Vec2, margin: Double = 0) -> Bool {
         abs(world.delta(from: cameraX, to: pos.x)) < halfWidth + margin
@@ -720,6 +1124,7 @@ final class GameScene: SKScene {
             switch event {
             // Waves
             case .waveStarted(let wave):
+                sweepAcross(theme.terrain.ridge)
                 callouts.banner("WAVE \(wave)", subtitle: "\(sim.survivingColonists) colonists to protect",
                                 color: theme.terrain.ridge)
             case .waveCleared(let wave, let bonus):
@@ -735,13 +1140,25 @@ final class GameScene: SKScene {
                 callouts.popup("OVERHEAT", at: sim.player.pos, color: palette.warning, scale: 0.9)
                 hud.flash(.heat, at: clock)
             case .playerBlinked(let from, let to):
-                effects.trail(from: from, to: to, color: palette.shield)
-                effects.ring(at: to, color: palette.shield, radius: 34, duration: 0.25)
+                // A streak, fading afterimages along it, and a pop of sparks at each end.
+                effects.trail(from: from, to: to, color: palette.shield, width: 3.5)
+                effects.afterimages(of: factory.glyph(for: .player, pointsPerUnit: pointsPerUnit), from: from, to: to,
+                                    facing: sim.player.facing, color: palette.shield)
+                effects.ring(at: to, color: palette.shield, radius: 38, duration: 0.25)
+                effects.emit(at: from, EffectsLayer.Emission(count: 10, color: palette.shield, speed: 40...120, life: 0.2...0.35))
+                effects.emit(at: to, EffectsLayer.Emission(count: 14, color: palette.shield.lightened(0.4), speed: 90...220,
+                                               life: 0.2...0.4))
             case .shockwave(let at):
-                effects.ring(at: at, color: palette.shield, radius: tuning.shockwaveRange, duration: 0.5)
+                // A double ring, a flat blast of sparks racing out, a white flash and a jolt.
+                effects.ring(at: at, color: palette.shield, radius: tuning.shockwaveRange, duration: 0.8, width: 2)
                 effects.ring(at: at, color: palette.shield.lightened(0.5), radius: tuning.shockwaveRange * 0.6,
-                             duration: 0.35)
-                callouts.flash(palette.shield, strength: 0.22)
+                             duration: 0.5, width: 1.4)
+                effects.emit(at: at, EffectsLayer.Emission(count: 64, color: palette.shield.lightened(0.3),
+                                               speed: 450...800, life: 0.5...0.8, drag: 1.2, size: 1.2...1.8))
+                effects.emit(at: at, EffectsLayer.Emission(count: 24, color: RGB(1, 1, 1), look: .dot, speed: 60...220,
+                                               life: 0.5...0.8, size: 1.2...2))
+                callouts.flash(palette.shield, strength: 0.3)
+                addShake(6)
                 hud.flash(.shockwaves, at: clock)
             case .shieldCharged:
                 effects.ring(at: sim.player.pos, color: palette.shield, radius: 44, duration: 0.5)
@@ -749,17 +1166,35 @@ final class GameScene: SKScene {
                 hud.flash(.shield, at: clock)
             case .shieldBroken:
                 effects.ring(at: sim.player.pos, color: palette.shield, radius: 60)
-                effects.burst(at: sim.player.pos, color: palette.shield, count: 12, speed: 160, life: 0.45)
+                effects.emit(at: sim.player.pos, EffectsLayer.Emission(count: 16, color: palette.shield, look: .shard, speed: 80...200,
+                                                           life: 0.4...0.6, drag: 2))
+                addShake(3)
                 callouts.popup("SHIELD DOWN", at: sim.player.pos, color: palette.warning, scale: 0.95, life: 1.1)
                 callouts.flash(palette.shield, strength: 0.15)
                 hud.flash(.shield, at: clock)
             case .playerDestroyed(let at, _):
-                effects.burst(at: at, color: color(of: .player), count: 32, speed: 220, life: 0.9)
-                effects.ring(at: at, color: color(of: .player), radius: 90, duration: 0.6)
+                // The hull breaks into tumbling pieces inside a hot burst, with a slow ring.
+                let hull = color(of: .player)
+                effects.emit(at: at, EffectsLayer.Emission(count: 16, color: hull, look: .shard, speed: 60...220, life: 0.8...1.3,
+                                               drag: 1.2, gravity: 90, size: 1...1.5))
+                effects.emit(at: at, EffectsLayer.Emission(count: 40, color: palette.spark, speed: 120...380, life: 0.4...0.9))
+                effects.emit(at: at, EffectsLayer.Emission(count: 14, color: RGB(1, 1, 1), look: .dot, speed: 20...90,
+                                               life: 0.5...0.9, size: 1.2...2))
+                effects.ring(at: at, color: hull, radius: 90, duration: 0.6)
+                effects.ring(at: at, color: palette.warning, radius: 150, duration: 0.9)
                 callouts.flash(palette.warning, strength: 0.28, duration: 0.6)
+                addShake(7)
                 hud.flash(.lives, at: clock)
             case .playerRespawned:
-                effects.ring(at: sim.player.pos, color: color(of: .player), radius: 50, duration: 0.5)
+                // Drawn back in: a ring closes on the ship and sparks gather.
+                let spot = sim.player.pos
+                effects.ring(at: spot, color: color(of: .player), radius: 16, duration: 0.45, inward: true)
+                for index in 0..<12 {
+                    let angle = Double(index) / 12 * 2 * .pi
+                    let from = Vec2(world.wrap(spot.x + cos(angle) * 70), spot.y + sin(angle) * 70)
+                    effects.emit(at: from, EffectsLayer.Emission(count: 1, color: color(of: .player), speed: 150...160, life: 0.4...0.42,
+                                                     angle: angle + .pi, spread: 0, drag: 0))
+                }
             case .extraLife:
                 callouts.notice("EXTRA LIFE", color: palette.falling)
                 callouts.popup("1UP", at: sim.player.pos, color: palette.falling, life: 1.2)
@@ -774,29 +1209,18 @@ final class GameScene: SKScene {
             case .enemyFired:
                 break
             case .enemyHit(let id, let at):
-                effects.burst(at: at, color: palette.spark, count: 5, speed: 90, life: 0.25)
+                effects.emit(at: at, EffectsLayer.Emission(count: 6, color: palette.spark, speed: 60...160, life: 0.15...0.3))
                 // The pulse is applied in updateEnemy, on top of facing and charge stretch.
                 enemyNodes[id]?.hitAt = clock
             case .enemyDestroyed(let id, let kind, let at, let points):
                 let tint = color(of: .enemy(kind))
-                switch kind {
-                case .brood:
-                    // The sac bursts: a big ring and the Motes scatter out of it.
-                    effects.burst(at: at, color: tint, count: 22, speed: 200, life: 0.7)
-                    effects.ring(at: at, color: color(of: .enemy(.mote)), radius: 70, duration: 0.45)
-                case .anchor:
-                    effects.burst(at: at, color: tint, count: 26, speed: 200, life: 0.8)
-                    effects.ring(at: at, color: tint, radius: 60, duration: 0.5)
-                case .mine:
-                    effects.burst(at: at, color: tint, count: 8)
-                default:
-                    effects.burst(at: at, color: tint, count: 14)
-                }
+                explode(kind, id: id, at: at, tint: tint)
                 callouts.popup("+\(groupedDigits(points))", at: at, color: tint.lightened(0.35),
                                scale: kind == .mine || kind == .mote ? 0.7 : 0.85, life: 0.75)
                 mineOwners[id] = nil
             case .huskFormed(_, let at):
-                effects.burst(at: at, color: color(of: .enemy(.husk)), count: 18, speed: 170)
+                effects.emit(at: at, EffectsLayer.Emission(count: 20, color: color(of: .enemy(.husk)), speed: 80...240,
+                                               life: 0.4...0.7, drag: 3))
                 effects.ring(at: at, color: color(of: .enemy(.husk)), radius: 55, duration: 0.5)
                 callouts.popup("HUSK", at: at, color: color(of: .enemy(.husk)), scale: 0.9, life: 1.1)
             case .mineLaid(let id, let at):
@@ -842,32 +1266,55 @@ final class GameScene: SKScene {
                 }
             case .colonistCaught(let id):
                 effects.ring(at: sim.player.pos, color: color(of: .colonist), radius: 30, duration: 0.3)
+                effects.emit(at: sim.player.pos, EffectsLayer.Emission(count: 10, color: color(of: .colonist), look: .dot,
+                                                           speed: 30...90, life: 0.4...0.7, angle: .pi / 2,
+                                                           spread: 2, drag: 2))
                 callouts.popup("+\(tuning.catchPoints)", at: sim.player.pos, color: palette.falling, scale: 0.9)
-                if let pos = sim.colonists.first(where: { $0.id == id })?.pos { trailPositions[id] = pos }
+                if let pos = sim.colonists.first(where: { $0.id == id })?.pos {
+                    trailPositions[id] = pos
+                    // Drawn in on a beam from where it was caught, so the catch radius reads as
+                    // a deliberate pull rather than a snap.
+                    catchBeams[id] = (from: pos, at: clock)
+                }
             case .colonistDelivered(let id, let outpost, let points):
                 delivered = (count: (delivered?.count ?? 0) + 1, points: points, outpost: outpost)
                 trailPositions[id] = nil
+                catchBeams[id] = nil
             case .colonistLanded(let id):
                 if let pos = sim.colonists.first(where: { $0.id == id })?.pos {
-                    effects.burst(at: pos, color: color(of: .colonist), count: 5, speed: 40, life: 0.35)
+                    effects.emit(at: pos, EffectsLayer.Emission(count: 6, color: theme.terrain.ridge, look: .dot, speed: 20...50,
+                                                    life: 0.25...0.4, angle: .pi / 2, spread: 2.4, gravity: 120))
                 }
             case .colonistLost(let id, let at):
-                effects.burst(at: at, color: color(of: .colonist), count: 10, speed: 80)
+                // A little figure's worth of light falls away and dims to red.
+                effects.emit(at: at, EffectsLayer.Emission(count: 12, color: color(of: .colonist), look: .dot, speed: 20...80,
+                                               life: 0.6...1, drag: 1, gravity: 140))
+                effects.emit(at: at, EffectsLayer.Emission(count: 8, color: palette.warning, speed: 40...120, life: 0.3...0.5))
+                effects.ring(at: at, color: palette.warning, radius: 24, duration: 0.35)
                 callouts.popup("LOST", at: at, color: palette.warning, scale: 0.8, life: 1.0)
                 trailPositions[id] = nil
+                catchBeams[id] = nil
                 hud.flash(.colonists, at: clock)
 
             // Outposts and Blackout
             case .outpostDestroyed(let id):
                 let outpost = world.outposts[id]
-                effects.burst(at: Vec2(outpost.x, outpost.groundY + 15), color: color(of: .outpost), count: 24,
-                              speed: 140, life: 0.8)
+                // The dome blows apart: pieces thrown up that fall back, smoke-coloured sparks.
+                let dome = Vec2(outpost.x, outpost.groundY + 10)
+                effects.emit(at: dome, EffectsLayer.Emission(count: 22, color: color(of: .outpost), look: .shard, speed: 120...300,
+                                                 life: 0.9...1.4, angle: .pi / 2, spread: 2.2, drag: 0.6,
+                                                 gravity: 320, size: 1...1.6))
+                effects.emit(at: dome, EffectsLayer.Emission(count: 30, color: theme.terrain.ridge, speed: 80...260, life: 0.5...0.9,
+                                                 angle: .pi / 2, spread: 3))
+                addShake(isOnScreen(dome) ? 6 : 2)
                 effects.ring(at: Vec2(outpost.x, outpost.groundY), color: palette.warning, radius: 90, duration: 0.6)
                 callouts.notice(pointed("OUTPOST LOST", toward: Vec2(outpost.x, outpost.groundY)),
                                 color: palette.warning, life: 2.4)
             case .outpostRestored(let id):
                 let outpost = world.outposts[id]
                 let ground = Vec2(outpost.x, outpost.groundY)
+                effects.emit(at: ground, EffectsLayer.Emission(count: 24, color: color(of: .outpost), look: .dot, speed: 60...180,
+                                                   life: 0.6...1, angle: .pi / 2, spread: 1.2, drag: 1.5, gravity: 80))
                 // The drop comes straight down from the top of the sky.
                 effects.trail(from: Vec2(outpost.x, world.ceiling), to: ground, color: color(of: .outpost), duration: 0.9)
                 effects.ring(at: ground, color: color(of: .outpost), radius: 70)
@@ -876,7 +1323,9 @@ final class GameScene: SKScene {
                 callouts.banner("BLACKOUT", subtitle: "Every colonist lost. Hold out for supplies.",
                                 color: palette.warning, life: 2.8)
                 callouts.flash(palette.warning, strength: 0.35, duration: 0.9)
+                addShake(5)
             case .blackoutEnded:
+                sweepAcross(color(of: .outpost), duration: 1.0)
                 callouts.banner("POWER RESTORED", subtitle: "Supplies landed", color: color(of: .outpost),
                                 life: 2.2)
                 callouts.flash(color(of: .outpost), strength: 0.2, duration: 0.6)
@@ -890,10 +1339,63 @@ final class GameScene: SKScene {
             let outpost = world.outposts[delivered.outpost]
             let spot = Vec2(outpost.x, outpost.groundY + 30)
             effects.ring(at: Vec2(outpost.x, outpost.groundY), color: color(of: .colonist), radius: 60, duration: 0.5)
+            // A fountain of light from the pad, bigger for more colonists.
+            effects.emit(at: Vec2(outpost.x, outpost.groundY + 4), EffectsLayer.Emission(count: 12 + 8 * delivered.count,
+                                                                           color: color(of: .colonist), look: .dot,
+                                                                           speed: 120...260, life: 0.6...1,
+                                                                           angle: .pi / 2, spread: 0.7, drag: 1,
+                                                                           gravity: 200))
             callouts.popup("+\(groupedDigits(delivered.points * delivered.count))", at: spot,
                            color: palette.falling, scale: 1.25, life: 1.3)
             let note = delivered.count > 1 ? "\(delivered.count) SAVED ×\(delivered.count)" : "SAVED"
             callouts.popup(note, at: spot, color: color(of: .colonist), scale: 0.9, life: 1.3)
+        }
+    }
+
+    /// Each enemy goes out its own way.
+    private func explode(_ kind: EnemyKind, id: Int, at: Vec2, tint: RGB) {
+        typealias E = EffectsLayer.Emission
+        let spark = theme.palette.spark
+        switch kind {
+        case .harvester:
+            // The pod cracks: hull pieces and a burst of green.
+            effects.emit(at: at, E(count: 7, color: tint, look: .shard, speed: 60...160, life: 0.5...0.8,
+                                   drag: 1.5, gravity: 120))
+            effects.emit(at: at, E(count: 14, color: tint, speed: 90...220, life: 0.3...0.55))
+        case .husk:
+            // A hard, fast star of magenta spikes.
+            effects.emit(at: at, E(count: 14, color: tint, speed: 260...420, life: 0.2...0.35, drag: 4,
+                                   size: 1.2...1.6))
+            effects.ring(at: at, color: tint, radius: 34, duration: 0.25)
+        case .sower:
+            // Seeds scatter and fall.
+            effects.emit(at: at, E(count: 10, color: tint.lightened(0.4), look: .dot, speed: 40...140,
+                                   life: 0.6...0.9, drag: 1, gravity: 160))
+            effects.emit(at: at, E(count: 12, color: tint, speed: 80...200, life: 0.3...0.5))
+        case .mine:
+            effects.emit(at: at, E(count: 10, color: tint, speed: 120...240, life: 0.15...0.3, drag: 5))
+            effects.ring(at: at, color: tint, radius: 22, duration: 0.2)
+        case .brood:
+            // The sac bursts: slow wet blobs, a big ring the Motes scatter out of.
+            effects.emit(at: at, E(count: 16, color: tint, look: .dot, speed: 30...120, life: 0.7...1.1,
+                                   drag: 2, gravity: 60, size: 1.4...2.2))
+            effects.emit(at: at, E(count: 12, color: color(of: .enemy(.mote)), speed: 100...220, life: 0.3...0.5))
+            effects.ring(at: at, color: color(of: .enemy(.mote)), radius: 70, duration: 0.45)
+        case .mote:
+            effects.emit(at: at, E(count: 6, color: tint, look: .dot, speed: 40...110, life: 0.15...0.3))
+        case .lancer:
+            // It was going fast: the debris keeps going.
+            let heading = enemyVelocities[id]?.x ?? 0
+            effects.emit(at: at, E(count: 16, color: tint, speed: 160...360, life: 0.3...0.55,
+                                   angle: heading < 0 ? .pi : 0, spread: 1.2, drag: 2))
+            effects.emit(at: at, E(count: 5, color: tint, look: .shard, speed: 60...140, life: 0.5...0.8))
+        case .anchor:
+            // Heavy metal: big pieces thrown up and falling, hot sparks, a jolt.
+            effects.emit(at: at, E(count: 12, color: tint, look: .shard, speed: 80...220, life: 0.8...1.2,
+                                   angle: .pi / 2, spread: 2.4, drag: 0.8, gravity: 300, size: 1.2...1.8))
+            effects.emit(at: at, E(count: 26, color: spark, speed: 120...300, life: 0.4...0.8))
+            effects.ring(at: at, color: tint, radius: 60, duration: 0.5)
+            addShake(isOnScreen(at) ? 4 : 0)
         }
     }
 
@@ -914,6 +1416,7 @@ final class GameScene: SKScene {
         links.removeAll()
         mineOwners.removeAll()
         trailPositions.removeAll()
+        catchBeams.removeAll()
         lastDrillSpark.removeAll()
         multiplierShown = 0
         multiplierLabel.isHidden = true
@@ -995,17 +1498,31 @@ final class GameScene: SKScene {
     private func sync(_ dt: Double) {
         guard pointsPerUnit > 0 else { return }
         let sim = session.simulation
+        // The lights go down over a second and come back over a little more.
+        blackoutMix += ((sim.isBlackout ? 1 : 0) - blackoutMix) * min(dt * (sim.isBlackout ? 2.2 : 1.6), 1)
+        if abs(blackoutMix - (sim.isBlackout ? 1 : 0)) < 0.01 { blackoutMix = sim.isBlackout ? 1 : 0 }
         terrain.update(cameraX: cameraX, halfWidth: halfWidth, integrity: sim.outpostIntegrity,
-                       isBlackout: sim.isBlackout, time: clock)
-        effects.update(cameraX: cameraX)
+                       blackout: blackoutMix, time: clock)
+        starLayer.alpha = CGFloat(1 - 0.75 * blackoutMix)
+        effects.update(cameraX: cameraX, halfWidth: halfWidth, elapsed: dt)
         syncPlayer(sim.player)
+        if sim.player.isAlive, frontEnd.screen == .playing {
+            let p = sim.player
+            let tail = Vec2(world.wrap(p.pos.x - p.facing * 14), p.pos.y)
+            effects.exhaust(at: tail, thrust: lastInput.move, shipVelocity: p.vel, facing: p.facing,
+                            color: p.isOverheated ? theme.palette.warning : theme.palette.shield, elapsed: dt)
+        }
 
         let palette = theme.palette
         let player = sim.player
         var telegraphing = Set<Int>()
         var seenLinks = Set<String>()
         enemyPositions.removeAll(keepingCapacity: true)
-        for enemy in sim.enemies { enemyPositions[enemy.id] = enemy.pos }
+        enemyVelocities.removeAll(keepingCapacity: true)
+        for enemy in sim.enemies {
+            enemyPositions[enemy.id] = enemy.pos
+            enemyVelocities[enemy.id] = enemy.vel
+        }
 
         syncNodes(&enemyNodes, with: sim.enemies, make: { makeSprite(.enemy($0.kind), z: 3) }) { enemy, node in
             place(node, at: enemy.pos)
@@ -1081,6 +1598,19 @@ final class GameScene: SKScene {
                 let current = trailPositions[colonist.id] ?? colonist.pos
                 let x = world.wrap(current.x + world.delta(from: current.x, to: target.x) * ease)
                 pos = Vec2(x, max(current.y + (target.y - current.y) * ease, world.groundHeight(at: x) + 1))
+                if let beam = catchBeams[colonist.id] {
+                    let t = (clock - beam.at) / Self.catchPull
+                    if t >= 1 {
+                        catchBeams[colonist.id] = nil
+                    } else {
+                        // Eased from the catch point toward the ship, with a bright beam between.
+                        let eased = t * t * (3 - 2 * t)
+                        let bx = world.wrap(beam.from.x + world.delta(from: beam.from.x, to: pos.x) * eased)
+                        pos = Vec2(bx, beam.from.y + (pos.y - beam.from.y) * eased)
+                        link("beam-\(colonist.id)", from: player.pos, to: Vec2(pos.x, pos.y + 8),
+                             color: color(of: .colonist), alpha: CGFloat(0.9 - 0.6 * t), width: 2.5, seen: &seenLinks)
+                    }
+                }
                 trailPositions[colonist.id] = pos
                 link("tow-\(colonist.id)", from: player.pos, to: Vec2(pos.x, pos.y + 12), color: color(of: .colonist),
                      alpha: 0.3, width: 1, seen: &seenLinks)
@@ -1301,13 +1831,15 @@ final class GameScene: SKScene {
                     // Ignored just after game over or a forced pause (see acceptsTouchActivation).
                     guard frontEnd.acceptsTouchActivation else { continue }
                     let wasInPlay = isInPlay
+                    let isBack = frontEnd.menu?.items.indices.contains(choice.index) == true
+                        && frontEnd.menu?.items[choice.index].command == .back
                     apply(frontEnd.choose(choice.index))
                     if !wasInPlay { menuActivationMayHaveStartedPlay() }
-                    feedback.menu(.tap)
+                    feedback.menu(.tap, sound: isBack ? .back : .activate)
                 } else if frontEnd.select(choice.index), choice.step != 0 {
                     // An arrow steps the option like a gamepad's left and right.
                     apply(frontEnd.adjust(by: choice.step))
-                    feedback.menu(.tick)
+                    feedback.menu(.tick, sound: .change)
                 }
             }
         }

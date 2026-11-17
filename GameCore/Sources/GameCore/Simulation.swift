@@ -35,7 +35,7 @@ public struct Simulation: Sendable {
     private var nextID = 1
     private var nextExtraLifeScore: Int
     private var waveBonusPaid = true
-    private let director = WaveDirector()
+    let director = WaveDirector()
 
     public init(seed: UInt64, tuning: Tuning = Tuning()) {
         self.tuning = tuning
@@ -140,7 +140,7 @@ public struct Simulation: Sendable {
         )
         switch kind {
         case .harvester:
-            enemy.fireTimer = rng.range(tuning.harvesterFireInterval)
+            enemy.fireTimer = nextHarvesterShotDelay()
         case .sower:
             enemy.vel = Vec2(side * tuning.sowerSpeed, 0)
             enemy.fireTimer = tuning.mineInterval
@@ -375,16 +375,39 @@ public struct Simulation: Sendable {
         }
     }
 
+    /// Seconds until a Harvester's next shot. Later waves shoot more often.
+    /// How much faster than their base speeds Harvesters fly and descend in this wave.
+    public var abductionScale: Double {
+        min(1 + tuning.abductionGrowthPerWave * wavesOfGrowth, max(tuning.abductionMaxScale, 1))
+    }
+
+    private var wavesOfGrowth: Double { Double(max(wave - tuning.abductionGrowthStart + 1, 0)) }
+
+    /// How much faster than `liftSpeed` Harvesters lift in this wave.
+    public var liftScale: Double {
+        min(1 + tuning.liftGrowthPerWave * wavesOfGrowth, max(tuning.abductionMaxScale, 1))
+    }
+
+    mutating func nextHarvesterShotDelay() -> Double {
+        rng.range(tuning.harvesterFireInterval) * director.fireIntervalScale(forWave: wave)
+    }
+
     mutating func fireEnemyShot(from origin: Vec2) {
         guard player.isAlive else { return }
         let dx = world.delta(from: origin.x, to: player.pos.x)
         let dy = player.pos.y - origin.y
         let distance = hypot(dx, dy)
         guard distance > 1, distance < tuning.harvesterFireRange else { return }
+        // Aim part of the way toward where the ship is heading, so flying straight on is not
+        // enough to stay safe.
+        let flight = distance / tuning.enemyShotSpeed * tuning.enemyShotLead
+        let aimX = dx + player.vel.x * flight
+        let aimY = dy + player.vel.y * flight
+        let aimLength = max(hypot(aimX, aimY), 1)
         projectiles.append(Projectile(
             id: takeID(),
             pos: origin,
-            vel: Vec2(dx / distance, dy / distance) * tuning.enemyShotSpeed,
+            vel: Vec2(aimX / aimLength, aimY / aimLength) * tuning.enemyShotSpeed,
             owner: .enemy,
             radius: tuning.enemyShotRadius,
             timeLeft: tuning.enemyShotLifetime
@@ -482,7 +505,7 @@ public struct Simulation: Sendable {
     }
 
     /// Nearest outpost that is still standing, if any.
-    func nearestIntactOutpost(to x: Double) -> Int? {
+    public func nearestIntactOutpost(to x: Double) -> Int? {
         world.outposts
             .filter { isOutpostIntact($0.id) }
             .min { abs(world.delta(from: x, to: $0.x)) < abs(world.delta(from: x, to: $1.x)) }?
@@ -542,6 +565,8 @@ public struct Simulation: Sendable {
         enemy.vel = .zero
         enemy.radius = stats.radius
         enemy.hp = stats.hp
+        // A fresh Husk hangs where it formed for a moment before it starts the hunt.
+        enemy.timer = tuning.huskWakeDelay
     }
 
     // MARK: Projectiles and contact

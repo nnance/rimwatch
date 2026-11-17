@@ -372,11 +372,11 @@ private func carry(_ count: Int, in sim: inout Simulation) {
 }
 
 @Suite struct ScoringTests {
-    @Test func tenThousandPointsEarnsALifeUpToTheLimit() {
+    @Test func eachExtraLifeThresholdEarnsALifeUpToTheLimit() {
         var sim = quietSimulation()
         let y = sim.world.ceiling - 100
         sim.player.pos = Vec2(1000, y)
-        sim.score = 9_900
+        sim.score = sim.tuning.extraLifeEvery - 100
         sim.addEnemy(kind: .harvester, at: Vec2(1100, y), state: .roaming)
 
         let events = run(&sim, maxSteps: 60, input: InputState(fire: true)) { $0.isEnemyDestroyed }
@@ -384,7 +384,7 @@ private func carry(_ count: Int, in sim: inout Simulation) {
         #expect(sim.player.lives == sim.tuning.startingLives + 1)
 
         sim.player.lives = sim.tuning.maxLives
-        sim.addScore(10_000)
+        sim.addScore(sim.tuning.extraLifeEvery)
         #expect(sim.player.lives == sim.tuning.maxLives)
     }
 
@@ -418,11 +418,32 @@ private func carry(_ count: Int, in sim: inout Simulation) {
     }
 
     @Test func newEnemiesAreIntroducedOneAtATime() {
-        let introduced: [(EnemyKind, Int)] = [(.sower, 2), (.brood, 3), (.lancer, 4), (.anchor, 5), (.husk, 6)]
+        let introduced: [(EnemyKind, Int)] = [(.sower, 2), (.brood, 3), (.lancer, 5), (.anchor, 7), (.husk, 9)]
+        #expect(WaveDirector.debut.map(\.kind) == introduced.map(\.0))
+        #expect(WaveDirector.debut.map(\.wave) == introduced.map(\.1))
         for (kind, wave) in introduced {
             #expect(!director.composition(forWave: wave - 1).contains { $0.kind == kind })
-            #expect(director.composition(forWave: wave).contains { $0.kind == kind })
+            // A debut: just one of the new kind, alongside Harvesters and nothing else.
+            let debut = director.composition(forWave: wave)
+            #expect(debut.map(\.kind) == [.harvester, kind])
+            #expect(debut.first { $0.kind == kind }?.count == 1)
+            // The next wave that isn't a debut mixes it in with the others.
+            let mixed = (wave + 1...wave + 3).first { w in !introduced.contains { $0.1 == w } }!
+            let kinds = director.composition(forWave: mixed).map(\.kind)
+            #expect(kinds.contains(kind))
+            #expect(kinds.count > 2)
         }
+    }
+
+    @Test func harvestersShootMoreOftenAsWavesGoOn() {
+        var previous = Double.infinity
+        for wave in 1...20 {
+            let scale = director.fireIntervalScale(forWave: wave)
+            #expect(scale <= previous)
+            #expect(scale > 0)
+            previous = scale
+        }
+        #expect(director.fireIntervalScale(forWave: 1) > 1)
     }
 
     @Test func wavesNeverShrinkAndNeverSpawnMinesOrMotesDirectly() {

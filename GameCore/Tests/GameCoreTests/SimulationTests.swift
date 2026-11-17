@@ -46,7 +46,7 @@ import Testing
         var sim = quietSimulation()
         let firing = InputState(fire: true)
 
-        let heating = run(&sim, maxSteps: 120 * 6, input: firing) { $0 == .playerOverheated }
+        let heating = run(&sim, maxSteps: 120 * 10, input: firing) { $0 == .playerOverheated }
         #expect(heating.contains(.playerOverheated))
         #expect(sim.player.isOverheated)
 
@@ -107,7 +107,8 @@ import Testing
 
         // A Husk sitting on the ship cannot hurt it until the protection runs out.
         sim.addEnemy(kind: .husk, at: sim.player.pos, state: .hunting)
-        let protected = run(&sim, maxSteps: 240)
+        let protectedSteps = Int((sim.tuning.respawnInvulnerability - 0.5) / Simulation.timeStep)
+        let protected = run(&sim, maxSteps: protectedSteps)
         #expect(!protected.contains { $0.isPlayerDestroyed })
         let exposed = run(&sim, maxSteps: 120) { $0.isPlayerDestroyed }
         #expect(exposed.contains { $0.isPlayerDestroyed })
@@ -254,10 +255,11 @@ import Testing
         #expect(long.contains { $0.isColonistLost })
         #expect(sim.colonists[0].state == .lost)
 
-        sim.colonists[1].pos.y += 100
-        sim.colonists[1].state = .falling(speed: 0, from: 100)
-        let short = run(&sim, maxSteps: 120 * 5) { $0.isColonistLost || $0.isColonistLanded }
-        #expect(short.contains { $0.isColonistLanded })
+        let short = sim.tuning.safeFallHeight * 0.7
+        sim.colonists[1].pos.y += short
+        sim.colonists[1].state = .falling(speed: 0, from: short)
+        let landing = run(&sim, maxSteps: 120 * 5) { $0.isColonistLost || $0.isColonistLanded }
+        #expect(landing.contains { $0.isColonistLanded })
         #expect(sim.colonists[1].state == .grounded)
     }
 
@@ -296,7 +298,7 @@ import Testing
 }
 
 @Suite struct WaveTests {
-    @Test func clearingAWaveBringsABiggerOne() {
+    @Test func clearingAWaveBringsABiggerOne() throws {
         var sim = Simulation(seed: 11)
         sim.player.invulnerableTimer = 1_000_000
 
@@ -322,12 +324,13 @@ import Testing
         #expect(sim.wave == 2)
         #expect(spawnedInWaveOne == director.spawns(forWave: 1).count)
         #expect(director.spawns(forWave: 2).count > director.spawns(forWave: 1).count)
-        #expect(director.spawns(forWave: 6).contains { $0.kind == .husk })
+        let huskDebut = try #require(WaveDirector.debut.first { $0.kind == .husk }?.wave)
+        #expect(director.spawns(forWave: huskDebut).contains { $0.kind == .husk })
     }
 
     @Test func enemiesSpawnWellAwayFromThePlayer() {
         var sim = Simulation(seed: 3)
-        run(&sim, maxSteps: 120 * 3) { if case .enemySpawned = $0 { true } else { false } }
+        run(&sim, maxSteps: 120 * 6) { if case .enemySpawned = $0 { true } else { false } }
         #expect(!sim.enemies.isEmpty)
         for enemy in sim.enemies {
             #expect(abs(sim.world.delta(from: sim.player.pos.x, to: enemy.pos.x)) >= sim.tuning.spawnClearance - 1)

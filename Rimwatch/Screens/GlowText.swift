@@ -20,6 +20,8 @@ enum GlowText {
     }
 
     private static var cache: [String: (SKTexture, CGSize)] = [:]
+    /// Every text texture made so far, for preloading.
+    static var cachedTextures: [SKTexture] { cache.values.map(\.0) }
     static let padding: CGFloat = 10
 
     /// A sprite showing `text`, centred on its position.

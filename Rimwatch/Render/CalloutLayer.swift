@@ -112,10 +112,19 @@ final class CalloutLayer: SKNode {
         backing.color = .black
         backing.colorBlendFactor = 1
         backing.blendMode = .alpha
-        backing.alpha = 0.8
-        backing.setScale(1.06)
+        backing.alpha = 0.95
+        backing.setScale(1.08)
         backing.zPosition = -0.1
         sprite.addChild(backing)
+        // And a soft dark plate under the whole line, so the gaps between letters don't fill
+        // with explosion glow either.
+        let plate = SKSpriteNode(texture: Self.plateTexture)
+        plate.centerRect = CGRect(x: 0.45, y: 0.45, width: 0.1, height: 0.1)
+        plate.size = CGSize(width: textWidth + textSize * 1.2, height: textSize * 1.9)
+        plate.alpha = 0.7
+        plate.blendMode = .alpha
+        plate.zPosition = -0.2
+        sprite.addChild(plate)
         let container = SKNode()
         container.addChild(sprite)
         let rise = SKAction.moveBy(x: 0, y: textSize * Self.riseLines, duration: life)
@@ -132,6 +141,37 @@ final class CalloutLayer: SKNode {
         popups.append(popup)
         place(popup)
     }
+
+    /// Renders the popup text styles and the plate once, so the first kill of a session doesn't
+    /// stall a frame drawing them.
+    func prewarm(colors: [RGB]) {
+        _ = Self.plateTexture
+        for scale: CGFloat in [0.7, 0.8, 0.85, 0.9, 0.95, 1.25, 1.4] {
+            for color in colors {
+                _ = GlowText.texture("+150", style: .item(textSize * scale), color: color)
+            }
+        }
+    }
+
+    /// Renders particular popups (text, size, colour) ahead of their first use.
+    func prewarm(popups: [(text: String, scale: CGFloat, color: RGB)]) {
+        for popup in popups {
+            _ = GlowText.texture(popup.text, style: .item(textSize * popup.scale), color: popup.color)
+        }
+    }
+
+    /// A black pill with feathered edges, stretched to fit each popup.
+    private static let plateTexture: SKTexture = {
+        let size = CGSize(width: 48, height: 48)
+        let image = GlowShapeFactory.image(size: size, scale: 2) { context in
+            let rect = CGRect(x: 10, y: 10, width: 28, height: 28)
+            context.setShadow(offset: .zero, blur: 8, color: UIColor.black.cgColor)
+            context.setFillColor(UIColor.black.cgColor)
+            context.addPath(CGPath(roundedRect: rect, cornerWidth: 12, cornerHeight: 12, transform: nil))
+            context.fillPath()
+        }
+        return SKTexture(image: image)
+    }()
 
     /// How far a popup's text rises over its life, in lines of text.
     private static let riseLines: CGFloat = 1.8
@@ -235,6 +275,14 @@ final class CalloutLayer: SKNode {
         ]))
         addChild(container)
         banner = container
+    }
+
+    /// Renders a banner's text without showing it, so its first real appearance is free.
+    func prewarmBanner(_ title: String, subtitle: String?, color: RGB, subtitleColor: RGB? = nil) {
+        let shown = banner
+        banner(title, subtitle: subtitle, color: color, subtitleColor: subtitleColor)
+        banner?.removeFromParent()
+        banner = shown
     }
 
     /// A one-line status message. Replaces any notice already showing.

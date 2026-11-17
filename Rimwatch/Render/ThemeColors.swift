@@ -1,7 +1,7 @@
 import GameCore
 import UIKit
 
-extension RGB {
+nonisolated extension RGB {
     func uiColor(alpha: Double = 1) -> UIColor {
         UIColor(red: r, green: g, blue: b, alpha: alpha)
     }

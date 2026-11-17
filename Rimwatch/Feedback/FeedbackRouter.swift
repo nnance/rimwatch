@@ -1,12 +1,23 @@
 import Foundation
 import GameCore
 
-/// Plays a theme's sound patch. Step 7 provides the synthesiser; until then `SilentSoundOutput`
-/// takes every call and does nothing.
+/// Plays a theme's sound patches and music. `Synth` is the real one; `SilentSoundOutput` takes
+/// every call and does nothing.
 @MainActor
 protocol SoundOutput: AnyObject {
-    /// `volume` is 0...1 (the options' sound level); `pan` is -1 (left) ... 1 (right).
-    func play(_ patch: SoundPatch, volume: Double, pan: Double)
+    /// A gameplay sound. `gain` is 0...1 for where it happened (quieter off screen), on top of
+    /// the sound option; `pan` is -1 (left) ... 1 (right).
+    func play(_ patch: SoundPatch, gain: Double, pan: Double)
+    /// A menu sound. Plays whether or not gameplay sound is on.
+    func playMenu(_ patch: SoundPatch)
+    /// The options' sound and music levels, 0...1. Takes effect at once.
+    func setLevels(sound: Double, music: Double)
+    /// Whether gameplay sounds may play. Off fades out whatever is sounding.
+    func setGameplayActive(_ active: Bool)
+    /// The music mood, or nil for silence. Changes fade.
+    func setMusic(_ mood: MusicMood?)
+    /// Called every frame, for fades.
+    func update(elapsed: Double)
 }
 
 /// Plays a haptic cue. `HapticRouter` plays it with Core Haptics on a controller or the phone;
@@ -19,7 +30,12 @@ protocol HapticOutput: AnyObject {
 
 @MainActor
 final class SilentSoundOutput: SoundOutput {
-    func play(_ patch: SoundPatch, volume: Double, pan: Double) {}
+    func play(_ patch: SoundPatch, gain: Double, pan: Double) {}
+    func playMenu(_ patch: SoundPatch) {}
+    func setLevels(sound: Double, music: Double) {}
+    func setGameplayActive(_ active: Bool) {}
+    func setMusic(_ mood: MusicMood?) {}
+    func update(elapsed: Double) {}
 }
 
 @MainActor
@@ -34,7 +50,9 @@ final class SilentHapticOutput: HapticOutput {
 final class FeedbackRouter {
     var sound: any SoundOutput
     var haptics: any HapticOutput
-    var options: GameOptions
+    var options: GameOptions {
+        didSet { sound.setLevels(sound: options.soundLevel, music: options.musicLevel) }
+    }
     private let theme: any Theme
 
     #if DEBUG
@@ -48,27 +66,28 @@ final class FeedbackRouter {
         self.options = options
         self.sound = sound
         self.haptics = haptics
+        sound.setLevels(sound: options.soundLevel, music: options.musicLevel)
     }
 
-    /// `pan` gives the stereo position of an event (from where it happened relative to the view).
-    func route(_ events: [GameEvent], pan: (GameEvent) -> Double) {
+    /// `placement` gives the stereo position of an event and how loud it should be for where it
+    /// happened relative to the view. The synth logs what it actually starts or drops.
+    func route(_ events: [GameEvent], placement: (GameEvent) -> (pan: Double, gain: Double)) {
         for event in events {
             if let patch = theme.sound(for: event), options.soundLevel > 0 {
-                let side = pan(event)
-                sound.play(patch, volume: options.soundLevel, pan: side)
-                #if DEBUG
-                if Self.logs, patch.name != "frontier.lance.fire" {
-                    NSLog("[Rimwatch feedback] sound %@ pan %.2f", patch.name, side)
-                }
-                #endif
+                let place = placement(event)
+                sound.play(patch, gain: place.gain, pan: place.pan)
             }
             if let cue = HapticCue.cue(for: event) { feel(cue, for: "\(event)") }
         }
     }
 
-    /// A haptic for the menus: a tick when the selection or an option moves, a tap on activation.
-    func menu(_ cue: HapticCue) {
-        feel(cue, for: "menu")
+    /// Menu feedback for an accepted command: a sound, and a haptic tick when the selection or an
+    /// option moves or a tap on activation.
+    func menu(_ cue: HapticCue, sound menuSound: MenuSound) {
+        if let patch = theme.menuSound(menuSound), options.soundLevel > 0 {
+            sound.playMenu(patch)
+        }
+        feel(cue, for: "menu \(menuSound.rawValue)")
     }
 
     private func feel(_ cue: HapticCue, for reason: @autoclosure () -> String) {

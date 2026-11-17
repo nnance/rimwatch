@@ -23,12 +23,13 @@ extension Simulation {
 
             let colonist = colonists[t]
             let dx = world.delta(from: enemy.pos.x, to: colonist.pos.x)
-            let reach = tuning.harvesterSpeed * dt
+            let pace = abductionScale
+            let reach = tuning.harvesterSpeed * pace * dt
             enemy.pos.x = world.wrap(enemy.pos.x + clamp(dx, -reach, reach))
 
             let hoverY = colonist.pos.y + tuning.grabHeight
             let wantedY = abs(dx) > tuning.harvesterDescendRange ? world.ceiling - 60 : hoverY
-            let climb = tuning.harvesterDescentSpeed * dt
+            let climb = tuning.harvesterDescentSpeed * pace * dt
             enemy.pos.y += clamp(wantedY - enemy.pos.y, -climb, climb)
 
             if abs(dx) < 4, abs(enemy.pos.y - hoverY) < 3 {
@@ -43,7 +44,7 @@ extension Simulation {
                 enemy.state = .seeking(target: nil)
                 return
             }
-            enemy.pos.y += tuning.liftSpeed * dt
+            enemy.pos.y += tuning.liftSpeed * liftScale * dt
             colonists[t].pos = Vec2(enemy.pos.x, enemy.pos.y - tuning.grabHeight)
             if enemy.pos.y >= world.ceiling {
                 colonists[t].state = .lost
@@ -69,7 +70,7 @@ extension Simulation {
 
         enemy.fireTimer -= dt
         if enemy.fireTimer <= 0 {
-            enemy.fireTimer = rng.range(tuning.harvesterFireInterval)
+            enemy.fireTimer = nextHarvesterShotDelay()
             fireEnemyShot(from: enemy.pos)
         }
     }

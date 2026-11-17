@@ -92,19 +92,61 @@ Tick each item when it is built and verified. Continue from the first unticked o
       `Rimwatch/Input/DebugPadCommands.swift`) and by real touch. The iOS simulator reports a
       phantom "Gamepad" controller with nothing attached, so DEBUG simulator builds ignore real
       controllers unless launched with `-realPads`. Not verified: real controller hardware and
-      real haptics (Core Haptics does not run in the simulator). Known defect, to fix in step 7:
-      a stick or D-pad held on a diagonal makes the menu selection chatter (`Gamepad.swift`,
-      the axis choice has no hysteresis).
-- [ ] 7. Synthesised audio, particle polish, difficulty tuning
+      real haptics (Core Haptics does not run in the simulator). The diagonal menu chatter found
+      here was fixed in step 7.
+- [x] 7. Synthesised audio, particle polish, difficulty tuning (2026-11-16).
+      - Audio: every sound is a `SoundPatch` in the theme (`Themes/AlienFrontierSounds.swift`),
+        rendered by the pure-Swift `SoundRenderer` in `GameCore`; `Rimwatch/Audio/Synth.swift`
+        plays pre-rendered buffers through AVAudioEngine (12 gameplay voices, 2 menu voices, rate
+        limiting, `.ambient` session). `AmbientMusic` is a generative bed with title, calm,
+        tension and blackout moods chosen by `MusicMoodDirector`. Checked by measurement only:
+        DEBUG `-dumpAudio` writes every patch and mood to WAV.
+      - Visuals: a fixed pool of 480 particles, engine plume, a death effect per enemy kind,
+        parallax stars and a far ridge, screen shake (off under Reduce Motion), a catch beam. The
+        next run's terrain is drawn in the background and text is warmed on the title, so a run
+        starts without a hitch.
+      - Tuning: done with scripted bots (`GameCore/Autopilot.swift`, DEBUG only; idle, novice,
+        competent, shooter) and the harness described below. `DifficultyTests` pin the results
+        coarsely. DEBUG `-autopilot` uses the competent bot and `-autopilot shooter` the one that
+        never rescues, which reaches Blackout.
+      - Independently verified on the iPhone 18 Pro simulator and the Duo simulator's outer
+        display. Not verified: sound through a real speaker, play feel, catching by hand, real
+        controllers and haptics, 120 Hz, and the Duo's open inner display.
 
-State of `GameCore` on 2026-11-16: 163 tests pass. Every number in `Tuning.swift` is a first guess
-that has not been tuned, so expect to retune flight, enemy speeds and wave makeup in step 7.
-Noted so far for step 7: holding Fire overheats the lance about every 3.3 s with a 1.6 s
-lockout (`heatPerShot` 0.07 against `coolingRate` 0.4); `harvesterFireRange` 500 lets Harvesters
-fire from the screen edge; `safeFallHeight` 150 means most colonists dropped from height die
-unless caught; an idle ship loses all three lives in about 25 s. Two details differ from the design text below: the shield starts empty (two deliveries
-fill it), and a supply drop comes on a 25-second timer when there are no colonists or no outposts
-left, not as something the player collects.
+State of `GameCore` on 2026-11-16: 201 tests pass (about 11 s). The numbers in `Tuning.swift` and
+`WaveDirector.swift` were tuned against bots, not people. Measured over 80 seeds per bot: an idle
+ship first dies at about 39 s; the novice bot reaches wave 4 and keeps 3 colonists to wave 6; the
+competent bot reaches wave 10 and loses 2 colonists by wave 5; the shooter bot hits Blackout in
+about 46% of games, first around wave 8, and usually recovers. Holding Fire overheats the lance
+after about 6.7 s with a 1.2 s lockout. A colonist dropped in the first 3.3 s of a 15 s lift
+survives the fall uncaught (`safeFallHeight` 100); after that it must be caught (`catchRadius`
+40). Each enemy kind debuts on its own, in waves 2, 3, 5, 7 and 9. The competent bot dodges
+shots almost perfectly, so its numbers are optimistic for a person. Two details differ from the
+design text below: the shield starts empty (two deliveries fill it), and a supply drop comes on a
+25-second timer when there are no colonists or no outposts left, not as something the player
+collects.
+
+The tuning harness is in `Tools/Harness`: a small executable that depends on the `GameCore`
+package and runs each bot over many seeds. The bots only exist in DEBUG builds, so run it with
+`swift build -c release -Xswiftc -DDEBUG && .build/release/Harness 80 20 idle novice competent
+shooter` (seeds, minutes cap, bots). Environment variables such as `SAFE`, `CATCH` and `FROM`
+override single tuning values for a sweep; see the top of its `main.swift`.
+
+## What is left
+
+Everything in the build order is done. What remains needs a person and a device:
+
+1. Run on a real iPhone Duo (set the signing team in Xcode). Nothing has been seen on the open
+   inner display: check the layout, the crease band, the camera hole, partial-open poses and
+   120 Hz pacing. The crease code uses `.division` reserved regions when the system reports
+   them and otherwise keeps a central band of 5% of the width clear.
+2. Play-test the feel: flight inertia, shot rhythm, thumb reach, whether colonists can be caught
+   by hand in waves 1 to 5, whether wave 2 is too steep for a first game, whether Blackout and
+   its recovery are clear.
+3. Listen on the phone speaker: overall mix, music level, whether the Shockwave and ship-death
+   sounds are prominent enough.
+4. Try a real controller (input, Menu button, controller haptics) and feel the phone haptics.
+5. Later expansion: the deep-sea theme, as one new `Theme` file.
 
 ## Prerequisites (yours; I can't do these)
 

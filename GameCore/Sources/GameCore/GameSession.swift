@@ -28,6 +28,14 @@ public struct GameSession: Sendable {
     private var seed: UInt64
     private var accumulator = 0.0
 
+    /// The seed of the current run's simulation (and its world).
+    public var runSeed: UInt64 { seed }
+
+    /// The seed the next new run will use, so its world can be prepared ahead of time.
+    public var nextRunSeed: UInt64 {
+        seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+    }
+
     public init(seed: UInt64, tuning: Tuning = Tuning()) {
         self.seed = seed
         self.tuning = tuning
@@ -146,7 +154,7 @@ public struct GameSession: Sendable {
 
     private mutating func newSimulation() {
         // A different but reproducible seed for each run.
-        seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+        seed = nextRunSeed
         simulation = Simulation(seed: seed, tuning: tuning)
         accumulator = 0
     }

@@ -68,8 +68,9 @@ public struct AlienFrontier: Theme {
         }
     }
 
-    /// Every event that makes a sound names its patch here. Step 7 synthesises them; the names
-    /// are stable identifiers, prefixed with the theme so a second theme can't collide.
+    /// Every event that makes a sound names its patch here; the patches themselves are in
+    /// `AlienFrontierSounds.swift`. Names are stable identifiers, prefixed with the theme so a
+    /// second theme can't collide.
     public func sound(for event: GameEvent) -> SoundPatch? {
         let name: String? = switch event {
         case .waveStarted: "wave.start"
@@ -111,8 +112,18 @@ public struct AlienFrontier: Theme {
         case .blackoutEnded: "blackout.end"
         case .gameOver: "game.over"
         }
-        return name.map { SoundPatch(name: "frontier.\($0)") }
+        return name.map { Self.patch($0) }
     }
+
+    public func menuSound(_ sound: MenuSound) -> SoundPatch? {
+        Self.patch("ui.\(sound.rawValue)")
+    }
+
+    public var allSounds: [SoundPatch] {
+        Self.patches.values.sorted { $0.name < $1.name }
+    }
+
+    public var music: MusicStyle? { Self.musicStyle }
 
     // MARK: Shapes
 

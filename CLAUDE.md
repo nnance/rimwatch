@@ -24,6 +24,9 @@ and tick items as they are built and verified.
   Testing, which the Command Line Tools alone don't provide. If `import Testing` fails, run
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test`, or switch `xcode-select`
   to Xcode.
+- Difficulty numbers were tuned against scripted bots. After changing `Tuning.swift` or
+  `WaveDirector.swift`, re-run the harness in `Tools/Harness` (usage in `PLAN.md`) as well as the
+  tests.
 - `#expect` cannot wrap a mutating call. Write `#expect(session.resume() == true)`, not
   `#expect(session.resume())`.
 - The app drives `GameSession` (never `Simulation` directly) and reacts to the `GameEvent`s it

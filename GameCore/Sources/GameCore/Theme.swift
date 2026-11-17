@@ -143,28 +143,27 @@ public struct TerrainStyle: Sendable, Equatable {
     }
 }
 
-/// A synthesiser voice description. Filled in at build step 7 (audio); for now a theme only names
-/// its patches.
-public struct SoundPatch: Sendable, Equatable {
-    public var name: String
-
-    public init(name: String) {
-        self.name = name
-    }
-}
-
 public protocol Theme: Sendable {
     var name: String { get }
     var palette: Palette { get }
     var terrain: TerrainStyle { get }
     func shape(for role: EntityRole) -> ShapeDescription
     func displayName(for role: EntityRole) -> String
-    /// The sound to play for an event, if any. Every theme returns nil until step 7.
+    /// The sound to play for an event, if any. See `SoundPatch` (in `Audio/`).
     func sound(for event: GameEvent) -> SoundPatch?
+    /// The sound for a menu action, if any.
+    func menuSound(_ sound: MenuSound) -> SoundPatch?
+    /// Every patch the theme can play, so an app can prepare them all up front.
+    var allSounds: [SoundPatch] { get }
+    /// The ambient music, or nil for none.
+    var music: MusicStyle? { get }
 }
 
 extension Theme {
     public func sound(for event: GameEvent) -> SoundPatch? { nil }
+    public func menuSound(_ sound: MenuSound) -> SoundPatch? { nil }
+    public var allSounds: [SoundPatch] { [] }
+    public var music: MusicStyle? { nil }
 }
 
 /// Helpers for building shapes.

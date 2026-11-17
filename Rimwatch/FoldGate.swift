@@ -138,7 +138,7 @@ final class FoldGate {
     }
 
     private func log(_ message: String) {
-        NSLog("[Rimwatch fold] %@", message)
+        debugLog("[Rimwatch fold] \(message)")
     }
 }
 

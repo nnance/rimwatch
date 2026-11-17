@@ -13,6 +13,14 @@ extension Simulation {
         var enemy = enemies[index]
         defer { enemies[index] = enemy }
 
+        // Still waking (a Husk that has just formed): drift to a stop.
+        if enemy.timer > 0 {
+            enemy.timer -= dt
+            enemy.vel = enemy.vel * exp(-3 * dt)
+            enemy.pos.x = world.wrap(enemy.pos.x + enemy.vel.x * dt)
+            return
+        }
+
         if player.isAlive {
             let dx = world.delta(from: enemy.pos.x, to: player.pos.x)
             let dy = player.pos.y - enemy.pos.y

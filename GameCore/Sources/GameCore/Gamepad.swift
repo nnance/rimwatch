@@ -190,33 +190,66 @@ public enum MenuDirection: Sendable, Hashable {
     public static let stickPress = 0.55
     /// ...and fall below this to let go, so a stick resting near the threshold doesn't chatter.
     public static let stickRelease = 0.35
+    /// A D-pad axis counts as pressed at this deflection (an analogue D-pad reports in between).
+    public static let dpadPress = 0.5
+    /// On a diagonal, the other axis must beat the held one by this much to take over, so a
+    /// thumb resting near 45 degrees doesn't flip between the two directions.
+    public static let axisSwitchMargin = 0.2
+    /// A stick push counts as left or right only when its horizontal part is this many times its
+    /// vertical part (within about 27 degrees of horizontal). Anything more diagonal is up or
+    /// down: moving the selection by mistake is harmless, changing an option's value is not.
+    public static let horizontalDominance = 2.0
 
-    /// The D-pad's direction, the stronger axis winning a diagonal (vertical on a tie, since
-    /// menus are lists).
-    static func dpad(_ dpad: Vec2) -> MenuDirection? {
-        axis(dpad, threshold: 0.5)
+    /// How far `v` pushes along a direction (negative when pushing the other way).
+    static func along(_ v: Vec2, _ direction: MenuDirection) -> Double {
+        switch direction {
+        case .up: v.y
+        case .down: -v.y
+        case .right: v.x
+        case .left: -v.x
+        }
+    }
+
+    /// Deflection on the axis that `direction` is not on.
+    static func across(_ v: Vec2, _ direction: MenuDirection) -> Double {
+        switch direction {
+        case .up, .down: abs(v.x)
+        case .left, .right: abs(v.y)
+        }
+    }
+
+    /// The D-pad's direction. A fresh diagonal picks the stronger axis (vertical on a tie, since
+    /// menus are lists); a direction already held (`previous`) keeps winning while its button
+    /// stays down, so rolling onto a diagonal and back doesn't change it.
+    static func dpad(_ dpad: Vec2, previous: MenuDirection? = nil) -> MenuDirection? {
+        if let previous, along(dpad, previous) >= dpadPress { return previous }
+        return axis(dpad, threshold: dpadPress)
     }
 
     /// The stick's direction: pushed past `stickPress`, or still past `stickRelease` in the
-    /// direction it was already held (`previous`).
+    /// direction it was already held (`previous`), unless the other axis has clearly taken over.
+    /// A fresh diagonal reads as vertical unless it is clearly horizontal.
     static func stick(_ stick: Vec2, previous: MenuDirection? = nil) -> MenuDirection? {
         if let previous {
-            let along: Double = switch previous {
-            case .up: stick.y
-            case .down: -stick.y
-            case .right: stick.x
-            case .left: -stick.x
+            let held = along(stick, previous)
+            let across = across(stick, previous)
+            let overtaken = switch previous {
+            // Turning to left or right needs a clearly horizontal stick, from any direction.
+            case .up, .down: across >= held * horizontalDominance
+            case .left, .right: across >= held + axisSwitchMargin
             }
-            if along >= stickRelease, axis(stick, threshold: 0) == previous { return previous }
+            if held >= stickRelease, !overtaken { return previous }
         }
-        return axis(stick, threshold: stickPress)
+        guard stick.length >= stickPress else { return nil }
+        if abs(stick.x) >= abs(stick.y) * horizontalDominance { return stick.x > 0 ? .right : .left }
+        return stick.y > 0 ? .up : .down
     }
 
     /// The direction a snapshot is pushing: the D-pad first, then the stick with hysteresis.
     /// `previous` is the direction currently held, which the stick keeps until it falls below
     /// `stickRelease`.
     public static func of(_ snapshot: PadSnapshot, previous: MenuDirection?) -> MenuDirection? {
-        dpad(snapshot.dpad) ?? stick(snapshot.stick, previous: previous)
+        dpad(snapshot.dpad, previous: previous) ?? stick(snapshot.stick, previous: previous)
     }
 
     private static func axis(_ v: Vec2, threshold: Double) -> MenuDirection? {
@@ -233,6 +266,11 @@ public enum MenuDirection: Sendable, Hashable {
 ///
 /// - A step happens on each new push of either source (a direction appearing, or changing), even
 ///   one that begins and ends between frames, and otherwise only by hold-to-repeat.
+/// - The D-pad keeps its direction while that button stays down, so rolling onto a diagonal and
+///   back is not a new push; letting the held button go while another stays down is a turn,
+///   and steps at once.
+/// - One source pushed the way the other is already holding is not a new push (the stick and
+///   the D-pad pushed together give one step).
 /// - The most recently pushed source that is still held supplies the direction that repeats:
 ///   after `initialDelay`, then every `interval`.
 /// - Letting go of a source never steps. If the other source is still held, it takes over the
@@ -266,16 +304,29 @@ public struct MenuDirectionTracker: Sendable {
     }
 
     public mutating func receive(dpad dpadValue: Vec2, stick stickValue: Vec2) {
-        let newDpad = MenuDirection.dpad(dpadValue)
+        let newDpad = MenuDirection.dpad(dpadValue, previous: dpad)
         let newStick = MenuDirection.stick(stickValue, previous: stick)
+        let heldBefore = (dpad: direction(.dpad), stick: direction(.stick))
         let changes: [(Source, MenuDirection?, MenuDirection?)] = [(.dpad, dpad, newDpad), (.stick, stick, newStick)]
         dpad = newDpad
         stick = newStick
-        for (source, old, new) in changes {
+        var pushedNow: Set<MenuDirection> = []
+        for (source, oldDirection, new) in changes {
             if new == nil { ignored.remove(source) }
-            guard let new, new != old else { continue }
-            // A new push: one step now, and this source takes over the repeat.
+            guard let new, new != oldDirection else { continue }
             ignored.remove(source)
+            let other: Source = source == .dpad ? .stick : .dpad
+            // The other source already holds this way, or pushed it in this same update.
+            let otherHeld = other == .dpad ? heldBefore.dpad : heldBefore.stick
+            let duplicate = pushedNow.contains(new) || otherHeld == new
+            if duplicate {
+                // A changed direction without a step: if this source supplies the repeat, the
+                // repeat waits the full delay again rather than stepping the new way at once.
+                if repeatSource == source { startRepeat(source) }
+                continue
+            }
+            // A new push: one step now, and this source takes over the repeat.
+            pushedNow.insert(new)
             pushes.append(new)
             startRepeat(source)
         }

@@ -17,7 +17,7 @@ final class GlowShapeFactory {
     }
 
     /// Line widths and blur in screen points.
-    enum Style {
+    nonisolated enum Style {
         static let coreWidth: CGFloat = 1.1
         static let lineWidth: CGFloat = 2.0
         static let haloWidth: CGFloat = 3.0
@@ -36,6 +36,9 @@ final class GlowShapeFactory {
         // Glow is soft anyway; 2x keeps memory down on 3x screens without visible loss.
         self.screenScale = min(screenScale, 2)
     }
+
+    /// Every texture made so far, for preloading.
+    var cachedTextures: [SKTexture] { cache.values.map(\.texture) }
 
     func clear() {
         cache.removeAll()
@@ -98,7 +101,8 @@ final class GlowShapeFactory {
 
     // MARK: Drawing helpers, shared with the terrain and the controls
 
-    static func image(size: CGSize, scale: CGFloat, draw: (CGContext) -> Void) -> UIImage {
+    /// Safe off the main thread (terrain is pre-rendered in the background).
+    nonisolated static func image(size: CGSize, scale: CGFloat, draw: (CGContext) -> Void) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         format.opaque = false
@@ -107,7 +111,7 @@ final class GlowShapeFactory {
     }
 
     /// Strokes `path` as a glowing line. `strength` scales the brightness of every pass.
-    static func strokeGlow(_ path: CGPath, color: RGB, strength: Double = 1, in context: CGContext) {
+    nonisolated static func strokeGlow(_ path: CGPath, color: RGB, strength: Double = 1, in context: CGContext) {
         context.saveGState()
         context.setLineJoin(.round)
         context.setLineCap(.round)

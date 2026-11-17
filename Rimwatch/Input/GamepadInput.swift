@@ -145,7 +145,7 @@ final class GamepadInput {
         case nil:
             break
         }
-        NSLog("[Rimwatch pad] active controller: %@ (haptics: %@)", next?.name ?? "none", haptics == nil ? "no" : "yes")
+        debugLog("[Rimwatch pad] active controller: \(next?.name ?? "none") (haptics: \(haptics == nil ? "no" : "yes"))")
         if let next {
             onChange?(.connected(name: next.name, replaced: previous != nil))
         } else if let previous {

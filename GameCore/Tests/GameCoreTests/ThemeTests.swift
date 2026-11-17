@@ -86,6 +86,7 @@ import Testing
             func displayName(for role: EntityRole) -> String { base.displayName(for: role) }
         }
         #expect(Plain().sound(for: .extraLife) == nil)
-        #expect(theme.sound(for: .extraLife) == SoundPatch(name: "frontier.life.extra"))
+        #expect(theme.sound(for: .extraLife)?.name == "frontier.life.extra")
+        #expect(theme.sound(for: .extraLife)?.layers.isEmpty == false)
     }
 }

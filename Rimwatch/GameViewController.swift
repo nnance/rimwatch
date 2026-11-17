@@ -80,7 +80,7 @@ final class GameViewController: UIViewController {
     // MARK: Fold
 
     private func poseChanged(_ pose: FoldPose) {
-        NSLog("[Rimwatch fold] pose %@ (overridden: %@)", "\(pose)", foldGate.isOverridden ? "yes" : "no")
+        debugLog("[Rimwatch fold] pose \(pose) (overridden: \(foldGate.isOverridden ? "yes" : "no"))")
         setNeedsUpdateOfSupportedInterfaceOrientations()
         view.setNeedsLayout()
         scene?.setPose(pose)
@@ -135,7 +135,7 @@ final class GameViewController: UIViewController {
         let description = regions.map { "\($0.frame) margins \($0.margins)" }.joined(separator: "; ")
         if description != lastLoggedRegions {
             lastLoggedRegions = description
-            NSLog("[Rimwatch fold] division reserved regions: %@", regions.isEmpty ? "none" : description)
+            debugLog("[Rimwatch fold] division reserved regions: \(regions.isEmpty ? "none" : description)")
         }
         // A vertical division region (taller than wide) is the crease.
         let vertical = regions.map(\.frame).filter { $0.height >= $0.width }
