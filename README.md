@@ -1,12 +1,22 @@
 # Rimwatch
 
-An original side-scrolling rescue shooter for the iPhone Duo's inner display. Native iOS, written
-in Swift with SpriteKit. It has no third-party dependencies and no asset files: the art is drawn in
-code and the sound is synthesised.
+A side-scrolling rescue shooter for the iPhone Duo's inner display, inspired by the classic arcade
+game Defender (Williams Electronics, 1981). Native iOS, written in Swift with SpriteKit. It has no
+third-party dependencies and no asset files: the art is drawn in code and the sound is synthesised.
 
 ![Rimwatch gameplay: a colonist returned to an outpost at the end of wave 2](docs/screenshot.png)
 
 *Captured on an ordinary iPhone simulator, letterboxed to the Duo's inner-display shape.*
+
+## Inspiration
+
+Rimwatch sets out to capture the feel of Defender: fast momentum flight over a wraparound world, a
+scanner that shows all of it, and a loop built on protecting people on the ground and catching them
+when they are carried off.
+
+It is a tribute, not a copy. The name, ship, enemies, art, sounds and screen layout are its own,
+and it adds mechanics of its own too: the heat meter, Blink, the carry multiplier, the shield and
+Blackout. Rimwatch is not affiliated with or endorsed by the owners of Defender.
 
 ## Status
 
