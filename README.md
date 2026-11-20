@@ -3,6 +3,7 @@
 A side-scrolling rescue shooter for the iPhone Duo's inner display, inspired by the classic arcade
 game Defender (Williams Electronics, 1981). Native iOS, written in Swift with SpriteKit. It has no
 third-party dependencies and no asset files: the art is drawn in code and the sound is synthesised.
+The one image in the app, its icon, is drawn by a script too.
 
 ![Rimwatch gameplay: a colonist returned to an outpost at the end of wave 2](docs/screenshot.png)
 
@@ -57,6 +58,8 @@ whole world.
 Options let you swap the touch controls to the other hand and swap Blink and Shockwave on the
 gamepad. The touch controls hide while a controller is connected, and menus work with either.
 
+Sound respects the phone's Silent mode: with Silent mode on, the game plays no sound or music.
+
 ## Fold behaviour
 
 Gameplay only runs on the open inner display.
@@ -107,6 +110,15 @@ swift build -c release -Xswiftc -DDEBUG
 
 The arguments are the number of seeds, a cap in minutes per game, and the bots to run.
 
+## App icon
+
+The icon is generated, not drawn by hand. After changing the ship or colonist shapes or the
+palette in the theme, regenerate it from the repository root:
+
+```sh
+swift run --package-path Tools/Icon Icon Rimwatch/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+```
+
 ## Project layout
 
 | Path | What it holds |
@@ -114,6 +126,7 @@ The arguments are the number of seeds, a cap in minutes per game, and the bots t
 | `GameCore/` | The game logic as a Swift package, with no UIKit or SpriteKit: world, simulation, enemies, waves, scoring, menus, sound rendering and the tests. It knows what each entity does, never how it looks; appearance and sound come from a `Theme`. |
 | `Rimwatch/` | The app: SpriteKit scene and rendering, touch and gamepad input, fold handling, audio playback, haptics and the menu screens. |
 | `Tools/Harness/` | The bot harness used for difficulty tuning. |
+| `Tools/Icon/` | The script that draws the app icon from the theme's ship and colonist shapes. |
 | `PLAN.md` | The design, the build history and what is left. |
 | `CLAUDE.md` | Working notes for building the project with Claude Code. |
 
