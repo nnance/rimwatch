@@ -1508,11 +1508,11 @@ final class GameScene: SKScene {
         syncPlayer(sim.player)
         if sim.player.isAlive, frontEnd.screen == .playing {
             let p = sim.player
-            // The plume leaves the nozzle, wherever the tilt has swung it.
+            // The plume leaves the engine, wherever the tilt has swung it.
             let tilt = shipTilt(p)
-            let nozzle = shipNozzle
-            let tail = Vec2(world.wrap(p.pos.x + p.facing * nozzle.x * cos(tilt) - nozzle.y * sin(tilt)),
-                            p.pos.y + p.facing * nozzle.x * sin(tilt) + nozzle.y * cos(tilt))
+            let engine = shipEngine
+            let tail = Vec2(world.wrap(p.pos.x + p.facing * engine.x * cos(tilt) - engine.y * sin(tilt)),
+                            p.pos.y + p.facing * engine.x * sin(tilt) + engine.y * cos(tilt))
             effects.exhaust(at: tail, thrust: lastInput.move, shipVelocity: p.vel, facing: p.facing,
                             color: p.isOverheated ? theme.palette.warning : theme.palette.shield, elapsed: dt)
         }
@@ -1673,7 +1673,7 @@ final class GameScene: SKScene {
 
     /// Where the engine plume leaves the ship, in world units from its origin with the ship
     /// facing right: the middle of the rearmost points of the theme's ship shape.
-    private lazy var shipNozzle: Vec2 = {
+    private lazy var shipEngine: Vec2 = {
         let shape = theme.shape(for: .player)
         let back = shape.bounds.min.x
         let rear = shape.strokes.flatMap(\.points).filter { $0.x <= back + 0.001 }
@@ -1696,8 +1696,9 @@ final class GameScene: SKScene {
         node.isHidden = !player.isAlive
         guard player.isAlive else { return }
         node.position = CGPoint(x: world.delta(from: cameraX, to: player.pos.x), y: player.pos.y)
-        // Mirrored, never rotated, to face left: the ship is drawn side-on, so turning it half a
-        // circle would fly it upside down. The tilt follows the climb in either direction.
+        // Mirrored to face left, so the tilt keeps one sense for both facings: the nose lifts
+        // in a climb and dips in a dive either way. The ship is symmetric top to bottom, so the
+        // mirror looks the same as turning it round.
         node.xScale = player.facing < 0 ? -1 : 1
         node.zRotation = CGFloat(shipTilt(player))
 

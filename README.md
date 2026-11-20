@@ -5,7 +5,7 @@ game Defender (Williams Electronics, 1981). Native iOS, written in Swift with Sp
 third-party dependencies and no asset files: the art is drawn in code and the sound is synthesised.
 The one image in the app, its icon, is drawn by a script too.
 
-![Rimwatch gameplay in wave 5: the ship in flight, a colonist caught for 150 points and two Harvesters on screen](docs/screenshot.png)
+![Rimwatch gameplay in wave 2: the ship firing at a Harvester above an outpost with two colonists](docs/screenshot.png)
 
 *Captured on an ordinary iPhone simulator, letterboxed to the Duo's inner-display shape.*
 

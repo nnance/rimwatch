@@ -43,21 +43,27 @@ import Testing
         }
     }
 
-    /// The ship is drawn side-on: it has a top (canopy, fin) and a bottom (cannon), so it must
-    /// not be its own mirror image top to bottom, and it stays about as big as what can hit it.
-    @Test func theShipIsASideViewWithATopAndABottom() {
+    /// The ship is seen from above, so it is its own mirror image top to bottom: flipping it to
+    /// face left can never turn it upside down, and the plume and shots leave from its middle.
+    /// It stays about as big as what can hit it.
+    @Test func theShipIsATopDownForkSymmetricTopToBottom() {
         let ship = theme.shape(for: .player)
-        let points = Set(ship.strokes.flatMap(\.points).map { "\($0.x),\($0.y)" })
-        let mirrored = Set(ship.strokes.flatMap(\.points).map { "\($0.x),\(-$0.y == 0 ? 0 : -$0.y)" })
-        #expect(points != mirrored)
-        let bounds = ship.bounds
-        #expect(bounds.max.y > -bounds.min.y + 0.1, "the fin and canopy rise higher than the belly hangs")
-        // Its footprint is close to the hit circle: no more than half as long again as the
-        // circle is wide, and at least most of the circle tall.
+        for stroke in ship.strokes {
+            let points = Set(stroke.points.map { "\($0.x),\($0.y == 0 ? 0 : $0.y)" })
+            let mirrored = Set(stroke.points.map { "\($0.x),\($0.y == 0 ? 0 : -$0.y)" })
+            #expect(points == mirrored, "\(stroke.points)")
+        }
+        // The cannon lies on the centre line, behind the nose, where the shots leave.
+        let cannon = ship.strokes.filter { $0.points.allSatisfy { $0.y == 0 } }
+        #expect(cannon.count == 1)
+        #expect(cannon.first.map { $0.points.map(\.x).max()! < ship.bounds.max.x } == true)
+        // Its footprint is close to the hit circle: from as long as the circle is wide to half as
+        // long again, and from most of the circle tall to no taller than it.
         let radius = Tuning().playerRadius
+        let bounds = ship.bounds
         let length = (bounds.max.x - bounds.min.x) * ship.scale
         let height = (bounds.max.y - bounds.min.y) * ship.scale
-        #expect(length <= 2 * radius * 1.6 && length >= 2 * radius)
+        #expect(length >= 2 * radius && length <= 2 * radius * 1.6)
         #expect(height >= radius * 1.2 && height <= 2 * radius)
         // The life icon is a simpler ship, never a different one.
         let icon = theme.icon(for: .player)
