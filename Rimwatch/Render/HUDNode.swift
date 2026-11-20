@@ -104,16 +104,19 @@ final class HUDNode: SKNode {
         addChild(score)
         scoreRow = score
 
-        // Row 2: lives as small ships, then Shockwave charges as rings.
-        let slots = CGFloat(maxLives + maxShockwaves) + 1.5
+        // Row 2: lives as small ships, then Shockwave charges as rings. The ships lie level, so
+        // each takes a slot and a bit to stay clear of the next.
+        let lifeSlot: CGFloat = 1.3
+        let slots = CGFloat(maxLives) * lifeSlot + CGFloat(maxShockwaves) + 1.5
         let icon: CGFloat = min(rowH * 0.95, leftW / slots)
-        let shipShape = theme.shape(for: .player)
+        let shipShape = theme.icon(for: .player)
         let shipSpan = (shipShape.bounds.max.x - shipShape.bounds.min.x) * shipShape.scale
         for index in 0..<maxLives {
             let sprite = SKSpriteNode()
-            factory.apply(iconGlyph("hud-life", shipShape, factor: Double(icon * 0.85) / shipSpan), to: sprite)
-            sprite.position = CGPoint(x: icon * (CGFloat(index) + 0.5), y: rowY(1))
-            sprite.zRotation = .pi / 2
+            factory.apply(iconGlyph("hud-life", shipShape, factor: Double(icon * 0.95) / shipSpan), to: sprite)
+            // Level and facing right, as the ship flies: it is drawn side-on, so standing it on
+            // its tail would read as a rocket.
+            sprite.position = CGPoint(x: icon * lifeSlot * (CGFloat(index) + 0.5), y: rowY(1))
             addChild(sprite)
             lifeIcons.append(sprite)
         }
@@ -121,7 +124,7 @@ final class HUDNode: SKNode {
             ShapeStroke(ShapeKit.arc(radius: 1, segments: 20), color: theme.palette.shield),
             ShapeStroke(ShapeKit.arc(radius: 0.4, segments: 12), color: theme.palette.shield),
         ])
-        let pipStart = icon * (CGFloat(maxLives) + 0.5)
+        let pipStart = icon * (CGFloat(maxLives) * lifeSlot + 0.5)
         for index in 0..<maxShockwaves {
             let sprite = SKSpriteNode()
             factory.apply(iconGlyph("hud-shock", pipShape, factor: Double(icon * 0.34)), to: sprite)

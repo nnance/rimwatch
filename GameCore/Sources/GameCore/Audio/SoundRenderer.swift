@@ -65,6 +65,9 @@ public enum SoundRenderer {
         let detuneRatio = pow(2, layer.detune / 1200)
         let glide = layer.endFrequency / max(layer.frequency, 1)
         let cutoffGlide = layer.filter.map { $0.endCutoff / max($0.cutoff, 1) } ?? 1
+        // Crackle grains: each starts at a random level and dies away over about a millisecond.
+        var grain = 0.0
+        let grainFade = exp(-dt / 0.0012)
 
         for n in 0..<length {
             let index = start + n
@@ -85,6 +88,11 @@ public enum SoundRenderer {
             let white = rng.range(-1...1)
             if layer.wave == .noise {
                 sample = white
+            } else if layer.wave == .crackle {
+                // Extra draws only for crackle, so every other layer's noise is unchanged.
+                if rng.range(0...1) < frequency * dt { grain = rng.range(0.25...1) }
+                sample = white * grain
+                grain *= grainFade
             } else {
                 sample = osc.next(layer.wave, increment: frequency * dt)
                 if layer.detune != 0 {
@@ -181,7 +189,7 @@ struct Oscillator {
             if q >= 1 { q -= 1 }
             v -= Self.blep(q, dt)
             return v
-        case .noise:
+        case .noise, .crackle:
             return 0
         }
     }

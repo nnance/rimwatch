@@ -1508,7 +1508,11 @@ final class GameScene: SKScene {
         syncPlayer(sim.player)
         if sim.player.isAlive, frontEnd.screen == .playing {
             let p = sim.player
-            let tail = Vec2(world.wrap(p.pos.x - p.facing * 14), p.pos.y)
+            // The plume leaves the nozzle, wherever the tilt has swung it.
+            let tilt = shipTilt(p)
+            let nozzle = shipNozzle
+            let tail = Vec2(world.wrap(p.pos.x + p.facing * nozzle.x * cos(tilt) - nozzle.y * sin(tilt)),
+                            p.pos.y + p.facing * nozzle.x * sin(tilt) + nozzle.y * cos(tilt))
             effects.exhaust(at: tail, thrust: lastInput.move, shipVelocity: p.vel, facing: p.facing,
                             color: p.isOverheated ? theme.palette.warning : theme.palette.shield, elapsed: dt)
         }
@@ -1661,6 +1665,22 @@ final class GameScene: SKScene {
                            time: clock)
     }
 
+    /// How far the ship noses up (positive) or down while climbing or diving, as a scene
+    /// rotation. Mirroring for a left-facing ship flips the sense, hence the facing factor.
+    private func shipTilt(_ player: Player) -> Double {
+        player.vel.y / session.tuning.verticalSpeed * 0.18 * player.facing
+    }
+
+    /// Where the engine plume leaves the ship, in world units from its origin with the ship
+    /// facing right: the middle of the rearmost points of the theme's ship shape.
+    private lazy var shipNozzle: Vec2 = {
+        let shape = theme.shape(for: .player)
+        let back = shape.bounds.min.x
+        let rear = shape.strokes.flatMap(\.points).filter { $0.x <= back + 0.001 }
+        let y = rear.map(\.y).reduce(0, +) / Double(max(rear.count, 1))
+        return Vec2(back * shape.scale - 1, y * shape.scale)
+    }()
+
     private func syncPlayer(_ player: Player) {
         let node = playerNode ?? {
             let made = makeSprite(.player, z: 5)
@@ -1676,8 +1696,10 @@ final class GameScene: SKScene {
         node.isHidden = !player.isAlive
         guard player.isAlive else { return }
         node.position = CGPoint(x: world.delta(from: cameraX, to: player.pos.x), y: player.pos.y)
+        // Mirrored, never rotated, to face left: the ship is drawn side-on, so turning it half a
+        // circle would fly it upside down. The tilt follows the climb in either direction.
         node.xScale = player.facing < 0 ? -1 : 1
-        node.zRotation = CGFloat(player.vel.y / session.tuning.verticalSpeed * 0.18 * player.facing)
+        node.zRotation = CGFloat(shipTilt(player))
 
         let invulnerable = player.invulnerableTimer > 0
         // Invulnerable: the hull strobes and the shield ring pulses. A charged shield shows a

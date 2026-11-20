@@ -2,7 +2,8 @@
 ///
 /// Families, so a sound says where it came from before you see it:
 /// - the ship: clean square and triangle tones pitched around E, bright and short;
-/// - enemies: detuned, buzzy sawtooth with noise, low and filtered;
+/// - enemies: detuned, buzzy sawtooth with noise, low and filtered; their deaths are explosions
+///   with a sharp crack and their energy in the mid band, where a phone speaker can play it;
 /// - colonists: soft sine chirps up high;
 /// - alerts (waves, Blackout, outposts, extra life): chords and arpeggios in A minor with echo.
 /// Loudness follows importance: firing is the quietest and shortest; losing the ship, Blackout,
@@ -130,11 +131,26 @@ extension AlienFrontier {
             SoundLayer(.saw, 170, to: 120, noise: 0.4, detune: 20, envelope: .pluck(0.07), filter: FilterSpec(.lowPass, cutoff: 1000),
                        duration: 0.08, gain: 0.6),
         ]),
-        // A crunchy burst with a falling buzz under it.
-        make("enemy.explode", .enemy, gain: 0.5, priority: 4, cooldown: 0.05, maxVoices: 3, [
-            SoundLayer(.noise, 0, envelope: .pluck(0.38), filter: FilterSpec(.lowPass, cutoff: 4500, to: 300), duration: 0.42),
-            SoundLayer(.saw, 170, to: 48, detune: 35, envelope: .pluck(0.28), filter: FilterSpec(.lowPass, cutoff: 1300),
-                       duration: 0.3, gain: 0.6),
+        // A craft blows apart: a bright crack, a burst of noise that darkens as it spreads, and
+        // debris crackling away. The body lives in the mid band a phone speaker carries; the low
+        // thump under it is only for headphones.
+        make("enemy.explode", .enemy, gain: 0.75, priority: 4, cooldown: 0.05, maxVoices: 3, [
+            // The crack.
+            SoundLayer(.noise, 0, envelope: .pluck(0.016, attack: 0.0005),
+                       filter: FilterSpec(.bandPass, cutoff: 3000, resonance: 0.6), duration: 0.024, gain: 2.6),
+            // The blast: bright at first, falling away.
+            SoundLayer(.noise, 0, envelope: Envelope(attack: 0.006, decay: 0.28, sustain: 0, release: 0.02, curve: 2.4),
+                       filter: FilterSpec(.lowPass, cutoff: 3500, to: 700, resonance: 0.8), duration: 0.32, gain: 1.2),
+            // Its rumbling core, as low as a phone speaker still plays.
+            SoundLayer(.noise, 0, envelope: Envelope(attack: 0.003, decay: 0.36, sustain: 0, release: 0.02, curve: 2),
+                       filter: FilterSpec(.bandPass, cutoff: 950, to: 420, resonance: 0.9), duration: 0.4, gain: 1.6),
+            // Debris crackling away.
+            SoundLayer(.crackle, 240, to: 30, envelope: Envelope(attack: 0.03, decay: 0.55, sustain: 0, release: 0.03, curve: 1.3),
+                       filter: FilterSpec(.lowPass, cutoff: 2600, to: 1000, resonance: 0.9), delay: 0.03, duration: 0.62,
+                       gain: 2.2),
+            // A low thump for headphones.
+            SoundLayer(.saw, 120, to: 45, detune: 30, envelope: .pluck(0.16), filter: FilterSpec(.lowPass, cutoff: 500),
+                       duration: 0.18, gain: 0.35),
         ]),
         // A small, high crackle.
         make("mote.pop", .enemy, gain: 0.3, priority: 2, cooldown: 0.04, maxVoices: 3, [
@@ -149,22 +165,34 @@ extension AlienFrontier {
                        filter: FilterSpec(.lowPass, cutoff: 2400, to: 500, resonance: 5), duration: 0.18),
             SoundLayer(.noise, 0, envelope: .pluck(0.05), filter: FilterSpec(.highPass, cutoff: 2000), duration: 0.06, gain: 0.5),
         ]),
-        // The sac bursts: a long wet gurgle with a heavy body.
-        make("brood.burst", .enemy, gain: 0.6, priority: 5, cooldown: 0.1, maxVoices: 2, [
+        // The sac bursts: a wet splat, then a gurgling spill that drains away. Kept in the mid
+        // band, with only a little weight underneath.
+        make("brood.burst", .enemy, gain: 0.7, priority: 5, cooldown: 0.1, maxVoices: 2, [
+            SoundLayer(.noise, 0, envelope: .pluck(0.04, attack: 0.0008), filter: FilterSpec(.bandPass, cutoff: 1400, resonance: 0.7),
+                       duration: 0.05, gain: 0.7),
             SoundLayer(.noise, 0, envelope: Envelope(attack: 0.004, decay: 0.6, sustain: 0, release: 0.05),
-                       filter: FilterSpec(.lowPass, cutoff: 2600, to: 160, resonance: 1.5), duration: 0.7),
-            SoundLayer(.saw, 95, to: 42, tremolo: (17, 0.7), detune: 40, envelope: Envelope(attack: 0.004, decay: 0.55, sustain: 0, release: 0.05),
-                       filter: FilterSpec(.lowPass, cutoff: 900), duration: 0.65, gain: 0.8),
+                       filter: FilterSpec(.lowPass, cutoff: 2200, to: 400, resonance: 1.5), duration: 0.7, gain: 1.3),
+            SoundLayer(.saw, 240, to: 110, tremolo: (17, 0.7), detune: 40, envelope: Envelope(attack: 0.004, decay: 0.55, sustain: 0, release: 0.05),
+                       filter: FilterSpec(.lowPass, cutoff: 1200, to: 600, resonance: 1.5), duration: 0.65, gain: 0.6),
         ]),
-        // Metal giving way: a deep clang, rumble and echo.
-        make("anchor.explode", .enemy, gain: 0.72, priority: 6, cooldown: 0.2, maxVoices: 1,
+        // The biggest enemy blows up: a heavy crack, a long roar with metal clanging inside it,
+        // and wreckage crackling on into the echo. The roar sits where a phone speaker plays; the
+        // sub-bass under it is for headphones.
+        make("anchor.explode", .enemy, gain: 0.8, priority: 6, cooldown: 0.2, maxVoices: 1,
              echo: Echo(time: 0.14, feedback: 0.3, mix: 0.3), [
+                SoundLayer(.noise, 0, envelope: .pluck(0.03, attack: 0.0005),
+                           filter: FilterSpec(.lowPass, cutoff: 3200, resonance: 0.8), duration: 0.04, gain: 2.4),
+                SoundLayer(.noise, 0, envelope: Envelope(attack: 0.003, decay: 0.7, sustain: 0, release: 0.05, curve: 2.2),
+                           filter: FilterSpec(.lowPass, cutoff: 2400, to: 400, resonance: 0.7), duration: 0.8, gain: 1.1),
                 SoundLayer(.noise, 0, envelope: Envelope(attack: 0.004, decay: 0.95, sustain: 0, release: 0.05),
-                           filter: FilterSpec(.lowPass, cutoff: 1600, to: 60), duration: 1.0),
-                SoundLayer(.saw, 72, to: 30, detune: 30, envelope: Envelope(attack: 0.004, decay: 0.8, sustain: 0, release: 0.05),
-                           filter: FilterSpec(.lowPass, cutoff: 700), duration: 0.85, gain: 0.8),
+                           filter: FilterSpec(.lowPass, cutoff: 900, to: 380, resonance: 1.2), duration: 1.0, gain: 1.3),
                 SoundLayer(.saw, 233, to: 175, envelope: .pluck(0.5), filter: FilterSpec(.bandPass, cutoff: 700, resonance: 4),
-                           duration: 0.55, gain: 0.5),
+                           duration: 0.55, gain: 0.7),
+                SoundLayer(.crackle, 300, to: 35, envelope: Envelope(attack: 0.04, decay: 1.0, sustain: 0, release: 0.05, curve: 1.4),
+                           filter: FilterSpec(.lowPass, cutoff: 2000, to: 700, resonance: 0.9), delay: 0.05, duration: 1.1,
+                           gain: 2.0),
+                SoundLayer(.saw, 72, to: 30, detune: 30, envelope: Envelope(attack: 0.004, decay: 0.8, sustain: 0, release: 0.05),
+                           filter: FilterSpec(.lowPass, cutoff: 500), duration: 0.85, gain: 0.3),
              ]),
         // A Harvester turns: a sick, wobbling growl.
         make("husk.form", .enemy, gain: 0.52, priority: 6, cooldown: 0.3, maxVoices: 1, [

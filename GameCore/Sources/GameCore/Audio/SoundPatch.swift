@@ -16,6 +16,10 @@ public enum Waveform: String, Sendable, Equatable, CaseIterable {
     case saw
     /// White noise (seeded, so a patch always renders the same).
     case noise
+    /// Crackle: short grains of noise at random moments, like debris snapping and sparks
+    /// spitting. `frequency` is the average number of grains a second (it glides to
+    /// `endFrequency` like a pitch does, so a crackle can thin out as it dies). Seeded like noise.
+    case crackle
 }
 
 /// Which group a sound belongs to. Sounds in a family share a timbre, so the player can tell at
@@ -93,7 +97,8 @@ public struct FilterSpec: Sendable, Equatable {
 /// sums its layers.
 public struct SoundLayer: Sendable, Equatable {
     public var wave: Waveform
-    /// Starting frequency in Hz (ignored for pure noise, which has none).
+    /// Starting frequency in Hz (ignored for pure noise, which has none; for crackle, grains a
+    /// second).
     public var frequency: Double
     /// Frequency at the end of the layer; the glide between is exponential.
     public var endFrequency: Double

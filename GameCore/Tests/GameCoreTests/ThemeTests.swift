@@ -43,6 +43,28 @@ import Testing
         }
     }
 
+    /// The ship is drawn side-on: it has a top (canopy, fin) and a bottom (cannon), so it must
+    /// not be its own mirror image top to bottom, and it stays about as big as what can hit it.
+    @Test func theShipIsASideViewWithATopAndABottom() {
+        let ship = theme.shape(for: .player)
+        let points = Set(ship.strokes.flatMap(\.points).map { "\($0.x),\($0.y)" })
+        let mirrored = Set(ship.strokes.flatMap(\.points).map { "\($0.x),\(-$0.y == 0 ? 0 : -$0.y)" })
+        #expect(points != mirrored)
+        let bounds = ship.bounds
+        #expect(bounds.max.y > -bounds.min.y + 0.1, "the fin and canopy rise higher than the belly hangs")
+        // Its footprint is close to the hit circle: no more than half as long again as the
+        // circle is wide, and at least most of the circle tall.
+        let radius = Tuning().playerRadius
+        let length = (bounds.max.x - bounds.min.x) * ship.scale
+        let height = (bounds.max.y - bounds.min.y) * ship.scale
+        #expect(length <= 2 * radius * 1.6 && length >= 2 * radius)
+        #expect(height >= radius * 1.2 && height <= 2 * radius)
+        // The life icon is a simpler ship, never a different one.
+        let icon = theme.icon(for: .player)
+        #expect(!icon.strokes.isEmpty && icon.strokes.count <= ship.strokes.count)
+        #expect(icon.strokes.allSatisfy { ship.strokes.contains($0) })
+    }
+
     @Test func colonistAndOutpostStandOnTheirOrigin() {
         #expect(theme.shape(for: .colonist).bounds.min.y >= 0)
         #expect(theme.shape(for: .outpost).bounds.min.y >= 0)

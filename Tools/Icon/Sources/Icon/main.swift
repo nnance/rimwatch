@@ -138,17 +138,20 @@ for (path, color) in paths(of: theme.shape(for: .colonist), colonistPlace) {
 // MARK: Ship
 
 let ship = theme.shape(for: .player)
-let shipScale: CGFloat = 300
+let shipScale: CGFloat = 290
 let shipAngle: CGFloat = 6 * .pi / 180
-let shipPlace = CGAffineTransform(translationX: 525, y: 625).rotated(by: shipAngle)
+let shipPlace = CGAffineTransform(translationX: 560, y: 600).rotated(by: shipAngle)
     .scaledBy(x: shipScale, y: shipScale)
 
-// Engine trail: tapering streaks out of the tail, faded out along their length by a gradient mask.
+// Engine trail: tapering streaks out of the nozzle (the middle of the ship's rearmost points),
+// faded out along their length by a gradient mask.
 let shipTint = ship.strokes[0].color
+let rearmost = ship.strokes.flatMap(\.points).filter { $0.x <= ship.bounds.min.x + 0.001 }
+let nozzleY = CGFloat(rearmost.map(\.y).reduce(0, +) / Double(max(rearmost.count, 1)))
 for (offset, length, weight) in [(0.0, 1.7, 1.0), (0.2, 1.15, 0.6), (-0.2, 1.15, 0.6)] as
     [(CGFloat, CGFloat, CGFloat)] {
-    let start = CGPoint(x: -0.7, y: offset).applying(shipPlace)
-    let end = CGPoint(x: -0.84 - length, y: offset * 0.75).applying(shipPlace)
+    let start = CGPoint(x: -0.98, y: nozzleY + offset).applying(shipPlace)
+    let end = CGPoint(x: -1.1 - length, y: nozzleY + offset * 0.75).applying(shipPlace)
     let half = 30 * weight
     let dx = end.x - start.x, dy = end.y - start.y
     let len = (dx * dx + dy * dy).squareRoot()

@@ -148,6 +148,9 @@ public protocol Theme: Sendable {
     var palette: Palette { get }
     var terrain: TerrainStyle { get }
     func shape(for role: EntityRole) -> ShapeDescription
+    /// A simpler version of a role's shape for drawing very small, such as the lives in the
+    /// HUD, where fine details would blur together. Defaults to the full shape.
+    func icon(for role: EntityRole) -> ShapeDescription
     func displayName(for role: EntityRole) -> String
     /// The sound to play for an event, if any. See `SoundPatch` (in `Audio/`).
     func sound(for event: GameEvent) -> SoundPatch?
@@ -160,6 +163,7 @@ public protocol Theme: Sendable {
 }
 
 extension Theme {
+    public func icon(for role: EntityRole) -> ShapeDescription { shape(for: role) }
     public func sound(for event: GameEvent) -> SoundPatch? { nil }
     public func menuSound(_ sound: MenuSound) -> SoundPatch? { nil }
     public var allSounds: [SoundPatch] { [] }

@@ -324,6 +324,25 @@ struct SoundMeasure {
         }
     }
 
+    @Test func killSoundsAreSharpAndCarryOnAPhoneSpeaker() {
+        // Destroying something should crack, not thud: the sound hits its peak at once, and its
+        // weight sits where a phone speaker plays rather than in the bass it drops.
+        let kills = ["enemy.explode", "brood.burst", "anchor.explode", "mote.pop", "mine.pop"]
+        for name in kills {
+            let m = Self.measure(name)
+            let small = m.smallSpeaker().loudness
+            #expect(small >= 0.75 * m.loudness, "\(name) loses \(20 * log10(small / m.loudness)) dB on a small speaker")
+            let level = 0.9 * m.peak
+            let rise = m.samples.firstIndex { Double(abs($0)) >= level } ?? m.samples.count
+            #expect(Double(rise) / Self.rate <= 0.005, "\(name) takes \(Double(rise) / Self.rate) s to reach its peak")
+        }
+        // Scaled to what was destroyed, and all under losing the ship.
+        func loud(_ name: String) -> Double { Self.measure(name).smallSpeaker().loudness }
+        #expect(loud("mote.pop") < loud("enemy.explode"))
+        #expect(loud("enemy.explode") < loud("anchor.explode"))
+        #expect(loud("anchor.explode") < loud("player.explode"))
+    }
+
     @Test func distinctEventsSoundMeasurablyDifferent() {
         let patches = Self.usedPatches
         var closest = (score: Double.infinity, pair: "")
@@ -367,12 +386,12 @@ struct SoundMeasure {
         #expect(colonistNoise < average(.player) { $0.flatness } && colonistNoise < average(.enemy) { $0.flatness })
         let enemyBright = average(.enemy) { $0.centroid }, playerBright = average(.player) { $0.centroid }
         #expect(enemyBright < playerBright, "enemy \(enemyBright) player \(playerBright)")
-        // And by construction: enemies buzz (sawtooth and noise), colonists sing (sine and
+        // And by construction: enemies buzz (sawtooth, noise and crackle), colonists sing (sine and
         // triangle), the ship never buzzes.
         for patch in Self.usedPatches {
             let waves = Set(patch.layers.map(\.wave))
             switch patch.family {
-            case .enemy: #expect(waves.isSubset(of: [.saw, .noise]), "\(patch.name)")
+            case .enemy: #expect(waves.isSubset(of: [.saw, .noise, .crackle]), "\(patch.name)")
             case .colonist: #expect(waves.isSubset(of: [.sine, .triangle]), "\(patch.name)")
             case .player: #expect(!waves.contains(.saw), "\(patch.name)")
             case .alert, .interface: break
@@ -391,6 +410,27 @@ struct SoundMeasure {
             #expect(e.level(at: 0.999_999, duration: 1) < 0.001)
         }
         #expect(Envelope(attack: 0.1, release: 0.1).level(at: 0.5, duration: 1) == 1)
+    }
+
+    @Test func crackleIsSparseGrainsThatThinOut() {
+        func render(_ layer: SoundLayer) -> SoundMeasure {
+            let patch = SoundPatch(name: "test.crackle", family: .enemy, gain: 0.8, layers: [layer])
+            return SoundMeasure(samples: SoundRenderer.render(patch, sampleRate: Self.rate), sampleRate: Self.rate)
+        }
+        let steady = render(SoundLayer(.crackle, 200, envelope: Envelope(attack: 0.001, release: 0.001), duration: 1))
+        let noise = render(SoundLayer(.noise, 0, envelope: Envelope(attack: 0.001, release: 0.001), duration: 1))
+        #expect(steady.isFinite && steady.peak > 0.5)
+        // Grains with gaps between them: far more of the sound is near silence than in noise.
+        func quietShare(_ m: SoundMeasure) -> Double {
+            let floor = 0.05 * m.peak
+            return Double(m.samples.filter { Double(abs($0)) < floor }.count) / Double(m.samples.count)
+        }
+        #expect(quietShare(steady) > 0.5)
+        #expect(quietShare(noise) < 0.1)
+        // Grain density glides like a pitch does: thinning out leaves the end quieter.
+        let thinning = render(SoundLayer(.crackle, 400, to: 20, envelope: Envelope(attack: 0.001, release: 0.001), duration: 1))
+        let quarter = thinning.samples.count / 4
+        #expect(SoundMeasure.rms(thinning.samples[(3 * quarter)...]) < 0.6 * SoundMeasure.rms(thinning.samples[..<quarter]))
     }
 
     @Test func echoTailFallsAway() {
