@@ -1,5 +1,6 @@
 import Foundation
 import GameCore
+import RidgelineCore
 
 // Usage: Harness [seeds] [maxMinutes] [skill...]
 let args = CommandLine.arguments

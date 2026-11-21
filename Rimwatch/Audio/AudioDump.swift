@@ -1,6 +1,7 @@
 #if DEBUG
 import Foundation
 import GameCore
+import RidgelineCore
 
 /// DEBUG only. Launch with `-dumpAudio <folder>` to render every sound patch and 20 seconds of
 /// each music mood to 16-bit mono WAV files in `Documents/<folder>`, for analysis off the device:

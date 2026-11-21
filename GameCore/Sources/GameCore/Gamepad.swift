@@ -1,7 +1,8 @@
 /// Gamepad logic that doesn't depend on any controller framework. The app reads a physical (or,
 /// in debug builds, a simulated) controller into a `PadSnapshot`; everything from there on, the
-/// stick dead zone, merging the D-pad with the stick, which face button does what, press edges
-/// and menu navigation with hold-to-repeat, happens here.
+/// stick dead zone, merging the D-pad with the stick, press edges and menu navigation with
+/// hold-to-repeat, happens here. Which face button does what in play is the mode's (Ridgeline's
+/// is in `RidgelineCore/PadInput.swift`).
 
 /// The face buttons and the menu button, named by position on an extended gamepad.
 public enum PadButton: String, Sendable, Hashable, CaseIterable {
@@ -60,30 +61,6 @@ public enum PadMapping {
         func pick(_ s: Double, _ d: Double) -> Double { abs(d) > abs(s) ? d : s }
         return Vec2(pick(stick.x, dpad.x), pick(stick.y, dpad.y)).clampedToUnit
     }
-
-    /// The button that does `action` in a layout. Fire is always A.
-    public static func button(for action: PadAction, layout: GameOptions.GamepadLayout) -> PadButton {
-        switch (action, layout) {
-        case (.fire, _): .a
-        case (.blink, .standard), (.shockwave, .swapped): .b
-        case (.shockwave, .standard), (.blink, .swapped): .x
-        }
-    }
-
-    /// Gameplay input for buttons that are `held` (or were pressed since the last step).
-    public static func input(move: Vec2, held: Set<PadButton>, layout: GameOptions.GamepadLayout) -> InputState {
-        InputState(
-            move: move,
-            fire: held.contains(button(for: .fire, layout: layout)),
-            shockwave: held.contains(button(for: .shockwave, layout: layout)),
-            blink: held.contains(button(for: .blink, layout: layout))
-        )
-    }
-}
-
-/// The gameplay actions a face button can be given.
-public enum PadAction: Sendable, Hashable, CaseIterable {
-    case fire, blink, shockwave
 }
 
 /// A device-neutral menu command: from a gamepad, or from the debug notifications.
@@ -123,12 +100,13 @@ public struct PadReader: Sendable {
         self = PadReader()
     }
 
-    /// Gameplay input now: the buttons held, plus any pressed since the last simulation step.
-    public func input(layout: GameOptions.GamepadLayout) -> InputState {
+    /// The buttons gameplay sees now: those held, plus any pressed since the last simulation
+    /// step, less any suppressed. A mode turns these into its input (see its `input(layout:)`).
+    package var playButtons: Set<PadButton> {
         var held = current.buttons
         if !playLatched.isEmpty { held.formUnion(playLatched) }
         if !suppressed.isEmpty { held.subtract(suppressed) }
-        return PadMapping.input(move: PadMapping.move(current), held: held, layout: layout)
+        return held
     }
 
     /// A menu activation is starting play (Play chosen, Resume chosen): any button down now is

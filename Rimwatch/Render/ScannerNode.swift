@@ -1,11 +1,12 @@
 import GameCore
+import RidgelineCore
 import SpriteKit
 import UIKit
 
 /// The scanner: the whole wraparound world in a strip in the top band. It is centred on the
 /// camera, so the part of the world on screen is always in the middle (marked by a bracket) and
 /// the rest wraps round either side; across the seam nothing jumps. Mapping comes from
-/// `ScannerProjection` in GameCore.
+/// `ScannerProjection` in RidgelineCore.
 ///
 /// Performance: the terrain silhouette is drawn once per world and size and shown as two copies
 /// that slide inside a crop; marks are pooled sprites that are moved, recoloured and hidden, never

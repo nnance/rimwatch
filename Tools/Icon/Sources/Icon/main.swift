@@ -10,6 +10,7 @@ import CoreGraphics
 import Foundation
 import GameCore
 import ImageIO
+import RidgelineCore
 import UniformTypeIdentifiers
 
 let size = 1024

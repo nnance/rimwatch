@@ -123,14 +123,14 @@ swift run --package-path Tools/Icon Icon Rimwatch/Assets.xcassets/AppIcon.appico
 
 | Path | What it holds |
 |---|---|
-| `GameCore/` | The game logic as a Swift package, with no UIKit or SpriteKit: world, simulation, enemies, waves, scoring, menus, sound rendering and the tests. It knows what each entity does, never how it looks; appearance and sound come from a `Theme`. |
+| `GameCore/` | The game logic as a Swift package, with no UIKit or SpriteKit, and its tests. Its `RidgelineCore` target is the game: world, simulation, enemies, waves, scoring and the theme. Its `GameCore` target is what any game mode can share: maths, shapes, sound rendering and music, menus, options, high scores and gamepad logic. The game logic knows what each entity does, never how it looks; appearance and sound come from a `Theme`. |
 | `Rimwatch/` | The app: SpriteKit scene and rendering, touch and gamepad input, fold handling, audio playback, haptics and the menu screens. |
 | `Tools/Harness/` | The bot harness used for difficulty tuning. |
 | `Tools/Icon/` | The script that draws the app icon from the theme's ship and colonist shapes. |
 | `PLAN.md` | The design, the build history and what is left. |
 | `CLAUDE.md` | Working notes for building the project with Claude Code. |
 
-Gameplay numbers live in `GameCore/Sources/GameCore/Tuning.swift`.
+Gameplay numbers live in `GameCore/Sources/RidgelineCore/Tuning.swift`.
 
 ## Debug launch arguments
 

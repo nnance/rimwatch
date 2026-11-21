@@ -72,8 +72,21 @@ changed for this yet.
 | Game logic (the Swift package) | Maths and random numbers, the shape and theme types, the sound renderer, the menu model, options, high-score tables, pause and countdown session logic, gamepad mapping | World, entities, waves, tuning numbers, bots, theme content (shapes, sounds, names) |
 | App | Fold handling, touch and gamepad input, audio playback, haptics, menu screens, the glow renderer, particles | The SpriteKit scene and the HUD |
 
-These lines are from memory of the code. Step 8 starts by confirming them against it. The mode
-contract stays thin at first, and I expect to revise it while building Redoubt, since a shared
+These lines were written from memory of the code before step 8. What step 8 found:
+
+- Shared now (`GameCore` target): maths and random numbers, sweep collision maths, colour and
+  shape types, the menu model, options, high-score tables, the gamepad reader and menu
+  navigation, haptic cue names, the sound patch types and renderer, and the music synthesis.
+- Still Ridgeline's (`RidgelineCore` target) although the table lists it as shared: the pause and
+  countdown session logic (`GameSession`), the screen and menu flow (`FrontEnd`), the `Theme`
+  protocol with its palette, and the mapping from gamepad buttons to actions. Each is written
+  against Ridgeline's simulation, events or abilities, so sharing them needs the mode contract.
+  That is step 9's work.
+- Some shared types still carry Ridgeline wording (a `blackout` music mood, `wave` and `saved`
+  on a high-score entry, option names that mention Blink and Shockwave). They get tidied when
+  the second mode shows what the general form should be.
+
+The mode contract stays thin at first, and I expect to revise it while building Redoubt, since a shared
 layer shaped around one game guesses wrong about what the second needs.
 
 Rules that carry over to every mode:
@@ -95,8 +108,11 @@ Each step is built, independently verified and committed before the next one sta
 10. **Title screen with Free Play.** Rimwatch is the title and the player picks a mode; only
     Ridgeline is listed until the others exist. The pause menu gains a way back to the title. A
     DEBUG launch argument starts a given mode directly. `README.md` and `CLAUDE.md` are updated to
-    the new names here.
-    - Gate: you check on your phone that Ridgeline plays as it did before.
+    the new names here. The app icon is redesigned in this step as an emblem for the whole game
+    instead of Ridgeline's ship: you pick from five candidates (the current icon included for
+    comparison), and the title screen uses the same emblem.
+    - Check, in parallel: you confirm on your phone that Ridgeline plays as it did before. This
+      does not hold up the next step; a difference you find is fixed before other work.
 11. **Twin-stick input in the shared shell**: a second floating stick for aiming on touch, and the
     right stick on a gamepad.
 12. **Redoubt design.** The full design (arena, enemies, controls, scoring, waves) is written into
@@ -233,14 +249,26 @@ in Silent mode by design.
 ### Expansion
 
 The steps are described under "Build order" in "Expansion" above. A gate is yours to tick: do not
-start the step after a gate until you have said to move on.
+start the step after a gate until you have said to move on. Your checks on the phone that nothing
+changed are different: they run in parallel and block nothing (decided 2026-11-20). Each verified
+step is pushed so you can install it.
 
 - [x] Expansion planned and the names chosen: Rimwatch (the whole game), Calder (the world),
       Ridgeline, Redoubt, Riftwing (2026-11-20)
-- [ ] 8. Split the shared game logic out of Ridgeline in the Swift package
+- [x] 8. Split the shared game logic out of Ridgeline in the Swift package (2026-11-20). The
+      package now has two targets, `GameCore` (shared) and `RidgelineCore`, in one library product
+      named `GameCore`, so the Xcode project file did not change. The app and the tools gained
+      `import RidgelineCore` lines and nothing else. 204 tests pass: 36 in `GameCoreTests`, 168 in
+      `RidgelineCoreTests`, with the same names and bodies as before. The harness gives the same
+      results as before for the same seeds, and the app's 44 rendered sounds are byte-identical.
+      Small maths helpers are `@inlinable`; the builder measured no change in harness speed and
+      the verifier about 3% slower, which does not matter at the game's 120 Hz step. The
+      harness's "death causes" lines print ties in an unstable order, as they did before the
+      split. What landed where is under "What is shared and what belongs to a mode".
 - [ ] 9. Split the app into a shared shell and the Ridgeline mode; one high-score table per mode
-- [ ] 10. Title screen with Free Play mode selection; `README.md` and `CLAUDE.md` updated
-- [ ] Gate: Ridgeline checked on the phone and unchanged
+- [ ] 10. Title screen with Free Play mode selection; new app icon chosen from five candidates;
+      `README.md` and `CLAUDE.md` updated
+- [ ] Parallel check (not a gate): Ridgeline checked on the phone and unchanged
 - [ ] 11. Twin-stick input (touch and gamepad)
 - [ ] 12. Redoubt design written here and approved
 - [ ] 13. Redoubt build
@@ -253,7 +281,7 @@ start the step after a gate until you have said to move on.
 
 ## What is left
 
-The next piece of building is step 8 of the expansion. Ridgeline itself is built; what remains for
+The next piece of building is step 9 of the expansion. Ridgeline itself is built; what remains for
 it needs a person and a device, and can happen alongside the expansion:
 
 1. Run on a real iPhone Duo (set the signing team in Xcode). Nothing has been seen on the open
@@ -353,19 +381,32 @@ This section and the four after it describe Ridgeline.
 rimwatch/
   Rimwatch.xcodeproj            created via the Xcode tools if they support it, otherwise by you
                                 from the iOS Game (SpriteKit) template; bundle name Rimwatch
-  GameCore/                     Swift package, no UIKit/SpriteKit: builds and tests on macOS
-    Sources/GameCore/
+  GameCore/                     Swift package, no UIKit/SpriteKit: builds and tests on macOS.
+                                Two targets since step 8 of the expansion.
+    Sources/GameCore/           shared by every mode
+      Math.swift                vectors, seeded random numbers
+      Collision.swift           sweep collision maths
+      Shapes.swift              colour and shape types
+      Menu.swift, Options.swift, HighScores.swift, FoldPose.swift
+      Gamepad.swift             pad snapshot, reader, menu navigation
+      Feedback.swift            haptic cue names
+      Audio/                    SoundPatch, SoundRenderer, Music (synthesis)
+    Sources/RidgelineCore/      Ridgeline's game logic
       World.swift               wraparound maths, terrain heightmap, outposts
       Simulation.swift          fixed 120 Hz step; owns all entities; emits events
       Entities/                 Player, Colonist, enemy state machines, projectiles
       WaveDirector.swift        wave composition and difficulty curve
-      Collision.swift           wrap-aware broad and narrow phase
+      Tuning.swift              gameplay numbers
       Input.swift               device-neutral InputState
+      PadInput.swift            gamepad buttons to actions
       GameSession.swift         playing / paused / game over; start over; end game
+      FrontEnd.swift            which screen and menu to show
+      Events.swift, Scanner.swift, Autopilot.swift (DEBUG bots), HapticCue+Events.swift
       Theme.swift               Theme protocol: palette, shape per entity role, terrain style,
                                 sound patches, display names
-      Themes/AlienFrontier.swift
-    Tests/GameCoreTests/
+      Themes/AlienFrontier.swift, Themes/AlienFrontierSounds.swift
+      Audio/MusicMoodDirector.swift
+    Tests/GameCoreTests/, Tests/RidgelineCoreTests/
   Rimwatch/                     app target
     AppDelegate.swift, SceneDelegate.swift, Info.plist
     FoldGate.swift              hinge status -> open / closed / no hinge; drives pause + orientation

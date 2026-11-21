@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import GameCore
+import RidgelineCore
 import UIKit
 
 /// The game's sound: theme patches rendered once to PCM, played through a small pool of voices,

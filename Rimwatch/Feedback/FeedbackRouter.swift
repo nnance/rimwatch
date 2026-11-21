@@ -1,5 +1,6 @@
 import Foundation
 import GameCore
+import RidgelineCore
 
 /// Plays a theme's sound patches and music. `Synth` is the real one; `SilentSoundOutput` takes
 /// every call and does nothing.

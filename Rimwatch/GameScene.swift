@@ -1,5 +1,6 @@
 import Foundation
 import GameCore
+import RidgelineCore
 import SpriteKit
 import UIKit
 
