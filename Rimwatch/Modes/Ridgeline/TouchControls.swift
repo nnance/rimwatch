@@ -3,8 +3,8 @@ import RidgelineCore
 import SpriteKit
 import UIKit
 
-/// On-screen controls in screen space (points, origin bottom-left). A floating stick appears
-/// wherever a thumb lands on the stick side; Fire, Shockwave and Blink sit in the lower corner of
+/// On-screen controls in screen space (points, origin bottom-left). A floating stick (the shell's
+/// `FloatingStick`) appears wherever a thumb lands on the stick side; Fire, Shockwave and Blink sit in the lower corner of
 /// the other side. The sides follow the handedness option. Every touch is tracked on its own, so
 /// the stick and any buttons can be held together. Nothing reacts inside the crease band.
 ///
@@ -20,7 +20,7 @@ final class TouchControls: SKNode {
     /// The device-neutral input these controls are producing right now.
     var input: InputState {
         InputState(
-            move: stickVector,
+            move: stick.vector,
             fire: isHeld(.fire) || latched.contains(.fire),
             shockwave: isHeld(.shockwave) || latched.contains(.shockwave),
             blink: isHeld(.blink) || latched.contains(.blink)
@@ -35,19 +35,13 @@ final class TouchControls: SKNode {
     /// Where the buttons are, so later layout work (the Duo crease) can keep them clear.
     private(set) var buttonClusterFrame: CGRect = .zero
     /// The region where a touch starts the stick.
-    private(set) var stickZone: CGRect = .zero
+    var stickZone: CGRect { stick.zone }
 
     private let factory: GlowShapeFactory
     private let palette: Palette
     private var color: RGB { palette.controls }
 
-    private var stickTouch: UITouch?
-    private var stickCenter: CGPoint = .zero
-    private var stickRestCenter: CGPoint = .zero
-    private var stickRadius: CGFloat = 50
-    private var stickVector: Vec2 = .zero
-    private let stickBase = SKSpriteNode()
-    private let stickKnob = SKSpriteNode()
+    private let stick: FloatingStick
 
     private var buttonTouches: [ObjectIdentifier: Button] = [:]
     private var buttonNodes: [Button: SKSpriteNode] = [:]
@@ -79,9 +73,9 @@ final class TouchControls: SKNode {
     init(factory: GlowShapeFactory, palette: Palette) {
         self.factory = factory
         self.palette = palette
+        stick = FloatingStick(factory: factory, color: palette.controls)
         super.init()
-        addChild(stickBase)
-        addChild(stickKnob)
+        for node in stick.nodes { addChild(node) }
         for button in Button.allCases {
             let node = SKSpriteNode()
             buttonNodes[button] = node
@@ -124,12 +118,13 @@ final class TouchControls: SKNode {
         let middleLow = keepClear?.lowerBound ?? size.width / 2
         let middleHigh = keepClear?.upperBound ?? size.width / 2
 
-        stickRadius = min(max(short * 0.12, 40), 72)
+        let stickRadius = min(max(short * 0.12, 40), 72)
         let stickInset = stickRadius * 1.3
-        stickRestCenter = CGPoint(x: stickOnLeft ? left + stickInset : right - stickInset, y: bottom + stickInset)
-        stickZone = stickOnLeft
+        let stickRest = CGPoint(x: stickOnLeft ? left + stickInset : right - stickInset, y: bottom + stickInset)
+        let stickZone = stickOnLeft
             ? CGRect(x: 0, y: 0, width: middleLow, height: size.height)
             : CGRect(x: middleHigh, y: 0, width: size.width - middleHigh, height: size.height)
+        stick.layout(radius: stickRadius, rest: stickRest, zone: stickZone)
 
         let fireRadius = min(max(short * 0.105, 34), 56)
         let smallRadius = fireRadius * 0.68
@@ -156,17 +151,6 @@ final class TouchControls: SKNode {
         }
         buttonClusterFrame = cluster
         layoutGauges()
-
-        factory.apply(factory.glyph(key: "stick-base-\(stickRadius)",
-                                    shape: ShapeDescription(scale: stickRadius, strokes: [
-                                        ShapeStroke(ShapeKit.arc(radius: 1, segments: 48), color: color),
-                                    ]), pointsPerUnit: 1), to: stickBase)
-        factory.apply(factory.glyph(key: "stick-knob-\(stickRadius)",
-                                    shape: ShapeDescription(scale: stickRadius * 0.4, strokes: [
-                                        ShapeStroke(ShapeKit.arc(radius: 1, segments: 32), color: color),
-                                        ShapeStroke(ShapeKit.arc(radius: 0.45, segments: 20), color: color),
-                                    ]), pointsPerUnit: 1), to: stickKnob)
-        if stickTouch == nil { stickCenter = stickRestCenter }
         refresh()
     }
 
@@ -261,41 +245,22 @@ final class TouchControls: SKNode {
             if let button = button(at: p) {
                 buttonTouches[ObjectIdentifier(touch)] = button
                 latched.insert(button)
-            } else if stickTouch == nil, stickZone.contains(p) {
-                stickTouch = touch
-                stickCenter = p
-                stickVector = .zero
+            } else {
+                _ = stick.touchBegan(touch, at: p)
             }
         }
         refresh()
     }
 
     func touchesMoved(_ touches: Set<UITouch>) {
-        guard let stickTouch, touches.contains(stickTouch) else { return }
-        let p = stickTouch.location(in: self)
-        var dx = p.x - stickCenter.x
-        var dy = p.y - stickCenter.y
-        let distance = hypot(dx, dy)
-        // Past the rim, the base trails the thumb so the stick never runs out of travel.
-        if distance > stickRadius {
-            let excess = distance - stickRadius
-            stickCenter.x += dx / distance * excess
-            stickCenter.y += dy / distance * excess
-            dx = p.x - stickCenter.x
-            dy = p.y - stickCenter.y
-        }
-        stickVector = Vec2(Double(dx / stickRadius), Double(dy / stickRadius)).clampedToUnit
+        guard stick.touchesMoved(touches, in: self) else { return }
         refresh()
     }
 
     func touchesEnded(_ touches: Set<UITouch>) {
         for touch in touches {
             buttonTouches[ObjectIdentifier(touch)] = nil
-            if touch === stickTouch {
-                stickTouch = nil
-                stickVector = .zero
-                stickCenter = stickRestCenter
-            }
+            stick.touchEnded(touch)
         }
         refresh()
     }
@@ -309,9 +274,7 @@ final class TouchControls: SKNode {
     func releaseAll() {
         buttonTouches.removeAll()
         latched.removeAll()
-        stickTouch = nil
-        stickVector = .zero
-        stickCenter = stickRestCenter
+        stick.release()
         refresh()
     }
 
@@ -334,12 +297,7 @@ final class TouchControls: SKNode {
     }
 
     private func refresh() {
-        let active = stickTouch != nil
-        stickBase.position = stickCenter
-        stickBase.alpha = active ? 0.55 : 0.18
-        stickKnob.position = CGPoint(x: stickCenter.x + CGFloat(stickVector.x) * stickRadius,
-                                     y: stickCenter.y + CGFloat(stickVector.y) * stickRadius)
-        stickKnob.alpha = active ? 0.9 : 0.22
+        stick.refresh()
         for button in Button.allCases {
             let node = buttonNodes[button]!
             let held = isHeld(button)

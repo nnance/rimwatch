@@ -34,7 +34,9 @@ extension ModeSession where Run == Simulation {
 
 extension ModeDescriptor {
     public static let ridgeline = ModeDescriptor(id: "ridgeline", displayName: "Ridgeline",
-                                                summary: "Rescue patrol over the crater")
+                                                summary: "Rescue patrol over the crater",
+                                                optionRows: [.soundVolume, .musicVolume, .haptics, .handedness,
+                                                             .gamepadLayout])
 }
 
 extension Theme {

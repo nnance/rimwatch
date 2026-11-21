@@ -18,6 +18,10 @@ import GameCore
 /// - `a.down|up|press`, `b.down|up|press`, `x.down|up|press`, `y.down|up|press` (press = down and
 ///   up at once, a tap shorter than a frame)
 /// - `menu` (a press), `menu.down|up`
+/// - `rstick.left|right|up|down|center|upleft|upright|downleft|downright`: the right stick (full
+///   deflection), for a mode that aims with it
+/// - `lshoulder.down|up|press`, `rshoulder.down|up|press`, `ltrigger.down|up|press`,
+///   `rtrigger.down|up|press`: shoulder buttons and triggers
 /// - `release` (everything back to neutral)
 @MainActor
 enum DebugPadCommands {
@@ -31,10 +35,13 @@ enum DebugPadCommands {
             names += ["stick.\(direction)", "dpad.\(direction)"]
         }
         names += ["stick.upleft", "stick.upright", "stick.downleft", "stick.downright"]
+        for direction in ["left", "right", "up", "down", "center", "upleft", "upright", "downleft", "downright"] {
+            names.append("rstick.\(direction)")
+        }
         for direction in ["left", "right", "up", "down"] {
             names += ["stick.tap.\(direction)", "dpad.tap.\(direction)"]
         }
-        for button in ["a", "b", "x", "y"] {
+        for button in ["a", "b", "x", "y", "lshoulder", "rshoulder", "ltrigger", "rtrigger"] {
             names += ["\(button).down", "\(button).up", "\(button).press"]
         }
         return names
@@ -81,6 +88,9 @@ enum DebugPadCommands {
         case "dpad":
             guard parts.count == 2, let v = direction(parts[1]) else { return }
             pad.simulated { $0.dpad = v }
+        case "rstick":
+            guard parts.count == 2, let v = direction(parts[1]) else { return }
+            pad.simulated { $0.rightStick = v.clampedToUnit }
         case "menu":
             press(pad, .menu, parts.count == 2 ? parts[1] : "press")
         default:

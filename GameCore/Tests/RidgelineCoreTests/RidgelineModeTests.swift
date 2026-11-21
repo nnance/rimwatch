@@ -53,6 +53,24 @@ import GameCore
         #expect(ModeDescriptor.ridgeline.summary == "Rescue patrol over the crater")
     }
 
+    @Test func ridgelinesOptionsMenuKeepsEveryRowInItsOrder() {
+        #expect(ModeDescriptor.ridgeline.optionRows == OptionKey.allCases)
+        var fe = FrontEnd(session: GameSession(seed: 1), pose: .open,
+                          catalog: ModeCatalog(modes: [.ridgeline], loaded: "ridgeline"))
+        fe.perform(.options)
+        #expect(fe.menu?.items.map(\.title) == ["Sound", "Music", "Haptics", "Stick side", "Gamepad", "Back"])
+    }
+
+    @Test func theRightStickShouldersAndTriggersDoNothingInRidgeline() {
+        var reader = PadReader()
+        let quiet = reader.input(layout: .standard)
+        reader.receive(PadSnapshot(buttons: [.leftShoulder, .rightShoulder, .leftTrigger, .rightTrigger],
+                                   rightStick: Vec2(1, 0)))
+        for layout in GameOptions.GamepadLayout.allCases {
+            #expect(reader.input(layout: layout) == quiet)
+        }
+    }
+
     @Test func theShipsHullIsTheEmblemsArrowhead() {
         let ship = AlienFrontier().shape(for: .player)
         #expect(ship.scale == 18)

@@ -31,8 +31,8 @@ were written while it was the whole game.
 
 ## Expansion: three modes and a campaign (decided 2026-11-20)
 
-Rimwatch grows from one game into three modes that share a world, and later a campaign. No code has
-changed for this yet.
+Rimwatch grows from one game into three modes that share a world, and later a campaign. Progress
+on it is in the "Expansion" list under "Progress".
 
 ### What was decided
 
@@ -119,7 +119,7 @@ These lines were written from memory of the code before step 8. What step 8 foun
 - Known Ridgeline-shaped parts of the shared session code, to settle while building Redoubt:
   the run result is fixed at score, wave and colonists saved; the pause and game-over menu
   lines are written in the shared front end (the heading says "Game over" even for a goal-met
-  ending); the options carry Ridgeline's stick side and gamepad layout.
+  ending). Options are stored once and each mode lists the rows it shows.
 - Some shared types still carry Ridgeline wording (a `blackout` music mood, `wave` and `saved`
   on a high-score entry, option names that mention Blink and Shockwave). They get tidied when
   the second mode shows what the general form should be.
@@ -350,10 +350,29 @@ step is pushed so you can install it.
         build: the run, screen and haptic logs match line for line, the 44 rendered sounds are
         byte-identical and every screen looks the same. The node count is one higher (the
         mode's root node).
-- [ ] 10. Title screen with Free Play mode selection; new app icon and emblem ("The Rim");
-      `README.md` and `CLAUDE.md` updated
+- [x] 10. Title screen with Free Play mode selection; new app icon and emblem ("The Rim")
+      (2026-11-21). The title shows the emblem, "Rimwatch", "Outpost Calder" and one item per
+      registered mode (Ridgeline only), each with a one-line summary and its best score.
+      Choosing a mode that is not loaded switches modes at run time: `ShellScene` swaps
+      `ModeHost`s, while the synth, gamepad and haptics live in `ShellDevices` and survive the
+      switch. High scores are shown per mode, with a mode selector when there are several. The
+      last mode played is remembered (`rimwatch.lastMode.v1`). DEBUG `-mode <id>` loads a mode
+      at launch and `-debugSecondMode` lists Ridgeline again as "Ridgeline B" to exercise
+      switching. The emblem's geometry is `Emblem` in `GameCore`; the icon generator, the title
+      and Ridgeline's ship hull all draw from it. The old title tagline "Hold the rim. Bring
+      them home." gave way to the subtitle. Switching modes takes a hitch of about 0.2 s while
+      the new mode is built.
 - [ ] Parallel check (not a gate): Ridgeline checked on the phone and unchanged
-- [ ] 11. Twin-stick input (touch and gamepad)
+- [x] 11. Twin-stick input (touch and gamepad) (2026-11-21). The gamepad reads the right stick,
+      both shoulders and both triggers (`PadSnapshot.rightStick`, new `PadButton`s,
+      `PadReader.rightStick`). The floating touch stick is shared: `TouchStick` in `GameCore`
+      holds the logic and `FloatingStick` in `Shell/Input` draws it; Ridgeline's `TouchControls`
+      uses it, and a mode can place two. Each mode lists the Options rows it shows
+      (`ModeDescriptor.optionRows`), so a mode without a gamepad layout does not show that row.
+      Ridgeline's action buttons were not extracted, being tied to its gauges. DEBUG
+      notifications `com.rimwatch.debug.pad.rstick.*` and
+      `pad.{lshoulder,rshoulder,ltrigger,rtrigger}.*` drive the new inputs. Steps 10 and 11 were
+      independently verified together. 273 tests.
 - [x] 12. Redoubt design written here and approved (2026-11-20; see "Redoubt design")
 - [ ] 13. Redoubt build
 - [ ] Gate: Redoubt played and refined
@@ -365,7 +384,7 @@ step is pushed so you can install it.
 
 ## What is left
 
-The next piece of building is step 10 of the expansion. Ridgeline itself is built; what remains for
+The next piece of building is step 13 of the expansion, Redoubt. Ridgeline itself is built; what remains for
 it needs a person and a device, and can happen alongside the expansion:
 
 1. Run on a real iPhone Duo (set the signing team in Xcode). Nothing has been seen on the open
@@ -423,7 +442,7 @@ Build step 1 (the game core) needs none of this and can start as soon as the new
 - **Options**: sound and music volume, haptics on/off, touch-control handedness, gamepad button layout.
 - **High scores**.
 
-The title screen, options and high scores are also usable while closed; only "Play" waits for the
+The title screen, options and high scores are also usable while closed; only starting a mode waits for the
 phone to be open. Reopening mid-game does not drop you straight into the action: the same menu
 appears on the inner display with Resume enabled, followed by a short countdown.
 
@@ -472,13 +491,17 @@ rimwatch/
       Collision.swift           sweep collision maths
       Shapes.swift              colour and shape types
       Menu.swift, Options.swift, HighScores.swift, FoldPose.swift
-      Gamepad.swift             pad snapshot, reader, menu navigation
+      Gamepad.swift             pad snapshot (two sticks, shoulders, triggers), reader, menu
+                                navigation
+      TouchStick.swift          the floating touch stick's logic
       Feedback.swift            haptic cue names
       Audio/                    SoundPatch, SoundRenderer, Music (synthesis)
       Session/                  ModeRun, ModeSession (playing / paused / countdown / game over),
                                 ModeFrontEnd (which screen and menu to show); generic over a
                                 mode's run
-      Modes.swift, ShellStyle.swift, SavedSettings.swift (options, one score table per mode)
+      Modes.swift (mode descriptors and the catalog the title lists), ShellStyle.swift,
+      SavedSettings.swift (options, one score table per mode, the last mode played)
+      Emblem.swift              the Rimwatch emblem's geometry, including the ship hull
     Sources/RidgelineCore/      Ridgeline's game logic
       World.swift               wraparound maths, terrain heightmap, outposts
       Simulation.swift          fixed 120 Hz step; owns all entities; emits events
@@ -497,17 +520,18 @@ rimwatch/
   Rimwatch/                     app target. Shell and modes since step 9 of the expansion.
     AppDelegate.swift, SceneDelegate.swift, Info.plist, Assets.xcassets
     Shell/                      shared by every mode; imports nothing of any one mode
-      ShellScene.swift          the SpriteKit scene; forwards to the mode host
-      ModeHost.swift            runs one mode: menus, pause, fold poses, input, audio, feedback
+      ShellScene.swift          the SpriteKit scene; owns ShellDevices, loads and switches modes
+      ShellDevices.swift        the synth, gamepad and haptics, shared across mode switches
+      ModeHost.swift            runs one mode: menus, pause, fold poses, input, sound routing
       GameMode.swift            what a mode must provide; ModeDriver.swift, ShellServices.swift
       GameViewController.swift, FoldGate.swift (hinge status -> open / closed / no hinge),
       Settings.swift (options and per-mode high scores), DebugLog.swift, DebugMenuCommands.swift
-      Input/                    GamepadInput.swift, DebugPadCommands.swift
+      Input/                    GamepadInput.swift, FloatingStick.swift, DebugPadCommands.swift
       Audio/                    Synth.swift (AVAudioEngine voices), AudioDump.swift
       Feedback/                 FeedbackRouter.swift, Haptics.swift
       Render/                   GlowShapeFactory (shapes pre-rendered to additive textures),
-                                CharRow.swift, ThemeColors.swift
-      Screens/                  MenuNode (title, pause, options, game over, high scores),
+                                EmblemNode.swift, CharRow.swift, ThemeColors.swift
+      Screens/                  MenuNode (title with emblem, pause, options, game over, high scores),
                                 PlayOverlays (pause button, countdown, Made for Duo), GlowText
     Modes/ModeRegistry.swift    lists the modes; the only shell-level file that names one
     Modes/Ridgeline/            RidgelineMode (+Backdrop, +Events, +Sync), TerrainNode,

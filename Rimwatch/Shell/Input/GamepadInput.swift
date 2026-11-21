@@ -79,8 +79,14 @@ final class GamepadInput {
         let unchanged = pad.buttonA.isPressed == current.isDown(.a) && pad.buttonB.isPressed == current.isDown(.b)
             && pad.buttonX.isPressed == current.isDown(.x) && pad.buttonY.isPressed == current.isDown(.y)
             && pad.buttonMenu.isPressed == current.isDown(.menu)
+            && pad.leftShoulder.isPressed == current.isDown(.leftShoulder)
+            && pad.rightShoulder.isPressed == current.isDown(.rightShoulder)
+            && pad.leftTrigger.isPressed == current.isDown(.leftTrigger)
+            && pad.rightTrigger.isPressed == current.isDown(.rightTrigger)
             && Double(pad.leftThumbstick.xAxis.value) == current.stick.x
             && Double(pad.leftThumbstick.yAxis.value) == current.stick.y
+            && Double(pad.rightThumbstick.xAxis.value) == current.rightStick.x
+            && Double(pad.rightThumbstick.yAxis.value) == current.rightStick.y
             && Double(pad.dpad.xAxis.value) == current.dpad.x && Double(pad.dpad.yAxis.value) == current.dpad.y
         if !unchanged { reader.receive(Self.snapshot(pad)) }
     }
@@ -162,10 +168,15 @@ final class GamepadInput {
         if pad.buttonX.isPressed { buttons.insert(.x) }
         if pad.buttonY.isPressed { buttons.insert(.y) }
         if pad.buttonMenu.isPressed { buttons.insert(.menu) }
+        if pad.leftShoulder.isPressed { buttons.insert(.leftShoulder) }
+        if pad.rightShoulder.isPressed { buttons.insert(.rightShoulder) }
+        if pad.leftTrigger.isPressed { buttons.insert(.leftTrigger) }
+        if pad.rightTrigger.isPressed { buttons.insert(.rightTrigger) }
         return PadSnapshot(
             stick: Vec2(Double(pad.leftThumbstick.xAxis.value), Double(pad.leftThumbstick.yAxis.value)),
             dpad: Vec2(Double(pad.dpad.xAxis.value), Double(pad.dpad.yAxis.value)),
-            buttons: buttons
+            buttons: buttons,
+            rightStick: Vec2(Double(pad.rightThumbstick.xAxis.value), Double(pad.rightThumbstick.yAxis.value))
         )
     }
 

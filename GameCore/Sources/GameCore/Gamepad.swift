@@ -4,7 +4,9 @@
 /// hold-to-repeat, happens here. Which face button does what in play is the mode's (Ridgeline's
 /// is in `RidgelineCore/PadInput.swift`).
 
-/// The face buttons and the menu button, named by position on an extended gamepad.
+/// The buttons of an extended gamepad, named by position. The triggers count as buttons (pressed
+/// past the controller's own threshold). The raw values name them in the DEBUG simulated
+/// controller's notifications.
 public enum PadButton: String, Sendable, Hashable, CaseIterable {
     /// The bottom face button.
     case a
@@ -16,6 +18,12 @@ public enum PadButton: String, Sendable, Hashable, CaseIterable {
     case y
     /// The menu (start) button.
     case menu
+    /// The shoulder buttons (L1, R1).
+    case leftShoulder = "lshoulder"
+    case rightShoulder = "rshoulder"
+    /// The triggers (L2, R2).
+    case leftTrigger = "ltrigger"
+    case rightTrigger = "rtrigger"
 }
 
 /// The state of a controller at one moment.
@@ -26,11 +34,14 @@ public struct PadSnapshot: Sendable, Equatable {
     public var dpad: Vec2
     /// The buttons held down.
     public var buttons: Set<PadButton>
+    /// Right thumbstick, as `stick`. Menus ignore it.
+    public var rightStick: Vec2
 
-    public init(stick: Vec2 = .zero, dpad: Vec2 = .zero, buttons: Set<PadButton> = []) {
+    public init(stick: Vec2 = .zero, dpad: Vec2 = .zero, buttons: Set<PadButton> = [], rightStick: Vec2 = .zero) {
         self.stick = stick
         self.dpad = dpad
         self.buttons = buttons
+        self.rightStick = rightStick
     }
 
     public static let neutral = PadSnapshot()
@@ -93,6 +104,12 @@ public struct PadReader: Sendable {
         pressEdges.formUnion(pressed)
         directions.receive(dpad: snapshot.dpad, stick: snapshot.stick)
         current = snapshot
+    }
+
+    /// The right stick now, with the same dead zone as the left (`PadMapping.stick`). For a mode
+    /// that aims with it; menus never read it.
+    public var rightStick: Vec2 {
+        PadMapping.stick(current.rightStick)
     }
 
     /// The controller went away: forget everything it was holding.

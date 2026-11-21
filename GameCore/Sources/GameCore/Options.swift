@@ -93,4 +93,7 @@ public struct GameOptions: Sendable, Equatable, Codable {
 
 public enum OptionKey: Sendable, Hashable, CaseIterable {
     case soundVolume, musicVolume, haptics, handedness, gamepadLayout
+
+    /// The rows every mode has: sound, music and haptics.
+    public static let shared: [OptionKey] = [.soundVolume, .musicVolume, .haptics]
 }

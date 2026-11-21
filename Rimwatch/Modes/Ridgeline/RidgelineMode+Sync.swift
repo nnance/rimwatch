@@ -283,7 +283,7 @@ extension RidgelineMode {
         guard player.isAlive else { return }
         node.position = CGPoint(x: world.delta(from: cameraX, to: player.pos.x), y: player.pos.y)
         node.xScale = player.facing < 0 ? -1 : 1
-        node.zRotation = CGFloat(player.vel.y / session.tuning.verticalSpeed * 0.18 * player.facing)
+        node.zRotation = CGFloat(player.vel.y / tuning.verticalSpeed * 0.18 * player.facing)
 
         let invulnerable = player.invulnerableTimer > 0
         // Invulnerable: the hull strobes and the shield ring pulses. A charged shield shows a

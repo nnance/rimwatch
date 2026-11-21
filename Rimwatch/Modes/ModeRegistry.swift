@@ -26,7 +26,8 @@ enum ModeRegistry {
         /// Ridgeline again, under its own id, name and high-score table, so switching between
         /// modes can be tried before a second mode exists.
         static let debugSecondMode = Entry(RidgelineMode.self, as: ModeDescriptor(
-            id: "ridgelineB", displayName: "Ridgeline B", summary: "A second copy, for testing mode switching"))
+            id: "ridgelineB", displayName: "Ridgeline B", summary: "A second copy, for testing mode switching",
+            optionRows: RidgelineMode.descriptor.optionRows))
         #endif
     }
 

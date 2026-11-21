@@ -17,11 +17,15 @@ public struct ModeDescriptor: Sendable, Equatable {
     public let displayName: String
     /// One short line the title screen shows while the mode is highlighted.
     public let summary: String
+    /// The rows its Options menu shows, in order. Options are stored once for every mode; a mode
+    /// lists only those that mean something to it (a gamepad button layout is one mode's).
+    public let optionRows: [OptionKey]
 
-    public init(id: ModeID, displayName: String, summary: String = "") {
+    public init(id: ModeID, displayName: String, summary: String = "", optionRows: [OptionKey] = OptionKey.shared) {
         self.id = id
         self.displayName = displayName
         self.summary = summary
+        self.optionRows = optionRows
     }
 }
 
@@ -42,7 +46,8 @@ public struct ModeCatalog: Sendable, Equatable {
     /// One unnamed mode whose title item reads "Play": a front end that is not choosing between
     /// modes (the package's own tests and tools).
     public init() {
-        self.init(modes: [ModeDescriptor(id: "play", displayName: "Play")], loaded: "play")
+        self.init(modes: [ModeDescriptor(id: "play", displayName: "Play", optionRows: OptionKey.allCases)],
+                  loaded: "play")
     }
 
     /// True when the player can choose between modes.
@@ -50,6 +55,11 @@ public struct ModeCatalog: Sendable, Equatable {
 
     public func descriptor(_ id: ModeID) -> ModeDescriptor? {
         modes.first { $0.id == id }
+    }
+
+    /// The Options rows of the loaded mode.
+    public var optionRows: [OptionKey] {
+        descriptor(loaded)?.optionRows ?? OptionKey.shared
     }
 
     /// The mode to load at launch: the one asked for (a debug launch argument), else the one last

@@ -489,7 +489,8 @@ public struct ModeFrontEnd<Run: ModeRun>: Sendable {
             ])
 
         case .options:
-            let rows = OptionKey.allCases.map { key in
+            // Only the loaded mode's rows; every option stays stored either way.
+            let rows = catalog.optionRows.map { key in
                 MenuItem(.option(key), options.title(of: key), value: options.valueText(of: key),
                          isAdjustable: true)
             }
