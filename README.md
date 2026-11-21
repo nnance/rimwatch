@@ -139,12 +139,14 @@ These exist in Debug builds only.
 | Argument | Effect |
 |---|---|
 | `-hinge open\|closed\|none` | Overrides the fold state. |
-| `-autopilot` | A bot plays the game. `-autopilot shooter` uses one that never rescues. |
+| `-autopilot [idle\|novice\|competent\|shooter]` | A bot plays the game. Plain `-autopilot` is `competent`; `shooter` never rescues; `idle` never touches the controls and `novice` plays badly, so both reach game over quickly. |
 | `-showStats` | Shows node count, draw count and frame rate. |
 | `-resetSettings` | Clears saved options and high scores at launch. |
 | `-logFeedback` | Logs every routed sound and haptic. |
 | `-realPads` | Uses real controllers in the simulator, which otherwise reports a phantom one. |
 | `-dumpAudio <dir>` | Writes every sound and music mood to WAV files. |
+| `-seed <n>` | Starts the session from seed `n` instead of the clock, so the runs are the same every launch. |
+| `-fixedFrame` | Counts every frame after the first as exactly 1/60 s, whatever the real time. With `-seed` and `-autopilot`, runs play out the same way every time; the `[Rimwatch run]` lines log each run's seed and result. |
 
 `PLAN.md` also lists the Darwin notifications that change the fold state and drive the menus and a
 simulated controller at run time.

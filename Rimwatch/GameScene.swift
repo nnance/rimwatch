@@ -147,7 +147,14 @@ final class GameScene: SKScene {
 
     override init(size: CGSize) {
         let options = Settings.shared.options
-        frontEnd = FrontEnd(session: GameSession(seed: UInt64(Date().timeIntervalSince1970 * 1000) & 0xFFFF_FFFF),
+        let clockSeed = UInt64(Date().timeIntervalSince1970 * 1000) & 0xFFFF_FFFF
+        #if DEBUG
+        // Launch with -seed <n> for the same runs every time (for comparing builds).
+        let seed = Self.debugSeed ?? clockSeed
+        #else
+        let seed = clockSeed
+        #endif
+        frontEnd = FrontEnd(session: GameSession(seed: seed),
                             pose: .closed, options: options, highScores: Settings.shared.highScores)
         factory = GlowShapeFactory(theme: theme, screenScale: 2)
         terrain = TerrainNode(world: frontEnd.session.simulation.world, factory: factory)
@@ -538,6 +545,7 @@ final class GameScene: SKScene {
         moodDirector.reset()
         #if DEBUG
         runStartedAt = clock
+        debugLog("[Rimwatch run] start seed \(session.runSeed)")
         #endif
         #if DEBUG
         autopilotBot = Autopilot(skill: Self.autopilotSkill, seed: UInt64(runID))
@@ -837,7 +845,14 @@ final class GameScene: SKScene {
             }
         }
         #endif
-        let elapsed = lastTime.map { currentTime - $0 } ?? 0
+        let realElapsed = lastTime.map { currentTime - $0 } ?? 0
+        #if DEBUG
+        // Launch with -fixedFrame to make every frame after the first 1/60 s of game time,
+        // whatever the real time, so a run plays out the same way every time.
+        let elapsed = Self.fixedFrame && lastTime != nil ? 1.0 / 60 : realElapsed
+        #else
+        let elapsed = realElapsed
+        #endif
         lastTime = currentTime
         clock += elapsed
 
@@ -850,7 +865,15 @@ final class GameScene: SKScene {
         readGamepad(elapsed: elapsed)
         let tickBefore = session.simulation.tick
         lastInput = currentInput()
+        #if DEBUG
+        let wasInGame = session.isInGame
+        #endif
         let frame = frontEnd.update(elapsed: elapsed, input: lastInput)
+        #if DEBUG
+        if wasInGame, case .gameOver(let score) = session.phase {
+            debugLog("[Rimwatch run] over score \(score) wave \(session.simulation.wave) saved \(session.simulation.colonistsSaved)")
+        }
+        #endif
         // A tap that came and went between frames has now reached a simulation step.
         if session.simulation.tick != tickBefore {
             controls.consumePresses()
@@ -925,14 +948,22 @@ final class GameScene: SKScene {
     }
 
     private static let autopilot = ProcessInfo.processInfo.arguments.contains("-autopilot")
+    private static let fixedFrame = ProcessInfo.processInfo.arguments.contains("-fixedFrame")
+    /// `-seed <n>`: the session's first seed, in place of one from the clock.
+    private static let debugSeed: UInt64? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flag = arguments.firstIndex(of: "-seed"), arguments.indices.contains(flag + 1) else { return nil }
+        return UInt64(arguments[flag + 1])
+    }()
     /// `-autopilot shooter` flies a pilot who fights well but never rescues anyone (it runs into
-    /// Blackout); plain `-autopilot` flies the competent rescuer.
+    /// Blackout); plain `-autopilot` flies the competent rescuer. `-autopilot idle` and
+    /// `-autopilot novice` fly the weaker test pilots, which lose their lives quickly.
     private static let autopilotSkill: Autopilot.Skill = {
         let arguments = ProcessInfo.processInfo.arguments
         guard let flag = arguments.firstIndex(of: "-autopilot"), arguments.indices.contains(flag + 1) else {
             return .competent
         }
-        return arguments[flag + 1] == "shooter" ? .shooter : .competent
+        return Autopilot.Skill.allCases.first { "\($0)" == arguments[flag + 1] } ?? .competent
     }()
     private var autopilotBot = Autopilot(skill: GameScene.autopilotSkill, seed: 1)
     private var titleSince: TimeInterval?

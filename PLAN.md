@@ -64,6 +64,12 @@ changed for this yet.
   idea, not a decision. One allowance is made before then: a mode's session can end because a goal
   was met, not only because the player died, so a campaign can use the modes without reworking
   them. Nothing else is built for the campaign ahead of its design step.
+- **An idea for the campaign, not a decision (yours, 2026-11-20):** an overworld in the spirit of
+  a platformer's world map. The player moves around Calder and enters portals, each leading to
+  a mini game they complete, with 15 to 20 classic-arcade-style games in all and the surprise of
+  not knowing which game is behind a portal. It should follow the world's theme so it does not
+  feel like a rigid set of separate scenes. This is input for step 16. It does not change the
+  build order, and nothing is built for it before then.
 
 ### What is shared and what belongs to a mode
 
@@ -105,6 +111,24 @@ Each step is built, independently verified and committed before the next one sta
    gives the same results for the same seeds.
 9. **Split the app the same way**: a shared shell, with Ridgeline's scene and HUD plugged into it
    as a mode. High scores become one table per mode, and the existing table moves to Ridgeline.
+   Nothing the player sees or does may change. It is built in three stages, each verified and
+   committed on its own:
+   - **9a, game logic.** The pause, countdown and screen-flow logic (`GameSession`, `FrontEnd`)
+     becomes generic over a mode's run and moves to the shared target. A run can end because a
+     goal was met as well as by defeat. High scores are stored per mode, and the old table is
+     migrated to Ridgeline's.
+   - **9b, shared app files.** Menus, overlays, audio playback, feedback routing and the glow
+     renderer stop depending on Ridgeline's theme (they take a small shell style instead), and
+     the app's folders become `Shell/` and `Modes/Ridgeline/`.
+   - **9c, the scene.** `GameScene.swift` is split into a shell scene, a host that runs one mode,
+     and the Ridgeline mode. One registry file lists the modes and is the only shell-level file
+     that names Ridgeline.
+
+   A safety net came first, on otherwise unchanged code: `FrontEndReplayTests` replays a scripted
+   20,000-frame session and pins every event, screen and score, and the DEBUG arguments
+   `-seed <n>` and `-fixedFrame` (with `-autopilot idle|novice|competent|shooter` and
+   `-logFeedback`) make two runs of the app log identical `[Rimwatch run]`, `[Rimwatch screen]`
+   and haptic lines, so each stage can be compared with the one before.
 10. **Title screen with Free Play.** Rimwatch is the title and the player picks a mode; only
     Ridgeline is listed until the others exist. The pause menu gains a way back to the title. A
     DEBUG launch argument starts a given mode directly. `README.md` and `CLAUDE.md` are updated to
@@ -276,6 +300,11 @@ step is pushed so you can install it.
       harness's "death causes" lines print ties in an unstable order, as they did before the
       split. What landed where is under "What is shared and what belongs to a mode".
 - [ ] 9. Split the app into a shared shell and the Ridgeline mode; one high-score table per mode
+  - [x] Safety net: golden replay test and the DEBUG `-seed`, `-fixedFrame` and
+        `-autopilot <skill>` arguments (2026-11-20). 205 tests.
+  - [ ] 9a. Session and screen-flow logic shared; per-mode high scores with migration
+  - [ ] 9b. Shared app files cut free of Ridgeline; folders reorganised
+  - [ ] 9c. `GameScene` split into shell scene, mode host and Ridgeline mode
 - [ ] 10. Title screen with Free Play mode selection; new app icon and emblem ("The Rim");
       `README.md` and `CLAUDE.md` updated
 - [ ] Parallel check (not a gate): Ridgeline checked on the phone and unchanged
