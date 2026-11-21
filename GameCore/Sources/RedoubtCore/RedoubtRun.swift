@@ -65,6 +65,11 @@ public struct RedoubtRun: Sendable {
     public internal(set) var powerCutPending = false
     var waveColonists = 0
     var waveLost = 0
+    #if DEBUG
+    /// DEBUG only (`Config.powerCutAtWave`): this wave begins under a power cut, as if every
+    /// colonist had been lost in the wave before. Nil in ordinary runs.
+    var forcedPowerCutWave: Int?
+    #endif
 
     private var nextID = 1
     private var nextExtraLifeScore: Int
@@ -195,6 +200,9 @@ public struct RedoubtRun: Sendable {
         waveClock = 0
         quota = director.quota(forWave: wave)
         groupCooldown = 0
+        #if DEBUG
+        if forcedPowerCutWave == wave { powerCutPending = true }
+        #endif
         if powerCutPending {
             powerCutPending = false
             if !isPowerCut {
@@ -227,6 +235,10 @@ public struct RedoubtRun: Sendable {
         events.append(.airlockClosed(at: airlock.pos))
         nextAirlock = pickAirlock(awayFrom: airlock.pos)
         phase = .intermission(remaining: tuning.intermission)
+        #if DEBUG
+        // A forced power cut shows as pending through the break before it, like a real one.
+        if forcedPowerCutWave == wave + 1 { powerCutPending = true }
+        #endif
     }
 
     /// A new airlock: a random wall, away from the corners and at least `airlockMinMove` from the

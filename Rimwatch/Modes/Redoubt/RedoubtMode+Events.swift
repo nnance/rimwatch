@@ -63,7 +63,7 @@ extension RedoubtMode {
             case .allColonistsLost:
                 callouts.notice("EVERY COLONIST LOST", color: palette.warning)
             case .powerCutBegan:
-                banner("POWER CUT", subtitle: "Wave \(max(run.wave, 1)) in the dark. Deliver a colonist to bring the lights back",
+                banner("POWER CUT", subtitle: "Deliver a colonist to bring the lights back",
                        color: palette.warning, life: 1.8)
                 // The lights stutter out, in step with the failing hum.
                 lightsFlicker = LightsFlicker(failing: true, since: clock)

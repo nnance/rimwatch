@@ -30,10 +30,10 @@ Defender or Robotron.
 ## Status
 
 Ridgeline is finished and was checked in the simulator. Redoubt is playable from the title screen,
-with its own sounds, music, haptics and effects, and waits on its tuning pass and on being played:
-its look and sound have been checked in the simulator and by measurement, not yet on a phone. The
-game has not yet been run on a real
-iPhone Duo, so the open inner display (layout around the crease and camera hole), play feel,
+with its own sounds, music, haptics and effects. Its difficulty has been tuned against scripted
+bots and it now waits only on being played: its look, sound and balance have been checked in the
+simulator and by measurement, not yet by people on a phone. The game has not yet been run on a
+real iPhone Duo, so the open inner display (layout around the crease and camera hole), play feel,
 speaker sound, haptics and physical controllers are untested. `PLAN.md` lists what is left and the
 plan for the other modes.
 
@@ -88,7 +88,12 @@ colonists still to save.
 
 - **The pace:** the floor is crowded from the first second of a wave, and more pour in while you
   fight. Pushing the aim stick fires a constant stream of shots, about ten a second, with no fire
-  button, heat or reload.
+  button, heat or reload. Early waves come in from a few walls (one wall in waves 1 to 4, two in
+  wave 5, three in waves 6 and 7, anywhere on the floor from wave 8), so the opening waves can be
+  read and met; the crowd starts a little smaller and grows to its full size by wave 8, and
+  Spitters fire half as often in the wave they first appear, back to full rate by wave 7. Laps
+  hugging the wall are no refuge: while the orb runs along a wall, new groups land on the path
+  ahead of it.
 - **The loop:** colonists shelter around the floor. Touch one and they follow you in a line; lead
   the line to the airlock to deliver them all at once. Each colonist in the line is worth more than
   the one before, so long lines pay, but enemies can take followers off the end. Every fourth
@@ -176,11 +181,17 @@ Difficulty was tuned against scripted bots, not people. After changing a mode's 
 cd Tools/Harness
 swift build -c release -Xswiftc -DDEBUG
 .build/release/Harness 80 20 idle novice competent shooter          # Ridgeline
-.build/release/Harness redoubt 80 20 idle novice competent          # Redoubt
+.build/release/Harness redoubt 80 20 idle novice competent wallCircler   # Redoubt
 ```
 
 The arguments are the number of seeds, a cap in minutes per game, and the bots to run. A leading
-`redoubt` runs Redoubt's bots instead of Ridgeline's.
+`redoubt` runs Redoubt's bots instead of Ridgeline's: `idle`, `novice`, `competent` and
+`shooter`, plus three that only circle the floor firing (`wallCircler`, `innerCircler`,
+`reversingCircler`), kept to check that wall-running does not out-survive real play. Without bot
+names it runs `idle novice competent wallCircler`. For each bot it prints survival, wave reached,
+score (and score a minute), games that reached the cap, colonists saved and lost, kills, power
+cuts, how close arrivals land to the orb, deaths by cause, and by wave the deaths, colonists saved,
+pressure on the orb (enemies within 120 and 200, blocked directions) and how each death happened.
 
 ## App icon
 
@@ -221,11 +232,11 @@ These exist in Debug builds only.
 | Argument | Effect |
 |---|---|
 | `-hinge open\|closed\|none` | Overrides the fold state. |
-| `-autopilot [idle\|novice\|competent\|shooter]` | A bot plays the game. Plain `-autopilot` is `competent`; `shooter` never rescues; `idle` never touches the controls and `novice` plays badly, so both reach game over quickly. Redoubt has the same four; its `shooter` never rescues and leaves Gleaners alone, so it reaches the power cut (with `-seed 7`, in wave 8). |
+| `-autopilot [idle\|novice\|competent\|shooter]` | A bot plays the game. Plain `-autopilot` is `competent`; `shooter` never rescues; `idle` never touches the controls and `novice` plays badly, so both reach game over quickly. Redoubt has the same four; its `shooter` fights like `competent` but never rescues and leaves Gleaners alone. Colonists still safe when a wave clears count as saved, so it loses only some of them and does not reach the power cut (none in 40 harness games); use `-powerCutAtWave` for that. |
 | `-showStats` | Shows node count, draw count and frame rate. |
 | `-resetSettings` | Clears saved options, the remembered mode and every mode's high scores at launch. |
 | `-logFeedback` | Logs every routed sound and haptic. |
-| `-rescueAfterCut` | Redoubt, with `-autopilot shooter`: once the power fails, the competent bot takes over and delivers, so the lights come back. |
+| `-powerCutAtWave <n>` | Redoubt: wave `n` begins under a power cut, as if every colonist had been lost in wave `n`-1, whatever the bot or the balance. With `-autopilot competent -powerCutAtWave 2` the lights fail as wave 2 starts (about 25 seconds in) and come back on the bot's first delivery a few seconds later; with `-autopilot shooter` they stay out. |
 | `-noClip` | Redoubt: draws its effects without clipping them to the floor (to measure what the clip costs). |
 | `-realPads` | Uses real controllers in the simulator, which otherwise reports a phantom one. |
 | `-dumpAudio <dir>` | Writes every sound and music mood of the mode loaded at launch to WAV files (pick it with `-mode`). |

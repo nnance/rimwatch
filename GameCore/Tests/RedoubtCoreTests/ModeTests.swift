@@ -82,7 +82,7 @@ import GameCore
     @Test func theSharedInitialiserBuildsTheSameRun() throws {
         var tuning = RedoubtTuning()
         tuning.orbMaxSpeed = 250
-        var a = RedoubtRun(seed: 9, config: tuning)
+        var a = RedoubtRun(seed: 9, config: RedoubtRun.Config(tuning: tuning))
         var b = RedoubtRun(seed: 9, tuning: tuning)
         for _ in 0..<seconds(5) {
             #expect(a.step(still) == b.step(still))

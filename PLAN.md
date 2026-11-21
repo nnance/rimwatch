@@ -393,8 +393,16 @@ step is pushed so you can install it.
         check failed it twice (Skitter arrival markers invisible in early waves; sprites
         re-textured while scaled drawn the wrong size) and passed the third time. The choices
         made are under "Decisions made while putting it on screen (13b)". 360 tests.
-  - [ ] 13c. Feedback: sounds, music moods and haptics
-  - [ ] 13d and 13e. Final tuning pass and polish
+  - [x] 13c. Feedback (2026-11-21): 53 sound patches, a music style with four moods and a
+        haptic cue for each event that matters, all in `RedoubtCore`; a tested rule keeps a
+        dying crowd from stacking into noise. Nobody has listened to it.
+  - [x] 13e. Polish (2026-11-21): deaths by kind, shot tails and muzzle flashes, power-cut
+        flicker and lighting, the delivery run-in, compact banners, clipping to the arena,
+        new colonist and life glyphs.
+  - [x] 13d. Balance (2026-11-21): the wall-circling hole closed with one rule, then the
+        early waves eased after the owner's first play (too hard: swarmed by wave 2). The
+        novice bot now reaches wave 6. 13c, 13e and the wall rule were independently verified
+        together and passed with notes (listed under "Redoubt design"). 406 tests.
 - [ ] Gate: Redoubt played and refined
 - [ ] 14. Riftwing design written here and approved
 - [ ] 15. Riftwing build
@@ -543,8 +551,10 @@ rimwatch/
       Input.swift, PadInput.swift (two sticks; shoulders are Shockwave)
       RedoubtMode.swift         RedoubtRun as a ModeRun; RedoubtSession and RedoubtFrontEnd
       Events.swift, Pilot.swift (DEBUG bots), HapticCue+Events.swift
-      Theme.swift               RedoubtTheme protocol: palette and a shape per role
-      Themes/CalderDome.swift   the theme
+      RedoubtReadout.swift      what the HUD shows that is a rule (the colonist alarm)
+      Theme.swift               RedoubtTheme protocol: palette, a shape per role, sounds
+      Themes/CalderDome.swift, Themes/CalderDomeSounds.swift
+      Audio/                    RedoubtSoundDirector (which events sound), RedoubtMoodDirector
     Tests/GameCoreTests/, Tests/RidgelineCoreTests/, Tests/RedoubtCoreTests/
   Rimwatch/                     app target. Shell and modes since step 9 of the expansion.
     AppDelegate.swift, SceneDelegate.swift, Info.plist, Assets.xcassets
@@ -739,8 +749,8 @@ you play it.
 - **Shockwave:** destroys everything within 150 units, Threshers and Burrows included, and pushes
   back enemies out to 340. Charges you have earned carry over to your next life.
 - **Arrivals:** shown for 1 s, at least 190 units from the orb. If you sit on one, it moves.
-- **Waves keep the floor full.** Each wave opens with its crowd (20 in wave 1, 8 more each
-  wave, up to 90), telegraphed in the last second of the break so it lands as the wave starts.
+- **Waves keep the floor full.** Each wave opens with its crowd (first 20 in wave 1, now 18;
+  about 8 more each wave, up to 90), telegraphed in the last second of the break so it lands as the wave starts.
   On top of that each wave has a quota of further Skitters (90 in wave 1, 25 more each wave, up
   to 400). Whenever the number on the floor drops below the opening crowd, another group of up
   to 6 is sent in at once, until the quota is spent. The wave ends when the quota is spent and
@@ -755,7 +765,9 @@ you play it.
 - **Lives:** three, at most five, an extra one every 60,000 points.
 - **Points:** Skitter 50, Gleaner 150, Spitter 200, Husk 250, Burrow 1,000, Thresher 1,500.
 
-Measured with the bots over 80 seeds: an idle orb is overrun in about 13 s. The novice bot
+These were the first measurements, before the balance pass and the easier early waves
+described further down, which hold the current numbers (the novice bot now reaches wave 6).
+Measured then with the bots over 80 seeds: an idle orb is overrun in about 13 s. The novice bot
 usually reaches wave 3. The competent bot usually reaches wave 11, loses almost no lives before
 wave 7 and saves most colonists in the early waves, killing about 440 enemies a minute. In every
 wave the floor has fewer than five targets for only 2 to 7% of the fighting time, which is the
@@ -771,15 +783,134 @@ Things to judge when you play:
   Burrows, against about 36,000 a minute for playing on), so it is a way to rest, not to score.
 - Arrivals are telegraphed at least 190 units away but can appear as close as about 93 if you fly
   at them.
-- Circling the wall while firing at the nearest enemy is a very strong tactic: a simple bot doing
-  only that survived 10 minutes in nearly half its games. Skitters are slow (speed 50 against
-  the orb's 280) and the forgiving hit size helps it. If it feels too safe, faster Skitters or
-  a full-size hit are the first numbers to try.
+- Circling the wall while firing at the nearest enemy was a very strong tactic. Stage 13d
+  closed it; see "The balance pass (13d)" below.
 
 Harness: `cd Tools/Harness && swift build -c release -Xswiftc -DDEBUG &&
 .build/release/Harness redoubt 80 20` (seeds, minutes cap).
 
-### Decisions made while putting it on screen (13b)
+### The balance pass (13d)
+
+One hole was found and closed; nothing else in the tuning changed.
+
+- **The hole:** a bot that only laps the arena hugging the wall and fires at the nearest enemy
+  reached wave 12, lasted about 9 minutes and survived the 10-minute cap in 26 of 80 games. It
+  outlasted the bot that plays properly. Skitters tail a circling orb and never catch it.
+- **The fix, one rule:** while the orb is running along a wall (within 40 units of it, faster
+  than 100, nearly all of that speed along the wall), each reinforcement group lands on its
+  path 400 to 520 units ahead, instead of at a random side. The one-second warning and the
+  minimum distance of 190 still hold. Near a corner the group arrives the usual way.
+- **The numbers** are new in `Tuning.swift`: `wallRunGap` 40, `wallRunSpeed` 100,
+  `wallRunAlong` 0.9, `wallRunReach` 400 to 520. Setting `wallRunGap` to 0 turns the rule off
+  and gives exactly the game as it was before.
+- **Result over 80 seeds:**
+
+  | Bot | Wave reached | Survival | Score | Games at the 10-minute cap |
+  |---|---|---|---|---|
+  | Wall circler, before | 12 | 529 s | 228,000 | 26 of 80 |
+  | Wall circler, after | 5 | 109 s | 41,000 | 0 |
+  | Circler that reverses when blocked, before | 10 | 338 s | 143,000 | 0 |
+  | Circler that reverses when blocked, after | 8 | 239 s | 99,000 | 0 |
+  | Novice, before and after | 3 | 95 s, then 92 s | 28,200, then 26,700 | 0 |
+  | Competent, before and after | 11 | 379 s, then 374 s | 227,600, then 227,800 | 0 |
+
+  The floor is as crowded as before (fewer than five targets for 7% of the time at most) and
+  never empty.
+- **Tried and rejected:** a full-size hit (the circler still reached the cap, and proper play
+  lost a wave), faster Skitters (everyone lost a wave), Skitters that aim ahead of the orb
+  (they overshoot when you turn, which made proper play easier and changed how they feel).
+- **Left as it is, for you to judge:**
+  - The circler that reverses still reaches about wave 8. It scores under half of proper play
+    and dies to Spitter shots.
+  - Farming a Burrow pays about 6,000 to 7,000 points a minute with three Burrows, against
+    about 36,000 for playing on, but it has no limit: an hour of it would beat a good game's
+    score. Every clean fix changes the design (Burrow Skitters worth nothing late in a wave,
+    Burrows that run dry, or a hunter that arrives when a wave drags on).
+  - An enemy can land as close as 93 units if you fly at its marker.
+  - Whether groups landing ahead of you on the wall feel fair or like the game cheating.
+- **Bots and harness:** three DEBUG bots were added to measure this (`wallCircler`,
+  `innerCircler`, `reversingCircler`). `Harness redoubt` now runs idle, novice, competent and
+  the wall circler, and prints score a minute, ranges, games at the cap and how close arrivals
+  land. Tests pin the hole shut and pin the farming rate.
+
+### Easier early waves (after your first play, 2026-11-21)
+
+You found it too hard on a controller: most games ended in wave 2 and none passed wave 3, and
+the cause was being swarmed by the crowd. That matched the novice bot exactly (it died in wave
+3), so the novice bot is now the stand-in for a first-time player and the target is the one
+you chose: a first game usually reaches wave 5 to 6.
+
+- **The crowd comes from one side early on.** In waves 1 to 4 the opening crowd and every
+  reinforcement group arrive along one wall, usually a far one. Wave 5 uses two walls, waves 6
+  and 7 three, and from wave 8 they come from anywhere, as before. This was the biggest single
+  effect: the orb no longer starts each wave surrounded.
+- **Slightly fewer early.** The opening crowd and Skitter quota are scaled to 90% in wave 1,
+  rising 1.5% a wave to full from wave 8. Opening crowd by wave: 18, 26, 33, 42, 50, 59, 67,
+  76, 84, 90 (it was 20, 28, 36, 44, 52, 60, 68, 76, 84, 90).
+- **Spitters fire half as often in their debut wave**, easing back to the normal rate by
+  wave 7. Once the swarm deaths were gone, Spitter shots were what ended the novice's games.
+- **The numbers** are in `WaveDirector.swift`: `entrySides` `[1,1,1,1,2,3,3,4]` (was anywhere
+  in every wave), `crowdEaseStart` 0.9 (was 1), `crowdEaseGrowth` 0.015 (was 0),
+  `spitterDebutSlowdown` 2.0 (was 1), `spitterEaseWaves` 4; and in `Tuning.swift`:
+  `entryBandDepth` 180, `entrySideJitter` 300. Setting the first four back gives exactly the
+  previous game.
+- **Result over 80 seeds:**
+
+  | | Before | After |
+  |---|---|---|
+  | Novice: wave reached | 3 | 6 |
+  | Novice: survival | 92 s | 183 s |
+  | Novice: lives lost in waves 1 and 2 together | 1.05 | 0.21 |
+  | Novice: directions blocked round the orb in wave 1 (of 8) | 1.3 | 0.8 |
+  | Competent: wave reached | 11 | 11 |
+  | Wall circler: wave reached | 5 | 4 |
+
+  The floor is still never empty mid-wave. The late game (wave 8 on) is untouched.
+- **Not changed:** orb speed, fire rate, how Skitters walk, lives, the respawn, Shockwave.
+- **Tried and left out** because they made no measurable difference: a bigger clear zone at
+  the start of a wave, and keeping reinforcements off the wall the orb is heading for.
+- **To look for when you play:** whether there is room to back away and whether one wall is
+  too predictable; whether 18 in wave 1 still feels like a crowd; whether wave 3 (Spitters) or
+  wave 7 (the third wall at nearly full density, where the novice loses most lives) is a step.
+- **An alternative** if "about 20 in wave 1" matters more: the same entry walls and Spitter
+  easing with no crowd reduction gives a novice median of wave 5, with little margin.
+- The harness now also prints the pressure on the orb per wave (enemies within 120 and 200
+  units, directions blocked) and what each loss looked like.
+
+### What the independent check of sound, polish and balance found
+
+It passed with notes (before the easier early waves above, which were checked separately).
+
+- A colonist seized within about 0.3 s of another makes no second alarm sound; the HELP! popup
+  and the haptic still fire.
+- Starting a Redoubt run in the first second after switching modes can lose the wave's first
+  two sounds (the airlock opening and the first arrival rustle) while the sounds are still
+  being prepared. Fixing it means caching prepared sounds per mode in the shell.
+- At full sound volume the very worst pile-up of sounds relies on the limiter, as Ridgeline's
+  does. At the default volume it stays just under full scale.
+- **A gap left in the wall rule:** walking the wall slowly (under the rule's speed threshold)
+  reaches about wave 9, close to proper play's survival at about 60% of its score. Not closed.
+- A player running along a wall to an airlock at full speed will meet a group landing on
+  their path. Whether that feels fair is yours to judge.
+- Haptics run at about 39 cues a minute in a good game, 44 of them light ticks for colonists
+  joining the line.
+
+And from the check of the easier early waves and the last fixes (also a pass with notes):
+
+- **Camping in a corner now does better than the novice bot.** A bot that parks in a corner
+  and fires at the nearest enemy reaches wave 7 (about 4 minutes); before the easing it
+  reached wave 4. The one-wall rule favours walls far from the orb, so a camper sees every
+  early crowd coming from the far side. Parking mid-wall reaches wave 4 and at the centre
+  wave 3. Whether sitting in a corner should work is yours to decide; it is not closed.
+- **In the app the bots play worse than in the harness.** The app asks a bot for its sticks
+  once per drawn frame and the harness once per simulation step, so in the app the bot reacts
+  half as fast: the novice bot under `-autopilot` dies in wave 1 or 2. Every balance number in
+  this plan is from the harness. It has been this way since Ridgeline; it only affects what
+  you see when watching a bot play in the app.
+- Closing the phone during a power cut and reopening it keeps the darkness and the music mood
+  correct.
+
+### Decisions made while putting it on screen (13b, polished in 13e)
 
 The builder's calls for the look and the layout. The shapes and colours are in
 `GameCore/Sources/RedoubtCore/Themes/CalderDome.swift`; the layout is in
@@ -787,16 +918,32 @@ The builder's calls for the look and the layout. The shapes and colours are in
 
 - **Orb:** a cyan ring (the Watch's cyan) round a pale seat, with a pointed emitter at the front
   that shows where it aims and two hover struts. A faint wide halo helps find it in a crowd.
-- **Colonist:** Ridgeline's mint waving figure, seen from above.
+- **Colonist:** an upright mint figure with its arms up (head, body, arms, legs). A first
+  version seen from above read as a small "u" and was redrawn.
 - **Enemies, one colour each:** Skitter, a small orange four-legged diamond; Gleaner, a yellow
-  open claw; Spitter, a violet hexagonal turret with a barrel; Burrow, a dark-orange ragged hole
-  with rings stepping down (the Skitters' colour family, since it spawns them); Thresher, a big
+  open claw; Spitter, a violet hexagonal turret with a barrel; Burrow, a dull brown ragged hole
+  with rings stepping down (first dark orange, moved away from the Skitter's colour); Thresher, a big
   crimson hull with a toothed blade; Husk, Ridgeline's magenta spinning star.
-- **Shots:** the orb's are pale cyan streaks; the Spitter's is a hot-pink diamond.
+- **Shots:** the orb's are pale cyan streaks with a dim tail about 50 units long, a muzzle
+  flash on every shot and a spark where each ends. The Spitter's is a throbbing hot-pink
+  four-pointed star inside a faint ring.
+- **Deaths, by worth:** a Skitter is four sparks and a small flash; Gleaner, Spitter and Husk
+  each burst in their own colour (tumbling shards, venom sparks, spinning shards); a Burrow
+  falls in on itself; a Thresher is a wreck of big shards with a shake.
 - **Airlock:** mint posts with chevrons pointing out and a faint arc marking the delivery reach;
   a steel bar across it when shut. It pulses while colonists are following you.
 - **Arrivals:** four corner brackets in the newcomer's colour that close in over the warning
-  second.
+  second. Skitters, which arrive by the dozen, get a small faint ring instead that brightens
+  and strobes in the last quarter second, so a late wave's opening is not a carpet of brackets.
+  Anything bigger than a Skitter lands with a puff in its own colour.
+- **Banners:** a compact line or two along the top of the floor, left of the crease: about 1 s
+  for a wave, 2 s for a debut wave (which names the newcomer and what it does). Popups stay
+  inside the floor.
+- **Clipping:** effects and the orb's halo are cut at the arena wall.
+- **Delivery:** the line runs in through the airlock door one colonist after another, and the
+  ring, burst and popup grow with the number delivered.
+- **Losing the orb** is shown at the orb (hull shards, a red flash, a ring) with only a light
+  red wash over the screen.
 - **Floor:** steel-blue walls, faint floor crosses, a ring marking the centre where you return.
 - **HUD:** one thin strip above the arena. Score and wave left of the crease; lives, Shockwave
   charges and colonists left to the right, ending before the pause button.
@@ -813,31 +960,80 @@ The builder's calls for the look and the layout. The shapes and colours are in
   as it wakes; a Burrow's hole shrinks as it is shot; a seized colonist flashes red on a red
   tether to its Gleaner; the line is joined to the orb by a mint cord; the orb strobes inside a
   ring while it cannot be hit.
-- **Power cut:** the floor and the enemies go dark except a pool of light about 70 units round
-  the orb, fading out by 160. Shots, colonists, the airlock and arrival markers stay visible;
-  enemies in the dark show very faintly.
-- **Music mood:** the power cut uses the shared `blackout` mood.
-- **A fourth bot, `shooter`** (DEBUG only): fights like the competent bot but never rescues, so
-  it reaches the power cut (seed 7, wave 8). It exists to show and test the power cut.
+- **Power cut:** the lights stutter out over about a second, and stutter back when a delivery
+  restores them. The floor and the enemies go dark except a pool of light about 70 units round
+  the orb, fading out by 160. Firing throws that pool forward along the aim, and a Shockwave
+  lights the whole room for a moment. Shots, sparks, colonists, the airlock and arrival markers
+  stay visible. Enemies in the dark show very faintly, except a Spitter winding up, which
+  glows through as fair warning.
+- **A fourth bot, `shooter`** (DEBUG only): fights like the competent bot but never rescues.
+  It was added to reach the power cut, and stopped reaching it once the difficulty was
+  retuned; no bot reaches it by play now.
+- **Seeing the power cut:** the DEBUG argument `-powerCutAtWave <n>` starts wave n in the dark
+  as if every colonist had been lost in the wave before, whatever the tuning. With
+  `-autopilot competent -powerCutAtWave 2` the lights fail about 25 s in and return on the
+  first delivery.
 - **The colonist count** in the HUD turns red and blinks only for danger: the power is out or
   about to fail, or every colonist still on the floor is in a Gleaner's grip. A zero after
-  everyone was delivered stays calm.
+  everyone was delivered stays calm. The rule is `RedoubtRun.colonistAlarm`, with tests.
+- **One more DEBUG argument:** `-noClip` turns the wall clipping off for comparison.
+- **Banners and notices can never overflow their half of the floor:** a line that does not fit
+  shrinks, then wraps onto a second line, then is cut short with an ellipsis.
 
 Things to judge on the phone (first versions, none measured by a person yet):
 
-- Whether ten shots a second reads as a constant stream. In a still it is a row of dashes.
+- Whether ten shots a second reads as a constant stream. In a still it is an evenly spaced
+  line of streaks.
 - The orb is about 10 pt across on the Duo. The halo helps; judge it in a real crowd.
-- The thumbs cover the lower corners, and sometimes a colonist or a low airlock there.
-- A dense clump of Skitters merges into an orange mass, and the Burrow's rust is close to the
-  Skitter's orange (the shapes differ).
-- The colonist reads as a small "u" at game size, less clearly a person than Ridgeline's.
-- From wave 9 a wave opens with up to 90 arrival markers at once, which is busy.
-- The power cut's darkness, the size of the pool of light, and whether enemies in the dark
-  should show at all (they show very faintly now).
-- The red wash when the orb is lost is strong, and the wave banner sits over the left half of
-  the floor for about two seconds.
-- Rings and bursts near a wall, the airlock's posts and the orb's halo can draw slightly past
-  the wall. To be tidied in the polish stage.
+- The thumbs cover the lower corners, and sometimes a colonist or a low airlock there. The
+  delivery run-in is short and can happen under a thumb.
+- A dense clump of Skitters merges into an orange mass.
+- The size of each death effect at a few hundred kills a minute.
+- The power cut: how dark it is, how far firing throws the light, whether the flicker feels
+  like failing lights, and whether enemies in the dark should show at all.
+- The new colonist and life glyphs and the brown Burrow at real size.
+- Whether the Skitter's faint arrival ring is warning enough.
+
+### Decisions made for sound, music and haptics (13c)
+
+Nobody has heard any of this: every sound was measured (level, length, how it survives a phone
+speaker, the worst pile-up) and none was listened to. The patches are in
+`GameCore/Sources/RedoubtCore/Themes/CalderDomeSounds.swift`.
+
+- **Its own voice, same world:** 53 patches named `dome.*`. The orb is clean tones, enemies are
+  rough and noisy, colonists are pure tones, alerts are chords with a short close echo. None is
+  taken from Ridgeline.
+- **The shot** is a 45 ms tick in three pitches that never repeats the same pitch twice running,
+  quieter than Ridgeline's shot because it sounds ten times a second.
+- **A dying crowd cannot stack into noise:** a small tested rule (`RedoubtSoundDirector`) lets
+  one sound per kind of event through each frame, limits Skitter deaths to about 40 a second
+  and arrival rustles to one a second, and keeps small enemies silent when a Shockwave clears
+  them.
+- **Sounds that carry information:** a colonist seized is the most urgent alarm and cannot be
+  cut off by shots or Skitter deaths; a Spitter's wind-up sounds for exactly its 0.4 s; a
+  Thresher hit is a dull clank; a Burrow's hit sound rises as it is damaged; colonists joining
+  the line climb a scale; the delivery fanfare grows with the length of the line.
+- **Shockwave** is the loudest sound in the game.
+- **Music:** G Phrygian at 104 bpm (Ridgeline's is A minor at 84), with a low pulse while a
+  wave is fought. Tension is the normal state; calm fills the 2 s break between waves; the
+  power cut uses the shared `blackout` mood; menus use the title mood.
+- **Haptics:** nothing for shots or Skitter kills. A warning for a colonist seized or a Husk
+  forming, an impact for a colonist lost and for a Burrow or Thresher destroyed, a rumble for
+  the orb lost, the power failing and game over, a sweep for Shockwave, and light taps for the
+  rest. About one cue every two seconds in a normal game.
+- **The title screen** plays the loaded mode's menu sounds and title music, so it sounds
+  different with Redoubt selected than with Ridgeline, as its colours already do.
+
+Things to judge by ear on the phone, least certain first:
+
+- Whether the shot stays pleasant for ten minutes, or is too faint under the music.
+- The tension music looping for minutes, and whether the 2 s of calm between waves sounds like
+  a breath or a hiccup.
+- Whether the seized alarm cuts through a crowd without being shrill.
+- The arrival rustle (up to once a second): subtle, or a constant hiss.
+- The Thresher clank and the respawn sound lose most of their weight on a phone speaker.
+- Shockwave and the power failing are both gentler than Ridgeline's Shockwave and Blackout.
+- The haptics have never run on hardware.
 
 A fault found here that Ridgeline shares, left alone until you decide: a sprite given a new
 texture while it is scaled comes out the wrong size. Redoubt now guards against it in one

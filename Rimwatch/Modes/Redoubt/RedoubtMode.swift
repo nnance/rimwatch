@@ -29,7 +29,14 @@ final class RedoubtMode: GameMode {
     }
 
     static func makeSession(seed: UInt64) -> RedoubtSession {
-        RedoubtSession(seed: seed)
+        #if DEBUG
+        if let wave = powerCutAtWave {
+            var config = RedoubtRun.Config()
+            config.powerCutAtWave = wave
+            return RedoubtSession(seed: seed, config: config)
+        }
+        #endif
+        return RedoubtSession(seed: seed)
     }
 
     // Pool sizes: the run caps enemies at 120; 13a measured up to 92 arrivals and 31 shots at once.
@@ -317,13 +324,7 @@ final class RedoubtMode: GameMode {
     func input(pad: PadReader?, options: GameOptions) -> RedoubtInput {
         #if DEBUG
         if Self.autopilot {
-            let run = session.run
-            // -rescueAfterCut: the shooter bot hands over to the competent one once the lights
-            // fail, so a delivery brings them back (to see the power return).
-            if Self.rescueAfterCut, run.isPowerCut, pilot.skill == .shooter {
-                pilot = RedoubtPilot(skill: .competent, seed: UInt64(runID))
-            }
-            return pilot.input(for: run)
+            return pilot.input(for: session.run)
         }
         #endif
         if let pad { return RedoubtInput(pad: pad) }
@@ -398,7 +399,14 @@ final class RedoubtMode: GameMode {
     // MARK: Debug
 
     static let autopilot = ProcessInfo.processInfo.arguments.contains("-autopilot")
-    static let rescueAfterCut = ProcessInfo.processInfo.arguments.contains("-rescueAfterCut")
+    /// `-powerCutAtWave <n>`: wave n begins under a power cut, as if every colonist had been lost
+    /// in wave n-1, whatever the pilot or the balance (`RedoubtRun.Config.powerCutAtWave`).
+    static let powerCutAtWave: Int? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flag = arguments.firstIndex(of: "-powerCutAtWave"), arguments.indices.contains(flag + 1),
+              let wave = Int(arguments[flag + 1]), wave >= 1 else { return nil }
+        return wave
+    }()
     /// `-autopilot idle|novice|competent|shooter` picks the test pilot; anything else flies the competent one.
     static let autopilotSkill: RedoubtPilot.Skill = {
         let arguments = ProcessInfo.processInfo.arguments

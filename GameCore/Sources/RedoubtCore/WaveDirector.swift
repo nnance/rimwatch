@@ -14,7 +14,7 @@ public struct RedoubtSpawn: Sendable, Equatable {
 ///   (`entrySides`: one wall in waves 1 to 4, more later, anywhere from wave 8).
 /// - It also has a quota of Skitters (`quota`). Whenever the shootable enemies on the floor (and
 ///   on their way in) fall below `floorTarget`, the run telegraphs another group of them at once,
-///   from a random side, until the quota is spent. Burrows pour out more on top.
+///   from one of the wave's entry walls (any side from wave 8), until the quota is spent. Burrows pour out more on top.
 /// - The wave ends when the quota is spent and the floor is clear, so only the last few need
 ///   hunting down.
 /// Each new role debuts in a wave of its own, alongside Skitters only; mixed waves come between

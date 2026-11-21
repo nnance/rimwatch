@@ -61,8 +61,9 @@ and tick items as they are built and verified.
   `[Rimwatch run]`, `[Rimwatch screen]` and `[Rimwatch feedback] haptic` lines are identical line
   for line for the same build (the `[Rimwatch audio]` lines are not deterministic). Add
   `-mode redoubt` to do the same for Redoubt; `-autopilot` takes `idle`, `novice`, `competent`
-  or `shooter` in both modes (Redoubt's `shooter` never rescues, so it reaches the power cut:
-  seed 7, wave 8).
+  or `shooter` in both modes. No bot reaches Redoubt's power cut by play; DEBUG
+  `-powerCutAtWave <n>` forces one (with `-autopilot competent`, the lights come back on the
+  first delivery).
 - DEBUG `-mode <id>` loads a mode at launch (`ridgeline`, `redoubt`). `-debugSecondMode` lists
   Ridgeline again as "Ridgeline B"; it dates from when only one mode existed.
 - `FrontEndReplayTests` is a golden replay of a whole session. If it fails after a refactor, the

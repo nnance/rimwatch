@@ -23,8 +23,9 @@ public struct RedoubtPilot: Sendable {
         /// the airlock, keeps out of Spitter shots and uses Shockwave when hemmed in.
         case competent
         /// Fights as the competent pilot does but never goes for colonists or the airlock and
-        /// leaves Gleaners alone unless they come close, so colonists are lost and the power cut
-        /// comes (as Ridgeline's `shooter` reaches Blackout). For seeing the power cut in the app.
+        /// leaves Gleaners alone unless they come close, so colonists are lost. Since the 13d
+        /// tuning it seldom loses a whole wave's colonists, so it does not reliably reach the power
+        /// cut; the app's `-powerCutAtWave` forces one.
         case shooter
         /// The kiting tactic, kept as a regression guard (13d): flies laps of the floor hugging
         /// the wall (its centre 12 units in, 2 more than its radius) at top speed, always

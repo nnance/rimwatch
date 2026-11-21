@@ -150,3 +150,97 @@ import GameCore
         #expect(!r.isPowerCut)
     }
 }
+
+#if DEBUG
+/// The DEBUG switch that forces a power cut at a chosen wave, whatever the bot or the balance.
+@Suite struct ForcedPowerCutTests {
+    private func config(cutAt wave: Int?) -> RedoubtRun.Config {
+        var config = RedoubtRun.Config()
+        config.powerCutAtWave = wave
+        return config
+    }
+
+    @Test func aDefaultConfigForcesNothing() throws {
+        #expect(RedoubtRun.Config().powerCutAtWave == nil)
+        let r = RedoubtRun(seed: 3, config: RedoubtRun.Config())
+        #expect(r.forcedPowerCutWave == nil)
+        #expect(!r.powerCutPending)
+    }
+
+    @Test func theChosenWaveStartsInTheDarkAndTheRunIsUnchangedUntilThen() throws {
+        let cutAt = 3
+        var plain = RedoubtRun(seed: 11, config: RedoubtRun.Config())
+        var forced = RedoubtRun(seed: 11, config: config(cutAt: cutAt))
+        var pilotA = RedoubtPilot(skill: .competent, seed: 11)
+        var pilotB = RedoubtPilot(skill: .competent, seed: 11)
+        var startEvents: [RedoubtEvent] = []
+        for _ in 0..<seconds(240) {
+            let a = plain.step(pilotA.input(for: plain))
+            let b = forced.step(pilotB.input(for: forced))
+            if forced.wave == cutAt {
+                startEvents = b
+                // The forced run differs only by the power cut in the step wave n starts.
+                #expect(a.filter { $0 != .powerCutBegan } == b.filter { $0 != .powerCutBegan })
+                #expect(!a.contains(.powerCutBegan))
+                break
+            }
+            #expect(a == b)
+            #expect(plain.isPowerCut == forced.isPowerCut)
+            if plain.isGameOver { break }
+        }
+        #expect(forced.wave == cutAt)
+        #expect(startEvents.contains(.powerCutBegan))
+        #expect(startEvents.contains { if case .waveStarted(cutAt, _) = $0 { true } else { false } })
+        #expect(forced.isPowerCut)
+        #expect(!plain.isPowerCut)
+        #expect(plain.score == forced.score)
+        #expect(plain.orb == forced.orb)
+        #expect(plain.enemies == forced.enemies)
+        #expect(plain.colonists == forced.colonists)
+    }
+
+    @Test func itIsPendingThroughTheBreakBefore() throws {
+        var r = RedoubtRun(seed: 5, config: config(cutAt: 2))
+        run(&r, steps: seconds(3)) { $0.isWaveStarted }
+        #expect(r.wave == 1)
+        #expect(!r.powerCutPending)
+        r.clearWave()
+        #expect(r.powerCutPending)
+        #expect(!r.isPowerCut)
+        let events = run(&r, steps: seconds(3)) { $0.isWaveStarted }
+        #expect(events.contains(.powerCutBegan))
+        #expect(r.isPowerCut)
+    }
+
+    @Test func waveOneCanStartInTheDark() throws {
+        var r = RedoubtRun(seed: 5, config: config(cutAt: 1))
+        #expect(r.powerCutPending)
+        let events = run(&r, steps: seconds(3)) { $0.isWaveStarted }
+        #expect(events.contains(.powerCutBegan))
+        #expect(r.isPowerCut)
+        #expect(r.wave == 1)
+    }
+
+    @Test func theCompetentPilotBringsTheLightsBack() throws {
+        var r = RedoubtRun(seed: 7, config: config(cutAt: 2))
+        var pilot = RedoubtPilot(skill: .competent, seed: 7)
+        var began = false
+        var ended = false
+        for _ in 0..<seconds(60) {
+            let events = r.step(pilot.input(for: r))
+            if events.contains(.powerCutBegan) { began = true }
+            if events.contains(.powerCutEnded) { ended = true; break }
+        }
+        #expect(began)
+        #expect(ended)
+        #expect(!r.isPowerCut)
+    }
+
+    @Test func aSessionKeepsTheSwitchForEveryRun() throws {
+        var session = RedoubtSession(seed: 2, config: config(cutAt: 2))
+        #expect(session.run.forcedPowerCutWave == 2)
+        session.startOver()
+        #expect(session.run.forcedPowerCutWave == 2)
+    }
+}
+#endif
