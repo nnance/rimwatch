@@ -407,7 +407,11 @@ step is pushed so you can install it.
   - [x] Refinement 1 (2026-11-21, after your second play): the opening crowd arrives as a main
         push from a different side each wave plus a thin scatter, in place of a strip along one
         wall that stayed on the same side. 415 tests. Pushed before its independent check, by
-        agreement; see "A natural crowd entry" in the Redoubt design.
+        agreement; see "A natural crowd entry" in the Redoubt design. You played it the same
+        day and said it was good and more natural.
+  - [x] Refinement 2 (2026-11-21): the orb, enemies, colonists and shots are 50% bigger, in
+        collision and in drawing, with the balance brought back. 416 tests. Pushed before its
+        independent check; see "Everything 50% bigger" in the Redoubt design.
 - [ ] 14. Riftwing design written here and approved
 - [ ] 15. Riftwing build
 - [ ] Gate: Riftwing played and refined
@@ -935,6 +939,68 @@ of a round all the enemies appeared on the right-hand side and it looked odd.
   the opening crowd lands in waves 1 to 5).
 - The harness also gained a corner-camping bot (`cornerCamper`). It still reaches wave 7; the
   camping note below stands.
+- **The independent check afterwards passed with notes** (no defect; spacing, the wall rules
+  and determinism hold; the novice measured level on a fresh 200 seeds, 5.45 against 5.46):
+  - The push gathers toward a corner more than along a wall (the lean, `pushAlongDraws` 4), so
+    it usually arrives diagonally opposite the orb. A player who moves sees a different corner
+    each wave; one who holds a spot sees the same far corner (a corner camper 92% of the
+    time). `pushAlongDraws` 2 would give more of a front at about a tenth of a wave harder.
+    Left as it is: you played it and called it natural.
+  - With the orb at the exact centre (the start of a run, or a respawn) the "nearest wall" is
+    always taken as north, so wave 1 never pushes from the north and rarely from the south.
+  - The tests pin the wall rules, the distances, the shares rising and the switch back, but
+    not that farther walls are likelier, the lean, the six-spot rule for reinforcement groups
+    or the exact shares.
+  - The wall circler and corner camper both do slightly worse than before.
+
+### Everything 50% bigger (2026-11-21)
+
+You said the orb and the enemies were very small, the orb almost a dot, and chose to grow
+everything by 50%.
+
+- **One number.** `RedoubtTuning.figureScale` is 1.5. The orb, every enemy, colonists, the
+  orb's shots and Spitter shots follow it for both collisions and drawing, so what you see is
+  still what gets hit. The orb is now 30 units across on the 600-unit floor (it was 20), a
+  Skitter 24, the Burrow 54.
+- **What else follows it:** the colonist pick-up reach and the spacing of the line, the
+  airlock's opening and reach, how close arrivals land to a wall, the spacing between Burrows,
+  and the effects fixed to a figure (halo, shield, muzzle flash, respawn ring, death pops and
+  sparks, the airlock beacon).
+- **What does not:** the floor, every speed, the fire rate, the clear distance for arrivals,
+  Shockwave's reach, Spitter ranges, lives, scoring, the crowd-entry rule, the HUD, text and
+  the touch controls.
+- **Balance.** Growing the figures alone made a first game a little shorter (novice mean wave
+  5.18 against 5.47) and corner camping better. Four numbers in `WaveDirector.swift` bring it
+  back:
+  - `crowdScale` 1.1 (new): the opening crowd and the floor target are 10% larger, still
+    capped at 90. Bigger enemies are easier to hit, so the crowd dies faster.
+  - The Skitter quota is `quotaFirst` 126 plus `quotaGrowth` 28 a wave (it was 90 plus 25).
+  - `crowdEaseStart` 0.82 and `crowdEaseGrowth` 0.03 (they were 0.9 and 0.015). Wave 1 still
+    opens with 18; the full crowd arrives in wave 7.
+  - `spitterDebutSlowdown` 3.8 (it was 2): in their first wave Spitters fire about every 8 to
+    11 seconds. This is the one you are most likely to notice.
+- **Result over 80 seeds:**
+
+  | | Before | After |
+  |---|---|---|
+  | Novice: wave reached (median, mean) | 5 (5.47) | 5 (5.46) |
+  | Novice: survival | 158 s | 178 s |
+  | Novice: lives lost in waves 1 and 2 together | 0.27 | 0.25 |
+  | Competent: wave reached (median, mean) | 11 (10.55) | 10 (10.05) |
+  | Wall circler: wave reached (median, mean) | 4 (3.73) | 3 (3.41) |
+  | Corner camper: wave reached (median, mean) | 7 (6.74) | 7 (7.11) |
+
+  Over 400 seeds the novice's mean is 5.48 and its median 6. Two misses against what I asked
+  for: the corner camper is slightly better on average (it still nearly always dies in wave
+  7), and the competent bot is about half a wave worse.
+- **To undo it:** `figureScale = 1` with `RedoubtWaves.beforeFiguresGrew` gives exactly the
+  previous game (a test checks it against the old golden values).
+- **Not yet checked independently** when it was pushed. The builder looked at wave 1, a wave 3
+  crowd and wave 4 on the simulator; a delivery through the airlock, the respawn and the power
+  cut at the new size had not been seen.
+- **To look for when you play:** whether 50% is enough or too much; whether hits still look
+  fair now that the orb is a bigger target; whether the floor feels cramped in waves 5 and
+  later; whether the Spitters' first wave is now too gentle.
 
 ### What the independent check of sound, polish and balance found
 

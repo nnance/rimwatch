@@ -3,17 +3,19 @@ import RedoubtCore
 import SpriteKit
 
 /// Redoubt's glyphs: the theme's shape for each thing, drawn by the shared factory at the arena's
-/// points per unit. Held as a concrete theme, so no lookup crosses an existential.
+/// points per unit, figures at the run's figure scale (`RedoubtTuning.figureScale`) so each is
+/// drawn at the size it collides at. Held as a concrete theme, so no lookup crosses an existential.
 @MainActor
 struct RedoubtGlyphs {
     let factory: GlowShapeFactory
     let theme: CalderDome
+    let figureScale: Double
 
     /// The glyph for a thing, optionally recoloured in one colour.
     func glyph(_ thing: RedoubtShape, tint: RGB? = nil, pointsPerUnit: CGFloat) -> GlowShapeFactory.Glyph {
-        var shape = theme.shape(for: thing)
+        var shape = theme.shape(for: thing, figureScale: figureScale)
         if let tint { shape = shape.recoloured(tint) }
-        return factory.glyph(key: "redoubt|\(thing)|\(tint.map { "\($0)" } ?? "-")", shape: shape,
+        return factory.glyph(key: "redoubt|\(thing)|\(tint.map { "\($0)" } ?? "-")|x\(figureScale)", shape: shape,
                              pointsPerUnit: pointsPerUnit)
     }
 

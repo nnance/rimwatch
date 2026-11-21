@@ -7,7 +7,8 @@ import GameCore
 ///
 /// Shapes are seen from above. In unit coordinates +x is the way the thing faces (its heading,
 /// or the orb's aim) and +y is to its left; the origin is its position. A shape's `scale` is
-/// arena units per unit coordinate.
+/// arena units per unit coordinate, for a figure at `RedoubtTuning.figureScale` 1 (draw figures
+/// with `shape(for:figureScale:)`).
 
 /// Everything the renderer draws with a shape of its own.
 public enum RedoubtShape: Sendable, Hashable, CaseIterable {
@@ -29,6 +30,16 @@ public enum RedoubtShape: Sendable, Hashable, CaseIterable {
     case life
     /// A Shockwave charge in the HUD and on the touch button.
     case charge
+
+    /// A figure on the floor, drawn at the figure scale (`RedoubtTuning.figureScale`) times the
+    /// theme's size so it matches its collision size: everything but the HUD icons and the
+    /// arrival markers (drawn at a size of their own, which follows the role's radius).
+    public var isFigure: Bool {
+        switch self {
+        case .life, .charge, .arrival, .swarmArrival: false
+        default: true
+        }
+    }
 
     public static var allCases: [RedoubtShape] {
         [.orb, .colonist, .orbShot, .enemyShot, .airlockOpen, .airlockShut, .arrival, .swarmArrival, .life, .charge]
@@ -99,6 +110,14 @@ extension RedoubtTheme {
     public func menuSound(_ sound: MenuSound) -> SoundPatch? { nil }
     public var allSounds: [SoundPatch] { [] }
     public var music: MusicStyle? { nil }
+
+    /// The shape as drawn on the floor: a figure's (`RedoubtShape.isFigure`) scale is multiplied
+    /// by `figureScale`, since the theme draws each figure at its size at figure scale 1.
+    public func shape(for thing: RedoubtShape, figureScale: Double) -> ShapeDescription {
+        var shape = shape(for: thing)
+        if thing.isFigure { shape.scale *= figureScale }
+        return shape
+    }
 
     /// The main colour of a shape: its first stroke's.
     public func color(of thing: RedoubtShape) -> RGB {

@@ -37,7 +37,7 @@ import GameCore
     @Test func shapesAreAboutAsBigAsWhatTheyStandFor() throws {
         let tuning = RedoubtTuning()
         func reach(_ thing: RedoubtShape) -> Double {
-            let shape = theme.shape(for: thing)
+            let shape = theme.shape(for: thing, figureScale: tuning.figureScale)
             let b = shape.bounds
             return max(abs(b.min.x), abs(b.max.x), abs(b.min.y), abs(b.max.y)) * shape.scale
         }
@@ -53,14 +53,14 @@ import GameCore
         #expect(!movers.isEmpty)
         #expect(movers.allSatisfy { reach(.enemy($0)) < reach(.enemy(.thresher)) })
         // The airlock shape is drawn at its opening's width.
-        #expect(theme.shape(for: .airlockOpen).scale == tuning.airlockWidth)
+        #expect(abs(theme.shape(for: .airlockOpen, figureScale: tuning.figureScale).scale - tuning.airlockWidth) < 1e-9)
     }
 
     /// The orb's body (its ring, not the emitter spike in front) is drawn at its radius, so what
     /// the player sees matches `orbRadius` and the smaller hit radius stays a forgiving margin.
     @Test func theOrbIsDrawnAtItsRadius() throws {
         let tuning = RedoubtTuning()
-        let shape = theme.shape(for: .orb)
+        let shape = theme.shape(for: .orb, figureScale: tuning.figureScale)
         // The body is the largest stroke whose points all lie on one circle round the origin.
         var body = 0.0
         for stroke in shape.strokes {

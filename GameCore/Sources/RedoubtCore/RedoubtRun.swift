@@ -473,7 +473,7 @@ public struct RedoubtRun: Sendable {
     private mutating func spawnPoint(for role: RedoubtRole, anywhere: Bool = false, scattered: Bool = false) -> Vec2 {
         let clearance = scattered ? max(tuning.scatterClearance, tuning.safeDistance) : tuning.safeDistance
         let orbRef = orb.isAlive ? orb.pos : centre
-        let margin = role == .burrow ? 60 : tuning.spawnWallMargin
+        let margin = role == .burrow ? tuning.figure(60) : tuning.spawnWallMargin
         var best = centre
         var bestScore = -Double.infinity
         for attempt in 0..<24 {
@@ -521,12 +521,12 @@ public struct RedoubtRun: Sendable {
             var score = gapToOrb(p)
             if role == .burrow {
                 ok = ok && distance(p, centre) >= tuning.burrowCentreClearance
-                    && !enemies.contains { $0.role == .burrow && !$0.isDead && distance($0.pos, p) < 120 }
-                    && !arrivals.contains { $0.role == .burrow && distance($0.pos, p) < 120 }
+                    && !enemies.contains { $0.role == .burrow && !$0.isDead && distance($0.pos, p) < tuning.figure(120) }
+                    && !arrivals.contains { $0.role == .burrow && distance($0.pos, p) < tuning.figure(120) }
             }
             if role == .thresher || role == .burrow {
                 // Not on top of a colonist: it would crush them before anyone could react.
-                ok = ok && !colonists.contains { $0.state == .sheltering && distance($0.pos, p) < 60 }
+                ok = ok && !colonists.contains { $0.state == .sheltering && distance($0.pos, p) < tuning.figure(60) }
             }
             if ok { return p }
             score -= Double(attempt)
@@ -622,7 +622,7 @@ public struct RedoubtRun: Sendable {
 
     private mutating func fireOrbShot() {
         let dir = unitVector(orb.heading)
-        let muzzle = orb.pos + dir * (tuning.orbRadius + 2)
+        let muzzle = orb.pos + dir * (tuning.orbRadius + tuning.figure(2))
         shots.append(RedoubtShot(id: takeID(), owner: .orb, pos: muzzle, vel: dir * tuning.shotSpeed,
                                  radius: tuning.shotRadius, timeLeft: tuning.shotLifetime))
         events.append(.orbFired(at: muzzle, heading: orb.heading))

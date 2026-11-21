@@ -94,8 +94,8 @@ colonists still to save.
   while the rest is scattered thinly over the floor away from you; the scattered share grows
   each wave until, from wave 8, the crowd lands anywhere. So the opening waves can be read and
   met, and there is room to back away. The crowd starts a little smaller and grows to its full
-  size by wave 8, and Spitters fire half as often in the wave they first appear, back to full
-  rate by wave 7. Laps hugging the wall are no refuge: while the orb runs along a wall, new
+  size by wave 7, and Spitters fire at about a quarter of their rate in the wave they first
+  appear, back to full rate by wave 7. Laps hugging the wall are no refuge: while the orb runs along a wall, new
   groups land on the path ahead of it.
 - **The loop:** colonists shelter around the floor. Touch one and they follow you in a line; lead
   the line to the airlock to deliver them all at once. Each colonist in the line is worth more than

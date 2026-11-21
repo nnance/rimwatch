@@ -250,8 +250,10 @@ import GameCore
     @Test func spittersFireSlowlyInTheirFirstWaves() throws {
         let waves = RedoubtWaves()
         let tuning = RedoubtTuning()
-        // Twice the interval in their debut wave (3), easing back to normal by wave 7.
-        #expect(abs(waves.spitterFireScale(forWave: 3, tuning: tuning) - 2.0) < 1e-9)
+        // 3.8 times the interval in their debut wave (3; twice before the figures grew), easing
+        // back to normal by wave 7.
+        #expect(abs(waves.spitterFireScale(forWave: 3, tuning: tuning) - 3.8) < 1e-9)
+        #expect(abs(RedoubtWaves.beforeFiguresGrew.spitterFireScale(forWave: 3, tuning: tuning) - 2.0) < 1e-9)
         let scales = (3...7).map { waves.spitterFireScale(forWave: $0, tuning: tuning) }
         #expect(zip(scales, scales.dropFirst()).allSatisfy { $0 > $1 })
         var flat = RedoubtWaves()
@@ -410,17 +412,28 @@ import GameCore
 
     @Test func colonistsAndTheCrowdGrowWaveByWave() throws {
         let waves = RedoubtWaves()
-        // A gentler opening (13d), the full 20 + 8 a wave from wave 8.
+        // With the figures at 1.5: a 10% bigger crowd and a bigger quota (126 + 28 a wave), eased in faster from
+        // the same 18 in wave 1; the full (20 + 8 a wave) x 1.1 from wave 7, capped at 90.
         #expect(waves.floorCrowd(forWave: 1) == 18)
         #expect(waves.floorCrowd(forWave: 2) == 26)
-        #expect(waves.floorCrowd(forWave: 8) == 76)
-        #expect(waves.floorCrowd(forWave: 9) == 84)
+        #expect(waves.floorCrowd(forWave: 7) == 75)
+        #expect(waves.floorCrowd(forWave: 8) == 84)
+        #expect(waves.floorCrowd(forWave: 9) == 90)
         #expect(waves.floorCrowd(forWave: 30) == 90)
-        #expect(waves.quota(forWave: 1) == 81)
-        #expect(waves.quota(forWave: 8) == 265)
+        #expect(waves.quota(forWave: 1) == 103)
+        #expect(waves.quota(forWave: 8) == 322)
         #expect((1...29).allSatisfy { waves.floorCrowd(forWave: $0 + 1) >= waves.floorCrowd(forWave: $0) })
+        // Before the figures grew: a gentler opening (13d), the full 20 + 8 a wave from wave 8.
+        let before = RedoubtWaves.beforeFiguresGrew
+        #expect(before.floorCrowd(forWave: 1) == 18)
+        #expect(before.floorCrowd(forWave: 2) == 26)
+        #expect(before.floorCrowd(forWave: 8) == 76)
+        #expect(before.floorCrowd(forWave: 9) == 84)
+        #expect(before.floorCrowd(forWave: 30) == 90)
+        #expect(before.quota(forWave: 1) == 81)
+        #expect(before.quota(forWave: 8) == 265)
         // Undone, the numbers are the original ones.
-        var flat = RedoubtWaves()
+        var flat = RedoubtWaves.beforeFiguresGrew
         flat.crowdEaseStart = 1
         flat.crowdEaseGrowth = 0
         #expect(flat.floorCrowd(forWave: 1) == 20 && flat.floorCrowd(forWave: 2) == 28)

@@ -28,7 +28,7 @@ public struct RedoubtPilot: Sendable {
         /// cut; the app's `-powerCutAtWave` forces one.
         case shooter
         /// The kiting tactic, kept as a regression guard (13d): flies laps of the floor hugging
-        /// the wall (its centre 12 units in, 2 more than its radius) at top speed, always
+        /// the wall (its centre 2 units, times the figure scale, more than its radius in from the wall) at top speed, always
         /// counterclockwise, aiming with lead at the nearest enemy shots can destroy. Never
         /// rescues; fires a Shockwave only when something is about to touch it. Before 13d it
         /// out-survived the competent pilot and lasted 10 minutes in about a third of its games.
@@ -38,7 +38,7 @@ public struct RedoubtPilot: Sendable {
         /// The wall loop, but it turns round whenever something is within 50 units ahead.
         case reversingCircler
         /// Corner camping, kept as a regression guard: flies to the corner nearest it (at the
-        /// start and after each respawn) and parks there, 14 units in from both walls, aiming with
+        /// start and after each respawn) and parks there, its radius plus 4 units (times the figure scale) in from both walls, aiming with
         /// lead at the nearest enemy shots can destroy. Never rescues; fires a Shockwave only when
         /// something is about to touch it.
         case cornerCamper
@@ -130,7 +130,7 @@ public struct RedoubtPilot: Sendable {
         let tuning = run.tuning
         let size = run.arenaSize
         // The loop's corners, counterclockwise from bottom-left.
-        let inset = skill == .innerCircler ? 190.0 : 12.0
+        let inset = skill == .innerCircler ? 190.0 : tuning.orbRadius + tuning.figure(2)
         let corners = [Vec2(inset, inset), Vec2(size.x - inset, inset),
                        Vec2(size.x - inset, size.y - inset), Vec2(inset, size.y - inset)]
         if corner == nil {
@@ -191,7 +191,7 @@ public struct RedoubtPilot: Sendable {
         let orb = run.orb
         let tuning = run.tuning
         let size = run.arenaSize
-        let inset = 14.0
+        let inset = tuning.orbRadius + tuning.figure(4)
         let corners = [Vec2(inset, inset), Vec2(size.x - inset, inset),
                        Vec2(size.x - inset, size.y - inset), Vec2(inset, size.y - inset)]
         // Choose the nearest corner at the start and again after a respawn at the centre.
@@ -372,11 +372,12 @@ public struct RedoubtPilot: Sendable {
 
     private func insetAirlock(_ run: RedoubtRun) -> Vec2 {
         let a = run.airlock
+        let i = run.tuning.figure(14)
         return switch a.wall {
-        case .north: Vec2(a.pos.x, a.pos.y - 14)
-        case .south: Vec2(a.pos.x, a.pos.y + 14)
-        case .east: Vec2(a.pos.x - 14, a.pos.y)
-        case .west: Vec2(a.pos.x + 14, a.pos.y)
+        case .north: Vec2(a.pos.x, a.pos.y - i)
+        case .south: Vec2(a.pos.x, a.pos.y + i)
+        case .east: Vec2(a.pos.x - i, a.pos.y)
+        case .west: Vec2(a.pos.x + i, a.pos.y)
         }
     }
 

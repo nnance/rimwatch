@@ -167,7 +167,7 @@ extension RedoubtMode {
                                     pointsPerUnit: ppu), factory: factory)
         wallSprite.position = .zero
 
-        RedoubtSprites.dress(beacon, with: factory.glyph(key: "redoubt-beacon", shape: ShapeDescription(scale: 36, strokes: [
+        RedoubtSprites.dress(beacon, with: factory.glyph(key: "redoubt-beacon-\(tuning.airlockReach)", shape: ShapeDescription(scale: tuning.airlockReach, strokes: [
             ShapeStroke(ShapeKit.arc(radius: 1, from: 0.2, to: Double.pi - 0.2, segments: 24),
                         color: theme.color(of: .colonist)),
         ]), pointsPerUnit: ppu), factory: factory)
@@ -209,18 +209,21 @@ extension RedoubtMode {
         for sprite in arrivalSprites { RedoubtSprites.dress(sprite, with: arrival, factory: factory) }
         RedoubtSprites.dress(orbSprite, with: glyphs.glyph(.orb, pointsPerUnit: pointsPerUnit), factory: factory)
         let cyan = theme.color(of: .orb)
-        RedoubtSprites.dress(orbHalo, with: factory.glyph(key: "redoubt-orb-halo", shape: ShapeDescription(scale: 21, strokes: [
+        // The orb's halo, shield ring, muzzle flash and respawn ring are sized for an orb at
+        // figure scale 1 and grow with it.
+        let fig = tuning.figureScale
+        RedoubtSprites.dress(orbHalo, with: factory.glyph(key: "redoubt-orb-halo-x\(fig)", shape: ShapeDescription(scale: 21 * fig, strokes: [
             ShapeStroke(ShapeKit.arc(radius: 1, segments: 40), color: cyan.scaled(0.8)),
         ]), pointsPerUnit: pointsPerUnit), factory: factory)
-        RedoubtSprites.dress(orbShield, with: factory.glyph(key: "redoubt-orb-shield", shape: ShapeDescription(scale: 16, strokes: [
+        RedoubtSprites.dress(orbShield, with: factory.glyph(key: "redoubt-orb-shield-x\(fig)", shape: ShapeDescription(scale: 16 * fig, strokes: [
             ShapeStroke(ShapeKit.arc(radius: 1, segments: 36), color: theme.palette.shield),
         ]), pointsPerUnit: pointsPerUnit), factory: factory)
-        RedoubtSprites.dress(muzzle, with: factory.glyph(key: "redoubt-muzzle", shape: ShapeDescription(scale: 5, strokes: [
+        RedoubtSprites.dress(muzzle, with: factory.glyph(key: "redoubt-muzzle-x\(fig)", shape: ShapeDescription(scale: 5 * fig, strokes: [
             ShapeStroke([Vec2(-0.6, 0.8), Vec2(1, 0), Vec2(-0.6, -0.8)], color: RGB(hex: 0xE0FFFF)),
             ShapeStroke([Vec2(-0.2, 0), Vec2(1.4, 0)], color: RGB(hex: 0xE0FFFF)),
         ]), pointsPerUnit: pointsPerUnit), factory: factory)
-        muzzle.position = CGPoint(x: 18, y: 0)
-        RedoubtSprites.dress(respawnMarker, with: factory.glyph(key: "redoubt-respawn", shape: ShapeDescription(scale: 24, strokes: [
+        muzzle.position = CGPoint(x: 18 * fig, y: 0)
+        RedoubtSprites.dress(respawnMarker, with: factory.glyph(key: "redoubt-respawn-x\(fig)", shape: ShapeDescription(scale: 24 * fig, strokes: [
             ShapeStroke(ShapeKit.arc(radius: 1, segments: 40), color: cyan),
             ShapeStroke(ShapeKit.arc(radius: 0.55, from: 0, to: Double.pi * 1.5, segments: 24), color: cyan),
         ]), pointsPerUnit: pointsPerUnit), factory: factory)

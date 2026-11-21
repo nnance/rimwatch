@@ -9,9 +9,9 @@ public struct RedoubtSpawn: Sendable, Equatable {
 /// Decides what each Redoubt wave contains.
 ///
 /// The floor is never allowed to go quiet while a wave lasts:
-/// - A wave opens with `floorCrowd` enemies (18 in wave 1, rising to the full 20 + 8 a wave by
-///   wave 8, capped at 90), all telegraphed in its first second: most in a main push along the
-///   wave's entry walls (`entrySides`: one wall in waves 1 to 4, more later), a share growing by
+/// - A wave opens with `floorCrowd` enemies (18 in wave 1, rising to the full 20 + 8 a wave
+///   times `crowdScale` by wave 7, capped at 90), all telegraphed in its first second: most in a
+///   main push along the wave's entry walls (`entrySides`: one wall in waves 1 to 4, more later), a share growing by
 ///   wave scattered over the rest of the floor (`scatterShare`), anywhere from wave 8.
 /// - It also has a quota of Skitters (`quota`). Whenever the shootable enemies on the floor (and
 ///   on their way in) fall below `floorTarget`, the run telegraphs another group of them at once,
@@ -28,6 +28,32 @@ public struct RedoubtSpawn: Sendable, Equatable {
 public struct RedoubtWaves: Sendable {
     public init() {}
 
+    /// The wave makeup as it was before the figures grew (`RedoubtTuning.figureScale` 1.5):
+    /// with this and a figure scale of 1 the game is exactly the one before.
+    public static var beforeFiguresGrew: RedoubtWaves {
+        var waves = RedoubtWaves()
+        waves.crowdScale = 1
+        waves.quotaFirst = 90
+        waves.quotaGrowth = 25
+        waves.crowdEaseStart = 0.9
+        waves.crowdEaseGrowth = 0.015
+        waves.spitterDebutSlowdown = 2
+        return waves
+    }
+
+    /// The balance that came with the bigger figures (`RedoubtTuning.figureScale` 1.5): bigger
+    /// enemies are easier to hit, so waves went faster, and a bigger orb (and bigger Spitter
+    /// shots) in a crowd covering more of the floor is easier to hit. The opening crowd (and the
+    /// floor target) are scaled by `crowdScale` (still capped at 90, 1 before the figures grew)
+    /// and the Skitter quota starts at `quotaFirst` in wave 1 and grows by `quotaGrowth` a wave
+    /// (90 and 25 before), so waves last about as long as before;
+    /// with them the crowd ease starts lower and grows faster (`crowdEaseStart`,
+    /// `crowdEaseGrowth`), so wave 1 still opens with 18, and debut Spitters fire more slowly
+    /// (`spitterDebutSlowdown`). `beforeFiguresGrew` holds the values from before.
+    public var crowdScale = 1.1
+    public var quotaFirst = 126.0
+    public var quotaGrowth = 28.0
+
     // The early-game ease (13d, after the owner's first play: a first-time player was swarmed in
     // waves 2 and 3). Each is a plain number to change or undo.
 
@@ -38,12 +64,14 @@ public struct RedoubtWaves: Sendable {
     /// are chosen. 4 is anywhere on the floor (as before 13d, every wave).
     public var entrySides: [Int] = [1, 1, 1, 1, 2, 3, 3, 4]
     /// The opening crowd and the Skitter quota are scaled by this in wave 1, rising by
-    /// `crowdEaseGrowth` a wave to the full numbers (wave 8 on). Before 13d: 1 and 0.
-    public var crowdEaseStart = 0.9
-    public var crowdEaseGrowth = 0.015
+    /// `crowdEaseGrowth` a wave to the full numbers (wave 7 on). Before 13d: 1 and 0. Before the
+    /// figures grew: 0.9 and 0.015 (full from wave 8).
+    public var crowdEaseStart = 0.82
+    public var crowdEaseGrowth = 0.03
     /// Spitters fire this many times more slowly in their debut wave, easing back to the normal
-    /// rate over `spitterEaseWaves` waves. Before 13d: 1 (no slowdown).
-    public var spitterDebutSlowdown = 2.0
+    /// rate over `spitterEaseWaves` waves. Before 13d: 1 (no slowdown); before the figures
+    /// grew: 2.
+    public var spitterDebutSlowdown = 3.8
     public var spitterEaseWaves = 4.0
 
     /// The main push and the scatter (after the owner's second play: the whole crowd along one
@@ -105,10 +133,11 @@ public struct RedoubtWaves: Sendable {
         return min(base + (wave - first) / every, cap)
     }
 
-    /// Enemies on the floor at the start of a wave, all roles together: 18 in wave 1, 8 more a
-    /// wave less the early ease, the full 76 in wave 8, capped at 90.
+    /// Enemies on the floor at the start of a wave, all roles together: 20 + 8 a wave times
+    /// `crowdScale`, less the early ease: 18 in wave 1, the full 75 in wave 7, capped at 90 (from
+    /// wave 9). Before the figures grew: 18 in wave 1, the full 76 in wave 8, 90 from wave 10.
     public func floorCrowd(forWave wave: Int) -> Int {
-        Int((Double(min(20 + 8 * max(wave - 1, 0), 90)) * crowdEase(forWave: wave)).rounded())
+        Int(min(Double(20 + 8 * max(wave - 1, 0)) * crowdEase(forWave: wave) * crowdScale, 90).rounded())
     }
 
     /// Colonists sheltering when a wave begins: 6 in wave 1, one more every two waves, up to 10.
@@ -139,7 +168,7 @@ public struct RedoubtWaves: Sendable {
 
     /// Skitters a wave sends in after its opening crowd, to keep the floor at `floorTarget`.
     public func quota(forWave wave: Int) -> Int {
-        Int((Double(min(90 + 25 * max(wave - 1, 0), 400)) * crowdEase(forWave: wave)).rounded())
+        Int((min(quotaFirst + quotaGrowth * Double(max(wave - 1, 0)), 400) * crowdEase(forWave: wave)).rounded())
     }
 
     /// Most Skitters telegraphed together in one top-up group.

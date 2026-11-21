@@ -9,11 +9,16 @@ import RedoubtCore
 // the early-game ease: SIDES=4 EASE0=1 EASESTEP=0 SPITEASE=1 together restore the waves as they
 // were before it (see `redoubtWaves`). PUSH=0 turns off the main push and the scatter (the first
 // 13d entry exactly); SCATTER=0.2,0.25,... PUSHDEPTH FALLOFF ALONG SCATCLEAR WALLW GDRAWS tune it.
-// SEEDBASE moves the seed set (default 1000) to check a result is not luck of the seeds.
+// FIGURE=1 CROWD=1 QUOTA0=90 QUOTASTEP=25 EASE0=0.9 EASESTEP=0.015 SPITEASE=2 together restore
+// the game before the figures grew. SEEDBASE moves the seed set (default 1000) to check a result is not luck of the seeds.
 
 private func redoubtTuning() -> RedoubtTuning {
     var t = RedoubtTuning()
     let env = ProcessInfo.processInfo.environment
+    // First, so the size overrides below (HIT) are read at the chosen figure scale.
+    if let v = env["FIGURE"].flatMap(Double.init) { t.figureScale = v }
+    if let v = env["MAXEN"].flatMap(Int.init) { t.maxEnemies = v }
+    if let v = env["SEP"].flatMap(Double.init) { t.separationStrength = v }
     if let v = env["SKSPEED"].flatMap(Double.init) { t.skitterSpeed = v }
     if let v = env["SKGROW"].flatMap(Double.init) { t.skitterSpeedGrowth = v }
     if let v = env["SKMAX"].flatMap(Double.init) { t.skitterMaxScale = v }
@@ -45,6 +50,9 @@ private func redoubtTuning() -> RedoubtTuning {
 private func redoubtWaves() -> RedoubtWaves {
     var w = RedoubtWaves()
     let env = ProcessInfo.processInfo.environment
+    if let v = env["CROWD"].flatMap(Double.init) { w.crowdScale = v }
+    if let v = env["QUOTA0"].flatMap(Double.init) { w.quotaFirst = v }
+    if let v = env["QUOTASTEP"].flatMap(Double.init) { w.quotaGrowth = v }
     if let v = env["SIDES"] { w.entrySides = v.split(separator: ",").compactMap { Int($0) } }
     if let v = env["EASE0"].flatMap(Double.init) { w.crowdEaseStart = v }
     if let v = env["EASESTEP"].flatMap(Double.init) { w.crowdEaseGrowth = v }

@@ -146,7 +146,7 @@ extension RedoubtRun {
         guard len > 1 else { return }
         let dir = aim * (1 / len)
         let heading = atan2(dir.y, dir.x)
-        let muzzle = enemy.pos + dir * (enemy.radius + 2)
+        let muzzle = enemy.pos + dir * (enemy.radius + tuning.figure(2))
         shots.append(RedoubtShot(id: takeID(), owner: .enemy, pos: muzzle, vel: dir * tuning.spitterShotSpeed,
                                  radius: tuning.spitterShotRadius, timeLeft: tuning.spitterShotLifetime))
         events.append(.enemyFired(id: enemy.id, at: muzzle, heading: heading))
@@ -169,7 +169,7 @@ extension RedoubtRun {
         guard children < tuning.burrowMaxChildren, enemies.count < tuning.maxEnemies,
               isClearOfOrb(burrow.pos, by: tuning.safeDistance) else { return }
         let angle = rng.range(0...(2 * .pi))
-        let pos = burrow.pos + unitVector(angle) * (burrow.radius + 4)
+        let pos = burrow.pos + unitVector(angle) * (burrow.radius + tuning.figure(4))
         let id = addEnemy(.skitter, at: pos, parent: burrow.id)
         events.append(.burrowSpawned(burrow: burrow.id, id: id, at: pos))
     }
@@ -200,7 +200,7 @@ extension RedoubtRun {
             }
             enemy.vel = dir * min(tuning.gleanerDragSpeed, dist / dt)
             // The colonist trails behind.
-            colonists[c].pos = clampToFloor(enemy.pos - dir * (enemy.radius + tuning.colonistRadius - 2),
+            colonists[c].pos = clampToFloor(enemy.pos - dir * (enemy.radius + tuning.colonistRadius - tuning.figure(2)),
                                             radius: tuning.colonistRadius)
         case .seeking(let target):
             var targetIndex = target.flatMap { id in colonistIndex(id) }

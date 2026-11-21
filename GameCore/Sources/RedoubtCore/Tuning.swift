@@ -17,6 +17,15 @@ public struct RedoubtRoleStats: Sendable, Equatable {
 public struct RedoubtTuning: Sendable {
     public init() {}
 
+    /// Figure size. Every figure on the floor (the orb, each enemy role, colonists, shots, the
+    /// airlock that lets the line through, and the spacing and margins that follow from their
+    /// sizes) is its size at 1 times this. The app draws them at the same factor, so a drawn
+    /// figure stays the size it collides at. Raised from 1 to 1.5 after the owner found the orb
+    /// "almost just a dot"; at 1 the game is exactly the one before. Each scaled distance below
+    /// reads its `base` value (the size at 1) times this; setting the scaled name sets the base.
+    /// The arena, speeds, ranges and Shockwave radii do not follow it.
+    public var figureScale = 1.5
+
     // Arena
     public var arenaWidth = 900.0
     public var arenaHeight = 600.0
@@ -25,10 +34,18 @@ public struct RedoubtTuning: Sendable {
     public var intermission = 2.0
 
     // Orb
-    public var orbRadius = 10.0
+    public var orbRadius: Double {
+        get { baseOrbRadius * figureScale }
+        set { baseOrbRadius = newValue / figureScale }
+    }
+    public var baseOrbRadius = 10.0
     /// The orb's size for being hit (by an enemy or a shot): a little smaller than it looks, so a
     /// shave in a crowd is forgiven.
-    public var orbHitRadius = 7.0
+    public var orbHitRadius: Double {
+        get { baseOrbHitRadius * figureScale }
+        set { baseOrbHitRadius = newValue / figureScale }
+    }
+    public var baseOrbHitRadius = 7.0
     public var orbMaxSpeed = 280.0
     /// The glide: seconds for the orb's velocity to close about 63% of the gap to what the stick
     /// asks for, speeding up and slowing down alike. Small enough to feel direct; large enough
@@ -47,7 +64,11 @@ public struct RedoubtTuning: Sendable {
     public var aimThreshold = 0.3
     public var shotInterval = 0.1
     public var shotSpeed = 900.0
-    public var shotRadius = 3.0
+    public var shotRadius: Double {
+        get { baseShotRadius * figureScale }
+        set { baseShotRadius = newValue / figureScale }
+    }
+    public var baseShotRadius = 3.0
     /// Long enough to cross the floor; shots also stop at the wall.
     public var shotLifetime = 1.3
 
@@ -66,15 +87,35 @@ public struct RedoubtTuning: Sendable {
     public var pushDecay = 5.0
 
     // Colonists
-    public var colonistRadius = 6.0
+    public var colonistRadius: Double {
+        get { baseColonistRadius * figureScale }
+        set { baseColonistRadius = newValue / figureScale }
+    }
+    public var baseColonistRadius = 6.0
     /// Extra reach when the orb touches a sheltering colonist, so a near miss counts.
-    public var pickupSlack = 6.0
+    public var pickupSlack: Double {
+        get { basePickupSlack * figureScale }
+        set { basePickupSlack = newValue / figureScale }
+    }
+    public var basePickupSlack = 6.0
     /// Gap between neighbours in the line (orb to first follower, and so on).
-    public var lineSpacing = 17.0
+    public var lineSpacing: Double {
+        get { baseLineSpacing * figureScale }
+        set { baseLineSpacing = newValue / figureScale }
+    }
+    public var baseLineSpacing = 17.0
     /// Distance from the airlock's centre within which the orb delivers its line.
-    public var airlockReach = 36.0
+    public var airlockReach: Double {
+        get { baseAirlockReach * figureScale }
+        set { baseAirlockReach = newValue / figureScale }
+    }
+    public var baseAirlockReach = 36.0
     /// Width of the airlock's opening in the wall, for the renderer.
-    public var airlockWidth = 56.0
+    public var airlockWidth: Double {
+        get { baseAirlockWidth * figureScale }
+        set { baseAirlockWidth = newValue / figureScale }
+    }
+    public var baseAirlockWidth = 56.0
     /// A new airlock position is at least this far from the last one.
     public var airlockMinMove = 300.0
     /// Colonists start at least this far from the orb, the airlock and the wall.
@@ -89,7 +130,11 @@ public struct RedoubtTuning: Sendable {
     /// Seconds an arrival is shown before the enemy appears.
     public var telegraphTime = 1.0
     /// Arrivals keep this far from the wall.
-    public var spawnWallMargin = 24.0
+    public var spawnWallMargin: Double {
+        get { baseSpawnWallMargin * figureScale }
+        set { baseSpawnWallMargin = newValue / figureScale }
+    }
+    public var baseSpawnWallMargin = 24.0
     /// Hard cap on enemies on the floor, Burrow spawns included.
     public var maxEnemies = 120
     /// Running the wall. While the orb hugs a wall and runs along it (its centre within
@@ -153,7 +198,11 @@ public struct RedoubtTuning: Sendable {
     /// It only fires at an orb closer than this.
     public var spitterFireRange = 480.0
     public var spitterShotSpeed = 165.0
-    public var spitterShotRadius = 5.0
+    public var spitterShotRadius: Double {
+        get { baseSpitterShotRadius * figureScale }
+        set { baseSpitterShotRadius = newValue / figureScale }
+    }
+    public var baseSpitterShotRadius = 5.0
     public var spitterShotLifetime = 6.0
     /// 0 aims at the orb, 1 leads it fully.
     public var spitterShotLead = 0.3
@@ -193,7 +242,15 @@ public struct RedoubtTuning: Sendable {
     public var waveBonusPerColonist = 250
     public var extraLifeEvery = 60_000
 
+    /// A role's stats; its radius is the base radius times `figureScale`.
     public func stats(for role: RedoubtRole) -> RedoubtRoleStats {
+        var stats = baseStats(for: role)
+        stats.radius *= figureScale
+        return stats
+    }
+
+    /// A role's stats at `figureScale` 1.
+    public func baseStats(for role: RedoubtRole) -> RedoubtRoleStats {
         switch role {
         case .skitter: RedoubtRoleStats(radius: 8, hp: 1, points: 50)
         case .gleaner: RedoubtRoleStats(radius: 10, hp: 1, points: 150)
@@ -204,8 +261,11 @@ public struct RedoubtTuning: Sendable {
         }
     }
 
+    /// A size-derived distance (`base` at `figureScale` 1) at the current figure scale.
+    public func figure(_ base: Double) -> Double { base * figureScale }
+
     /// The largest enemy radius, for grid queries.
     var maxEnemyRadius: Double {
-        RedoubtRole.allCases.map { stats(for: $0).radius }.max() ?? 20
+        RedoubtRole.allCases.map { stats(for: $0).radius }.max() ?? figure(20)
     }
 }

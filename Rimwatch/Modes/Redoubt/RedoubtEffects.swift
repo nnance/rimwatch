@@ -120,12 +120,14 @@ final class RedoubtEffects: SKNode {
         return texture
     }()
 
-    /// White textures, tinted per use, at the arena's scale.
-    func setPointsPerUnit(_ ppu: CGFloat, factory: GlowShapeFactory, arena: CGSize) {
+    /// White textures, tinted per use, at the arena's scale. Sparks are drawn at the figure scale
+    /// (`RedoubtTuning.figureScale`), so the debris matches the figures it comes from; a pop is
+    /// drawn at the radius it is given.
+    func setPointsPerUnit(_ ppu: CGFloat, factory: GlowShapeFactory, arena: CGSize, figureScale: Double) {
         pointsPerUnit = ppu
         floorBounds = CGRect(origin: .zero, size: arena)
         let white = RGB(1, 1, 1)
-        let spark = factory.glyph(key: "redoubt-spark", shape: ShapeDescription(scale: 3, strokes: [
+        let spark = factory.glyph(key: "redoubt-spark-x\(figureScale)", shape: ShapeDescription(scale: 3 * figureScale, strokes: [
             ShapeStroke([Vec2(-1, 0), Vec2(1, 0)], color: white),
         ]), pointsPerUnit: ppu)
         for sprite in sparkSprites { RedoubtSprites.dress(sprite, with: spark, factory: factory) }

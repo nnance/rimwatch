@@ -506,7 +506,7 @@ extension RedoubtMode {
             if t >= 1 {
                 ghosts[index].active = false
                 sprite.isHidden = true
-                effects.flash(at: ghost.to, radius: 16, color: mint, life: 0.2, strength: 0.7)
+                effects.flash(at: ghost.to, radius: 16 * tuning.figureScale, color: mint, life: 0.2, strength: 0.7)
                 continue
             }
             let eased = t * t

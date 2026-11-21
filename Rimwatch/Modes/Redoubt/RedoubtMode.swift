@@ -164,7 +164,7 @@ final class RedoubtMode: GameMode {
         currentSession = session
         tuning = session().tuning
         factory = services.factory
-        glyphs = RedoubtGlyphs(factory: factory, theme: theme)
+        glyphs = RedoubtGlyphs(factory: factory, theme: theme, figureScale: tuning.figureScale)
         callouts = RedoubtCallouts(subtitleColor: theme.palette.hud)
         hud = RedoubtHUD(theme: theme, factory: factory)
         controls = RedoubtTouchControls(factory: factory, palette: theme.palette,
@@ -211,7 +211,7 @@ final class RedoubtMode: GameMode {
             looks = Looks()
             buildArena()
             dressPools()
-            effects.setPointsPerUnit(ppu, factory: factory, arena: arena)
+            effects.setPointsPerUnit(ppu, factory: factory, arena: arena, figureScale: tuning.figureScale)
             buildDecor()
             needsPrewarm = true
         }

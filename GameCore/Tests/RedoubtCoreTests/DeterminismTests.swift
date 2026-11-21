@@ -11,8 +11,9 @@ import GameCore
     /// FNV-1a over every event's full description and the step it came in, plus the final
     /// counters, for `seconds` of play by `skill`.
     static func fingerprint(seed: UInt64, skill: RedoubtPilot.Skill, seconds: Double,
-                            waves: RedoubtWaves = RedoubtWaves()) -> (hash: UInt64, run: RedoubtRun, events: Int) {
-        var r = RedoubtRun(seed: seed, waves: waves)
+                            waves: RedoubtWaves = RedoubtWaves(),
+                            tuning: RedoubtTuning = RedoubtTuning()) -> (hash: UInt64, run: RedoubtRun, events: Int) {
+        var r = RedoubtRun(seed: seed, tuning: tuning, waves: waves)
         var pilot = RedoubtPilot(skill: skill, seed: seed)
         var hash: UInt64 = 0xCBF2_9CE4_8422_2325
         var total = 0
@@ -44,13 +45,33 @@ import GameCore
     /// top-up groups, deliveries, Shockwaves, an extra life and the airlock moving. Debug and
     /// Release builds give the same values. If a deliberate change to the rules, the
     /// tuning, the wave makeup or the pilot breaks it, capture the new values from the printed
-    /// line and say so in the commit. Last captured after the owner's second play, for the main
-    /// push and the scatter (`RedoubtWaves.pushAndScatter`); before that in 13d for the early-game
+    /// line and say so in the commit. Last captured when the figures grew by half
+    /// (`RedoubtTuning.figureScale` 1.5) with the balance that came with them; before that after
+    /// the owner's second play, for the main push and the scatter (`RedoubtWaves.pushAndScatter`);
+    /// before that in 13d for the early-game
     /// ease (crowds from entry walls, a gentler early crowd, slower debut Spitters) and the
     /// wall-run rule.
     @Test func aScriptedRunReplaysExactly() throws {
         let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180)
         print("REDOUBT GOLDEN hash \(hash) events \(events) score \(r.score) wave \(r.wave) saved \(r.colonistsSaved) delivered \(r.colonistsDelivered) lives \(r.orb.lives) tick \(r.tick)")
+        #expect(hash == 10_641_542_555_866_601_042)
+        #expect(events == 7290)
+        #expect(r.score == 105_650)
+        #expect(r.wave == 6)
+        #expect(r.colonistsSaved == 38)
+        #expect(r.colonistsDelivered == 38)
+        #expect(r.orb.lives == 4)
+        #expect(r.tick == 21_600)
+    }
+
+    /// With `RedoubtTuning.figureScale` at 1 (and the balance changes that came with the bigger
+    /// figures undone) the run is exactly the game before the figures grew: the golden values
+    /// captured for the main push and the scatter.
+    @Test func figureScaleOneReplaysTheGameBeforeTheFiguresGrew() throws {
+        var tuning = RedoubtTuning()
+        tuning.figureScale = 1
+        let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180,
+                                                 waves: RedoubtWaves.beforeFiguresGrew, tuning: tuning)
         #expect(hash == 1_857_457_665_820_620_754)
         #expect(events == 6847)
         #expect(r.score == 103_650)
@@ -61,12 +82,15 @@ import GameCore
         #expect(r.tick == 21_600)
     }
 
-    /// With `RedoubtWaves.pushAndScatter` off the run is exactly the 13d game: the golden values
-    /// captured before the main push and the scatter came in.
+    /// With `RedoubtWaves.pushAndScatter` off (and the figures at their old size) the run is
+    /// exactly the 13d game: the golden values captured before the main push and the scatter
+    /// came in.
     @Test func turningOffThePushAndScatterReplaysThe13dGame() throws {
-        var waves = RedoubtWaves()
+        var waves = RedoubtWaves.beforeFiguresGrew
         waves.pushAndScatter = false
-        let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180, waves: waves)
+        var tuning = RedoubtTuning()
+        tuning.figureScale = 1
+        let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180, waves: waves, tuning: tuning)
         #expect(hash == 16_656_838_565_572_388_220)
         #expect(events == 7053)
         #expect(r.score == 107_250)

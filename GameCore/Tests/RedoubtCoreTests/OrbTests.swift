@@ -43,8 +43,9 @@ import GameCore
 
     @Test func theOrbIsHitAsIfSmallerThanItIsDrawn() throws {
         let tuning = RedoubtTuning()
-        #expect(tuning.orbHitRadius == 7)
-        #expect(tuning.orbRadius == 10)
+        #expect(tuning.baseOrbHitRadius == 7)
+        #expect(tuning.baseOrbRadius == 10)
+        #expect(tuning.orbRadius == 10 * tuning.figureScale)
         // A Burrow (it never moves) just inside the drawn size but outside the hit size: a graze.
         let burrow = tuning.stats(for: .burrow).radius
         var graze = quietRun()

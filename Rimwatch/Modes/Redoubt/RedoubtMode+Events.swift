@@ -31,6 +31,8 @@ extension RedoubtMode {
         }
         let palette = theme.palette
         let mint = theme.color(of: .colonist)
+        // Effects on a figure are sized for figure scale 1 and grow with it.
+        let fig = tuning.figureScale
         var delivered: (count: Int, points: Int, at: Vec2)?
 
         for event in events {
@@ -77,7 +79,7 @@ extension RedoubtMode {
                 muzzleGlow = 1
                 // A small flash of light on the floor in front of the emitter, and in the dark
                 // the beam ahead brightens with each shot.
-                effects.flash(at: at + Vec2(cos(heading), sin(heading)) * 4, radius: 16, color: RGB(hex: 0x9FF8FF),
+                effects.flash(at: at + Vec2(cos(heading), sin(heading)) * (4 * fig), radius: 16 * fig, color: RGB(hex: 0x9FF8FF),
                               life: 0.07, strength: 0.55)
                 fireLight += (1 - fireLight) * 0.45
             case .shotEnded(_, let at, let reason):
@@ -87,10 +89,10 @@ extension RedoubtMode {
                     let back = atan2(run.orb.pos.y - at.y, run.orb.pos.x - at.x)
                     effects.spray(at: at, angle: back, spread: 1.0, color: RGB(hex: 0xD8FFFF), count: 3, speed: 130,
                                   life: 0.16, size: 0.6)
-                    effects.flash(at: at, radius: 9, color: RGB(hex: 0xBFFBFF), life: 0.08, strength: 0.7)
+                    effects.flash(at: at, radius: 9 * fig, color: RGB(hex: 0xBFFBFF), life: 0.08, strength: 0.7)
                 case .wall:
                     effects.burst(at: at, color: RGB(hex: 0xC8FFFF), count: 2, speed: 90, life: 0.2, size: 0.6)
-                    effects.flash(at: at, radius: 7, color: RGB(hex: 0x9FF8FF), life: 0.07, strength: 0.5)
+                    effects.flash(at: at, radius: 7 * fig, color: RGB(hex: 0x9FF8FF), life: 0.07, strength: 0.5)
                 case .expired, .cleared:
                     break
                 }
@@ -117,7 +119,7 @@ extension RedoubtMode {
                 effects.shards(at: at, color: cyan, count: 10, speed: 150, life: 0.9, size: 1.6)
                 effects.burst(at: at, color: palette.warning, count: 16, speed: 160, life: 0.6)
                 effects.flash(at: at, radius: 70, color: palette.warning, life: 0.45, strength: 0.7)
-                effects.ring(at: at, color: palette.warning, from: 8, to: 90, duration: 0.5, width: 1.5)
+                effects.ring(at: at, color: palette.warning, from: 8 * fig, to: 90, duration: 0.5, width: 1.5)
                 callouts.flash(palette.warning, strength: 0.1, duration: 0.35)
                 hud.flash(.lives, at: clock)
                 addShake(7)
@@ -127,7 +129,7 @@ extension RedoubtMode {
             case .lineScattered(let count):
                 popup(count == 1 ? "COLONIST DROPPED" : "LINE SCATTERED", at: run.orb.pos, color: palette.warning, scale: 0.9)
             case .orbRespawned(let at):
-                effects.ring(at: at, color: theme.color(of: .orb), from: 120, to: 14, duration: 0.4, width: 1.5)
+                effects.ring(at: at, color: theme.color(of: .orb), from: 120, to: 14 * fig, duration: 0.4, width: 1.5)
             case .extraLife:
                 callouts.notice("EXTRA LIFE", color: palette.reward)
                 hud.flash(.lives, at: clock)
@@ -152,10 +154,10 @@ extension RedoubtMode {
                 if role == .thresher {
                     // Sparks off the plate on the side facing the orb, thrown back at it.
                     let toward = atan2(run.orb.pos.y - at.y, run.orb.pos.x - at.x)
-                    let plate = at + Vec2(cos(toward), sin(toward)) * 15
+                    let plate = at + Vec2(cos(toward), sin(toward)) * (15 * fig)
                     effects.spray(at: plate, angle: toward, spread: 0.8, color: RGB(hex: 0xFFE0E8), count: 3, speed: 150,
                                   life: 0.22, size: 0.7)
-                    effects.flash(at: plate, radius: 10, color: RGB(hex: 0xFF9AAE), life: 0.09, strength: 0.8)
+                    effects.flash(at: plate, radius: 10 * fig, color: RGB(hex: 0xFF9AAE), life: 0.09, strength: 0.8)
                 } else if role == .burrow {
                     effects.spray(at: at, angle: atan2(run.orb.pos.y - at.y, run.orb.pos.x - at.x), spread: 1.2,
                                   color: theme.color(of: .enemy(.burrow)), count: 2, speed: 80, life: 0.3, size: 0.8)
@@ -168,19 +170,19 @@ extension RedoubtMode {
                 // a ring closing on the new Husk and a short shake.
                 let magenta = theme.color(of: .enemy(.husk))
                 effects.burst(at: at, color: mint, count: 10, speed: 120, life: 0.4)
-                effects.implode(at: at, radius: 46, color: magenta, count: 16, life: 0.4)
-                effects.flash(at: at, radius: 40, color: magenta, life: 0.5, strength: 0.9)
-                effects.ring(at: at, color: magenta, from: 60, to: 8, duration: 0.5, width: 1.5)
-                effects.pop(at: at, color: magenta, radius: 22, life: 0.5)
+                effects.implode(at: at, radius: 46 * fig, color: magenta, count: 16, life: 0.4)
+                effects.flash(at: at, radius: 40 * fig, color: magenta, life: 0.5, strength: 0.9)
+                effects.ring(at: at, color: magenta, from: 60 * fig, to: 8 * fig, duration: 0.5, width: 1.5)
+                effects.pop(at: at, color: magenta, radius: 22 * fig, life: 0.5)
                 popup("HUSK!", at: at, color: magenta, scale: 1.0)
                 addShake(2)
             case .enemyWithdrew(_, let role, let at):
-                effects.pop(at: at, color: theme.color(of: .enemy(role)), radius: 20, life: 0.5)
+                effects.pop(at: at, color: theme.color(of: .enemy(role)), radius: 20 * fig, life: 0.5)
 
             // Colonists
             case .colonistPickedUp(_, let at, _):
-                effects.pop(at: at, color: mint, radius: 10, life: 0.3)
-                effects.flash(at: at, radius: 14, color: mint, life: 0.2, strength: 0.6)
+                effects.pop(at: at, color: mint, radius: 10 * fig, life: 0.3)
+                effects.flash(at: at, radius: 14 * fig, color: mint, life: 0.2, strength: 0.6)
             case .colonistSeized(_, _, let at):
                 popup("HELP!", at: at, color: palette.warning, scale: 0.85)
             case .colonistFreed(_, let at):
@@ -222,30 +224,31 @@ extension RedoubtMode {
     /// torn apart in a spinning star of shards; a Burrow caving in; a Thresher wrecked.
     private func destroyed(_ role: RedoubtRole, at: Vec2, points: Int) {
         let color = theme.color(of: .enemy(role))
+        let fig = tuning.figureScale
         switch role {
         case .skitter:
             effects.burst(at: at, color: color, count: 4, speed: 120, life: 0.28, size: 0.8)
-            effects.flash(at: at, radius: 11, color: color, life: 0.1, strength: 0.6)
+            effects.flash(at: at, radius: 11 * fig, color: color, life: 0.1, strength: 0.6)
         case .gleaner:
             effects.shards(at: at, color: color, count: 6, speed: 110, life: 0.5, size: 1.1)
             effects.burst(at: at, color: color, count: 8, speed: 170, life: 0.4)
-            effects.flash(at: at, radius: 22, color: color, life: 0.18, strength: 0.7)
+            effects.flash(at: at, radius: 22 * fig, color: color, life: 0.18, strength: 0.7)
         case .spitter:
             effects.burst(at: at, color: color, count: 10, speed: 160, life: 0.45)
             effects.burst(at: at, color: theme.color(of: .enemyShot), count: 8, speed: 70, life: 0.7, size: 0.8)
-            effects.pop(at: at, color: color, radius: 18, life: 0.3)
-            effects.flash(at: at, radius: 24, color: color, life: 0.2, strength: 0.8)
+            effects.pop(at: at, color: color, radius: 18 * fig, life: 0.3)
+            effects.flash(at: at, radius: 24 * fig, color: color, life: 0.2, strength: 0.8)
         case .husk:
             effects.shards(at: at, color: color, count: 9, speed: 170, life: 0.55, size: 1.2)
             effects.burst(at: at, color: color.lightened(0.4), count: 8, speed: 200, life: 0.35)
-            effects.pop(at: at, color: color, radius: 20, life: 0.3)
-            effects.flash(at: at, radius: 26, color: color, life: 0.2, strength: 0.85)
+            effects.pop(at: at, color: color, radius: 20 * fig, life: 0.3)
+            effects.flash(at: at, radius: 26 * fig, color: color, life: 0.2, strength: 0.85)
         case .burrow:
             // The pit caves in: rubble drawn into the hole, dust thrown up, a shrinking rim.
-            effects.implode(at: at, radius: 34, color: color, count: 18, life: 0.45, size: 1.1)
+            effects.implode(at: at, radius: 34 * fig, color: color, count: 18, life: 0.45, size: 1.1)
             effects.burst(at: at, color: color.lightened(0.2), count: 16, speed: 110, life: 0.8, size: 1.1)
-            effects.ring(at: at, color: color, from: 30, to: 4, duration: 0.45, width: 1.4)
-            effects.flash(at: at, radius: 50, color: color, life: 0.45, strength: 0.8)
+            effects.ring(at: at, color: color, from: 30 * fig, to: 4 * fig, duration: 0.45, width: 1.4)
+            effects.flash(at: at, radius: 50 * fig, color: color, life: 0.45, strength: 0.8)
             popup("+\(groupedDigits(points))", at: at, color: theme.palette.reward, scale: 1.1)
             addShake(3)
         case .thresher:
@@ -253,8 +256,8 @@ extension RedoubtMode {
             effects.shards(at: at, color: color, count: 16, speed: 200, life: 1.0, size: 1.9)
             effects.shards(at: at, color: RGB(hex: 0xFF9AAE), count: 8, speed: 140, life: 0.9, size: 1.4)
             effects.burst(at: at, color: RGB(hex: 0xFFE0E8), count: 24, speed: 260, life: 0.6, size: 1.2)
-            effects.flash(at: at, radius: 80, color: color, life: 0.6, strength: 1)
-            effects.ring(at: at, color: color, from: 14, to: 110, duration: 0.55, width: 1.8)
+            effects.flash(at: at, radius: 80 * fig, color: color, life: 0.6, strength: 1)
+            effects.ring(at: at, color: color, from: 14 * fig, to: 110 * fig, duration: 0.55, width: 1.8)
             popup("+\(groupedDigits(points))", at: at, color: theme.palette.reward, scale: 1.3)
             addShake(5)
         }

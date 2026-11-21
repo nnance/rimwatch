@@ -53,7 +53,7 @@ import GameCore
         #expect(events.contains { if case .huskFormed(gleaner, _) = $0 { true } else { false } })
         let husk = try r.req(enemy: gleaner)
         #expect(husk.role == .husk)
-        #expect(husk.pos.y < 15)
+        #expect(husk.pos.y < r.tuning.figure(15))
         #expect(try r.req(colonist: colonist).state == .lost)
         // It waits a moment, then hunts.
         guard case .waking = husk.state else {
@@ -78,7 +78,7 @@ import GameCore
         #expect(events.contains { if case .colonistTaken(colonist, .gleaner, gleaner, _) = $0 { true } else { false } })
         let husk = try r.req(enemy: gleaner)
         // At the Burrow's rim, not the wall 140 units away.
-        #expect(try distance(husk.pos, r.req(enemy: burrow).pos) < 32)
+        #expect(try distance(husk.pos, r.req(enemy: burrow).pos) < r.tuning.figure(32))
     }
 
     @Test func shootingAGleanerFreesItsColonist() throws {
@@ -227,7 +227,7 @@ import GameCore
         let ids = r.formLine(3)
         let middle = r.colonists.firstIndex { $0.id == ids[1] }!
         // Over the middle follower, clear of its neighbours.
-        r.addEnemy(.thresher, at: r.colonists[middle].pos + Vec2(0, 20))
+        r.addEnemy(.thresher, at: r.colonists[middle].pos + Vec2(0, r.tuning.figure(20)))
         run(&r, steps: 1)
         #expect(r.line == [ids[0], ids[2]])
         #expect(try r.req(colonist: ids[1]).state == .lost)
