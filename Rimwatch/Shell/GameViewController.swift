@@ -12,7 +12,7 @@ final class GameViewController: UIViewController {
     private static let fallbackCreaseFraction: CGFloat = 0.05
 
     private let skView = SKView()
-    private var scene: GameScene?
+    private var scene: ShellScene?
     private let foldGate = FoldGate()
     private var lastLoggedRegions = ""
 
@@ -46,7 +46,7 @@ final class GameViewController: UIViewController {
         skView.frame = playfieldFrame(in: view.bounds)
         guard skView.bounds.width > 0, skView.bounds.height > 0 else { return }
         if scene == nil {
-            let scene = GameScene(size: skView.bounds.size)
+            let scene = ShellScene(size: skView.bounds.size, entry: ModeRegistry.launch)
             scene.scaleMode = .resizeFill
             scene.safeAreaInsets = layoutInsets()
             skView.presentScene(scene)

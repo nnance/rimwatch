@@ -124,9 +124,10 @@ swift run --package-path Tools/Icon Icon Rimwatch/Assets.xcassets/AppIcon.appico
 | Path | What it holds |
 |---|---|
 | `GameCore/` | The game logic as a Swift package, with no UIKit or SpriteKit, and its tests. Its `RidgelineCore` target is the game: world, simulation, enemies, waves, scoring and the theme, plugged into the shared session in `RidgelineMode.swift`. Its `GameCore` target is what any game mode can share: maths, shapes, sound rendering and music, menus, options, saved settings with one high-score table per mode, gamepad logic, and in `Session/` the pause, countdown and screen flow around a run (`ModeSession`, `ModeFrontEnd`), written against the `ModeRun` protocol each mode's simulation conforms to. The game logic knows what each entity does, never how it looks; appearance and sound come from a `Theme`. |
-| `Rimwatch/` | The app. `GameScene.swift` runs Ridgeline: the SpriteKit scene, its screens and the game loop. |
-| `Rimwatch/Shell/` | The parts of the app any mode shares, with no Ridgeline in them: fold handling, settings, gamepad input, audio playback, haptics and feedback routing, the glow renderer, and the menu screens and play overlays. Their look comes from a `ShellStyle`. |
-| `Rimwatch/Modes/Ridgeline/` | Ridgeline's own drawing and controls: terrain, scanner, HUD, particle effects, callouts, the touch controls and the entity glyphs. |
+| `Rimwatch/` | The app. |
+| `Rimwatch/Shell/` | The parts of the app any mode shares, with no Ridgeline in them. `ShellScene` is the one SpriteKit scene; `ModeHost` runs one mode inside it (screen flow, menus, pause, countdown, audio, haptics, settings, gamepad, touches) through the `GameMode` protocol in `GameMode.swift`. Also fold handling, the glow renderer, and the menu screens and play overlays, whose look comes from a `ShellStyle`. |
+| `Rimwatch/Modes/` | `ModeRegistry.swift` lists the modes and is the only shell-level file that names one. |
+| `Rimwatch/Modes/Ridgeline/` | Ridgeline as a `GameMode`: `RidgelineMode.swift` (layout, screens, input, sound) with its backdrop, events and per-entity sync in `RidgelineMode+Backdrop.swift`, `+Events.swift` and `+Sync.swift`, plus the terrain, scanner, HUD, particle effects, callouts, touch controls and entity glyphs. |
 | `Tools/Harness/` | The bot harness used for difficulty tuning. |
 | `Tools/Icon/` | The script that draws the app icon from the theme's ship and colonist shapes. |
 | `PLAN.md` | The design, the build history and what is left. |

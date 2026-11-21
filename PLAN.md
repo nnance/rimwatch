@@ -331,7 +331,7 @@ step is pushed so you can install it.
       the verifier about 3% slower, which does not matter at the game's 120 Hz step. The
       harness's "death causes" lines print ties in an unstable order, as they did before the
       split. What landed where is under "What is shared and what belongs to a mode".
-- [ ] 9. Split the app into a shared shell and the Ridgeline mode; one high-score table per mode
+- [x] 9. Split the app into a shared shell and the Ridgeline mode; one high-score table per mode
   - [x] Safety net: golden replay test and the DEBUG `-seed`, `-fixedFrame` and
         `-autopilot <skill>` arguments (2026-11-20). 205 tests.
   - [x] 9a. Session and screen-flow logic shared; per-mode high scores with migration
@@ -341,8 +341,15 @@ step is pushed so you can install it.
         untouched. The golden replay passes unchanged and the app's logs match the baseline line
         for line. 231 tests: 56 in `GameCoreTests`, 175 in `RidgelineCoreTests`. The generic
         session code is `@inlinable`; without that the session pipeline ran about 25% slower.
-  - [ ] 9b. Shared app files cut free of Ridgeline; folders reorganised
-  - [ ] 9c. `GameScene` split into shell scene, mode host and Ridgeline mode
+  - [x] 9b. Shared app files cut free of Ridgeline; folders reorganised (2026-11-20). Menus,
+        overlays and feedback routing take a `ShellStyle`, the synth takes plain sounds and
+        music, and Ridgeline's role glyphs are in `RidgelineGlyphs`.
+  - [x] 9c. `GameScene` split into `ShellScene`, `ModeHost<Mode>` and `RidgelineMode`
+        (+Backdrop, +Events, +Sync); `ModeRegistry` is the only shell-level file that names
+        Ridgeline (2026-11-20). 9b and 9c were independently verified together against the 9a
+        build: the run, screen and haptic logs match line for line, the 44 rendered sounds are
+        byte-identical and every screen looks the same. The node count is one higher (the
+        mode's root node).
 - [ ] 10. Title screen with Free Play mode selection; new app icon and emblem ("The Rim");
       `README.md` and `CLAUDE.md` updated
 - [ ] Parallel check (not a gate): Ridgeline checked on the phone and unchanged
@@ -358,7 +365,7 @@ step is pushed so you can install it.
 
 ## What is left
 
-The next piece of building is step 9 of the expansion. Ridgeline itself is built; what remains for
+The next piece of building is step 10 of the expansion. Ridgeline itself is built; what remains for
 it needs a person and a device, and can happen alongside the expansion:
 
 1. Run on a real iPhone Duo (set the signing team in Xcode). Nothing has been seen on the open
@@ -487,17 +494,25 @@ rimwatch/
       Themes/AlienFrontier.swift, Themes/AlienFrontierSounds.swift
       Audio/MusicMoodDirector.swift
     Tests/GameCoreTests/, Tests/RidgelineCoreTests/
-  Rimwatch/                     app target
-    AppDelegate.swift, SceneDelegate.swift, Info.plist
-    FoldGate.swift              hinge status -> open / closed / no hinge; drives pause + orientation
-    GameScene.swift             SpriteKit scene: steps Simulation, syncs nodes
-    Render/                     GlowShapeFactory (shapes pre-rendered to additive textures),
-                                TerrainNode, ScannerNode, HUDNode, particle bursts
-    Input/TouchControls.swift, GamepadInput.swift
-    Audio/Synth.swift           AVAudioEngine voices driven by simulation events
-    Screens/                    title, pause menu (inner and outer layouts), options, game over,
-                                high scores
-    Settings.swift              options persisted in UserDefaults
+  Rimwatch/                     app target. Shell and modes since step 9 of the expansion.
+    AppDelegate.swift, SceneDelegate.swift, Info.plist, Assets.xcassets
+    Shell/                      shared by every mode; imports nothing of any one mode
+      ShellScene.swift          the SpriteKit scene; forwards to the mode host
+      ModeHost.swift            runs one mode: menus, pause, fold poses, input, audio, feedback
+      GameMode.swift            what a mode must provide; ModeDriver.swift, ShellServices.swift
+      GameViewController.swift, FoldGate.swift (hinge status -> open / closed / no hinge),
+      Settings.swift (options and per-mode high scores), DebugLog.swift, DebugMenuCommands.swift
+      Input/                    GamepadInput.swift, DebugPadCommands.swift
+      Audio/                    Synth.swift (AVAudioEngine voices), AudioDump.swift
+      Feedback/                 FeedbackRouter.swift, Haptics.swift
+      Render/                   GlowShapeFactory (shapes pre-rendered to additive textures),
+                                CharRow.swift, ThemeColors.swift
+      Screens/                  MenuNode (title, pause, options, game over, high scores),
+                                PlayOverlays (pause button, countdown, Made for Duo), GlowText
+    Modes/ModeRegistry.swift    lists the modes; the only shell-level file that names one
+    Modes/Ridgeline/            RidgelineMode (+Backdrop, +Events, +Sync), TerrainNode,
+                                ScannerNode, HUDNode, EffectsLayer, CalloutLayer, TouchControls,
+                                RidgelineGlyphs
   PLAN.md                       this plan plus a progress checklist, kept current as work lands
   CLAUDE.md                     loaded automatically each session: points at PLAN.md, and notes
                                 to build via the Xcode MCP tools and test GameCore with `swift test`

@@ -38,10 +38,18 @@ and tick items as they are built and verified.
   `AppIcon.png` by hand; re-run the generator (command in `README.md`) after changing those.
 - `#expect` cannot wrap a mutating call. Write `#expect(session.resume() == true)`, not
   `#expect(session.resume())`.
-- The app drives a `FrontEnd` and its `GameSession` (Ridgeline's names for the shared
-  `ModeFrontEnd` and `ModeSession` in `GameCore/Sources/GameCore/Session/`, which are generic
-  over a mode's run), never `Simulation` directly, and reacts to the `GameEvent`s it returns.
-  Gameplay numbers live in `GameCore/Sources/RidgelineCore/Tuning.swift`.
+- The app is a shell plus modes. `Rimwatch/Shell/` is shared by every mode and must not import
+  a mode's package target or name its types; `Rimwatch/Modes/ModeRegistry.swift` lists the modes
+  and is the only shell-level file that names one. `ModeHost` drives the session through the
+  shared `ModeFrontEnd`/`ModeSession` (`GameCore/Sources/GameCore/Session/`, generic over a
+  mode's run; Ridgeline calls them `FrontEnd`/`GameSession`). A mode implements `GameMode`
+  (`Shell/GameMode.swift`), reads the live session through the closure it is given, never steps
+  its run itself, and reacts to the events the host passes it.
+  Gameplay numbers for Ridgeline live in `GameCore/Sources/RidgelineCore/Tuning.swift`.
+- To check that a shell change did not alter behaviour, compare DEBUG logs of two builds launched
+  with `-hinge open -autopilot <skill> -seed <n> -fixedFrame -logFeedback -resetSettings`: the
+  `[Rimwatch run]`, `[Rimwatch screen]` and `[Rimwatch feedback] haptic` lines are identical line
+  for line for the same build (the `[Rimwatch audio]` lines are not deterministic).
 - `FrontEndReplayTests` is a golden replay of a whole session. If it fails after a refactor, the
   refactor changed behaviour: fix the code, not the expected values. Re-capture the values only
   after a deliberate gameplay change (the test prints a `REPLAY` summary for that).
