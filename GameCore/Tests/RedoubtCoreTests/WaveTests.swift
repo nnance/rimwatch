@@ -176,6 +176,21 @@ import GameCore
         #expect(!events.contains { $0.isWaveCleared })
     }
 
+    @Test func theUnspentQuotaAloneHoldsAWaveOpen() throws {
+        var (r, _) = waveOne()
+        // Between a kill and the next top-up: the floor is empty, nothing is telegraphed or still
+        // to come from the opening crowd, and the group gap has not run out.
+        r.pendingIndex = r.pending.count
+        r.arrivals.removeAll()
+        r.enemies.removeAll()
+        r.groupCooldown = 1
+        try #require(r.quota > 0)
+        #expect(r.enemiesHoldingWave == r.quota)
+        let events = r.step(still)
+        #expect(!events.contains { $0.isWaveCleared })
+        #expect(r.phase == .fighting)
+    }
+
     @Test func theAirlockMovesBetweenWaves() throws {
         var (r, _) = waveOne()
         let first = r.airlock.pos

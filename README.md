@@ -3,8 +3,9 @@
 Rescue games for the iPhone Duo's inner display, set in one world: Calder, a colony built inside a
 vast crater, whose wall is the Rim. Rimwatch is the game; it is made of modes, each its own game
 about saving colonists. The first mode, **Ridgeline**, is a side-scrolling rescue shooter inspired
-by the classic arcade game Defender (Williams Electronics, 1981). Two more, Redoubt (a twin-stick
-arena shooter) and Riftwing (flap-to-fly combat), are planned.
+by the classic arcade game Defender (Williams Electronics, 1981). The second, **Redoubt**, is a
+twin-stick arena shooter in the spirit of Robotron: 2084 (Williams Electronics, 1982). A third,
+Riftwing (flap-to-fly combat), is planned.
 
 Native iOS, written in Swift with SpriteKit. It has no third-party dependencies and no asset files:
 the art is drawn in code and the sound is synthesised. The one image in the app, its icon, is drawn
@@ -22,12 +23,15 @@ when they are carried off.
 
 It is a tribute, not a copy. The name, ship, enemies, art, sounds and screen layout are its own,
 and it adds mechanics of its own too: the heat meter, Blink, the carry multiplier, the shield and
-Blackout. Rimwatch is not affiliated with or endorsed by the owners of Defender.
+Blackout. Redoubt takes the twin-stick arena genre the same way: its orb, enemies, colonist line,
+airlock and power cut are its own. Rimwatch is not affiliated with or endorsed by the owners of
+Defender or Robotron.
 
 ## Status
 
-Ridgeline is finished and was checked in the simulator. The title screen lets the player choose a
-mode, and lists only Ridgeline until the others are built. The game has not yet been run on a real
+Ridgeline is finished and was checked in the simulator. Redoubt is playable from the title screen
+but still being built: it is silent for now (its sounds, music and haptics come next), and its
+effects and tuning are first versions. The game has not yet been run on a real
 iPhone Duo, so the open inner display (layout around the crease and camera hole), play feel,
 speaker sound, haptics and physical controllers are untested. `PLAN.md` lists what is left and the
 plan for the other modes.
@@ -74,6 +78,42 @@ Options let you swap the touch controls to the other hand and swap Blink and Sho
 gamepad. The touch controls hide while a controller is connected, and menus work with either.
 
 Sound respects the phone's Silent mode: with Silent mode on, the game plays no sound or music.
+
+## Redoubt
+
+You fly a hover orb over the floor of a breached outpost dome, seen from above on one fixed
+screen. A thin strip along the top holds the score, the wave, lives, Shockwave charges and the
+colonists still to save.
+
+- **The pace:** the floor is crowded from the first second of a wave, and more pour in while you
+  fight. Pushing the aim stick fires a constant stream of shots, about ten a second, with no fire
+  button, heat or reload.
+- **The loop:** colonists shelter around the floor. Touch one and they follow you in a line; lead
+  the line to the airlock to deliver them all at once. Each colonist in the line is worth more than
+  the one before, so long lines pay, but enemies can take followers off the end. Every fourth
+  colonist delivered earns a Shockwave charge.
+- **Enemies:** Skitter (the flood), Gleaner (drags colonists away and becomes a Husk if it gets
+  one out), Spitter (keeps its distance and fires slow shots), Burrow (a hole in the floor that
+  pours out Skitters until shot shut), Thresher (a heavy that shots only push back; only a
+  Shockwave destroys it) and Husk (the fast hunter). Every arrival is marked on the floor a second
+  before it lands.
+- **Power cut:** lose every colonist of a wave and the next is fought in the dark, with a pool of
+  light round the orb, until you deliver a colonist.
+- **Structure:** a wave ends when the floor is clear; colonists still safe score a bonus. Three
+  lives, an extra life every 60,000 points, and its own top-10 table.
+
+## Redoubt controls
+
+| Action | Touch | Gamepad |
+|---|---|---|
+| Move | Floating stick under the left thumb | Left stick or D-pad |
+| Aim and fire | Floating stick under the right thumb; fires while pushed | Right stick; fires while pushed |
+| Shockwave | Button above the aim stick | Either shoulder button |
+| Pause | Pause button | Menu |
+
+Each stick appears wherever a thumb lands in its half of the screen. The Stick side option swaps
+the two sticks (the Shockwave button goes with the aim stick). Redoubt has no gamepad layout
+option.
 
 ## Fold behaviour
 
@@ -145,17 +185,19 @@ swift run --package-path Tools/Icon Icon Rimwatch/Assets.xcassets/AppIcon.appico
 
 | Path | What it holds |
 |---|---|
-| `GameCore/` | The game logic as a Swift package, with no UIKit or SpriteKit, and its tests. Its `RidgelineCore` target is the Ridgeline mode: world, simulation, enemies, waves, scoring and the theme, plugged into the shared session in `RidgelineMode.swift`. Its `GameCore` target is what any game mode can share: maths, shapes, the emblem, sound rendering and music, menus, options, saved settings (one high-score table per mode and the mode played last), gamepad logic, the list of modes the title offers (`ModeCatalog`), and in `Session/` the title, pause, countdown and screen flow around a run (`ModeSession`, `ModeFrontEnd`), written against the `ModeRun` protocol each mode's simulation conforms to. The game logic knows what each entity does, never how it looks; appearance and sound come from a `Theme`. |
+| `GameCore/` | The game logic as a Swift package, with no UIKit or SpriteKit, and its tests. Its `RidgelineCore` target is the Ridgeline mode: world, simulation, enemies, waves, scoring and the theme, plugged into the shared session in `RidgelineMode.swift`. Its `RedoubtCore` target is Redoubt's: the run (`RedoubtRun`), enemies, colonist line, waves, bots and its theme (`Theme.swift`, `Themes/CalderDome.swift`). Its `GameCore` target is what any game mode can share: maths, shapes, the emblem, sound rendering and music, menus, options, saved settings (one high-score table per mode and the mode played last), gamepad logic, the list of modes the title offers (`ModeCatalog`), and in `Session/` the title, pause, countdown and screen flow around a run (`ModeSession`, `ModeFrontEnd`), written against the `ModeRun` protocol each mode's simulation conforms to. The game logic knows what each entity does, never how it looks; appearance and sound come from a `Theme`. |
 | `Rimwatch/` | The app. |
 | `Rimwatch/Shell/` | The parts of the app any mode shares, with no Ridgeline in them. `ShellScene` is the one SpriteKit scene: it owns the devices every mode shares (`ShellDevices`: the synth, the game controller, haptics) and loads one mode at a time, swapping modes when the title asks. `ModeHost` runs the loaded mode inside it (screen flow, menus, pause, countdown, sound, settings, touches) through the `GameMode` protocol in `GameMode.swift`. Also fold handling, the glow renderer, the emblem, and the menu screens and play overlays, whose look comes from a `ShellStyle`. |
 | `Rimwatch/Modes/` | `ModeRegistry.swift` lists the modes and is the only shell-level file that names one. |
 | `Rimwatch/Modes/Ridgeline/` | Ridgeline as a `GameMode`: `RidgelineMode.swift` (layout, screens, input, sound) with its backdrop, events and per-entity sync in `RidgelineMode+Backdrop.swift`, `+Events.swift` and `+Sync.swift`, plus the terrain, scanner, HUD, particle effects, callouts, touch controls and entity glyphs. |
+| `Rimwatch/Modes/Redoubt/` | Redoubt as a `GameMode`: `RedoubtMode.swift` (layout, screens, input, sound hooks) with the floor, airlock, darkness and sprite pools in `+Arena.swift`, the per-frame sync in `+Sync.swift` and events in `+Events.swift`, plus its HUD, twin-stick touch controls, effects, callouts and glyphs. |
 | `Tools/Harness/` | The bot harness used for difficulty tuning. |
 | `Tools/Icon/` | The script that draws the app icon from the emblem in `GameCore`. |
 | `PLAN.md` | The design, the build history and what is left. |
 | `CLAUDE.md` | Working notes for building the project with Claude Code. |
 
-Ridgeline's gameplay numbers live in `GameCore/Sources/RidgelineCore/Tuning.swift`.
+Each mode's gameplay numbers live in its own `Tuning.swift`: `GameCore/Sources/RidgelineCore/` and
+`GameCore/Sources/RedoubtCore/`.
 
 ## Debug launch arguments
 
@@ -164,7 +206,7 @@ These exist in Debug builds only.
 | Argument | Effect |
 |---|---|
 | `-hinge open\|closed\|none` | Overrides the fold state. |
-| `-autopilot [idle\|novice\|competent\|shooter]` | A bot plays the game. Plain `-autopilot` is `competent`; `shooter` never rescues; `idle` never touches the controls and `novice` plays badly, so both reach game over quickly. |
+| `-autopilot [idle\|novice\|competent\|shooter]` | A bot plays the game. Plain `-autopilot` is `competent`; `shooter` never rescues; `idle` never touches the controls and `novice` plays badly, so both reach game over quickly. Redoubt has the same four; its `shooter` never rescues and leaves Gleaners alone, so it reaches the power cut (with `-seed 7`, in wave 8). |
 | `-showStats` | Shows node count, draw count and frame rate. |
 | `-resetSettings` | Clears saved options, the remembered mode and every mode's high scores at launch. |
 | `-logFeedback` | Logs every routed sound and haptic. |
@@ -172,8 +214,8 @@ These exist in Debug builds only.
 | `-dumpAudio <dir>` | Writes every sound and music mood to WAV files. |
 | `-seed <n>` | Starts the session from seed `n` instead of the clock, so the runs are the same every launch. |
 | `-fixedFrame` | Counts every frame after the first as exactly 1/60 s, whatever the real time. With `-seed` and `-autopilot`, runs play out the same way every time; the `[Rimwatch run]` lines log each run's seed and result. |
-| `-mode <id>` | Loads mode `<id>` at launch (for example `ridgeline`) instead of the one played last. |
-| `-debugSecondMode` | Lists Ridgeline a second time as "Ridgeline B" (id `ridgelineB`, with its own high-score table), so choosing and switching modes can be tried while there is only one real mode. |
+| `-mode <id>` | Loads mode `<id>` at launch (`ridgeline` or `redoubt`) instead of the one played last. |
+| `-debugSecondMode` | Lists Ridgeline a second time as "Ridgeline B" (id `ridgelineB`, with its own high-score table), so switching between two copies of one mode can be tried. |
 
 `PLAN.md` also lists the Darwin notifications that change the fold state and drive the menus and a
 simulated controller at run time.

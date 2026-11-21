@@ -57,7 +57,9 @@ public struct RedoubtRun: Sendable {
     /// The next wave's colonists and opening crowd are already out.
     var waveReady = false
     var nextAirlock: Airlock?
-    var powerCutPending = false
+    /// Every colonist of a wave was lost: the power fails when the next wave starts. True from
+    /// that moment, through the break (when the next wave's colonists are already out), until then.
+    public internal(set) var powerCutPending = false
     var waveColonists = 0
     var waveLost = 0
 

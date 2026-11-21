@@ -32,7 +32,7 @@ enum ModeRegistry {
     }
 
     static let all: [Entry] = {
-        var entries = [Entry(RidgelineMode.self)]
+        var entries = [Entry(RidgelineMode.self), Entry(RedoubtMode.self)]
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-debugSecondMode") { entries.append(.debugSecondMode) }
         #endif

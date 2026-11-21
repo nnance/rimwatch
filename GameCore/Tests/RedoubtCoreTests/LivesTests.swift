@@ -102,6 +102,36 @@ import GameCore
         #expect(!r.isPowerCut)
     }
 
+    @Test func aPendingPowerCutShowsThroughTheBreak() throws {
+        var r = waveOne()
+        #expect(!r.powerCutPending)
+        for c in r.colonists.indices { r.loseColonist(at: c, takenBy: .gleaner, enemy: 0) }
+        #expect(r.powerCutPending)
+        #expect(!r.isPowerCut)
+        // Clear the wave, then step into the break's last second, when the next wave's
+        // colonists are already on the floor: still pending, still lit.
+        r.pendingIndex = r.pending.count
+        r.quota = 0
+        r.arrivals.removeAll()
+        r.enemies.removeAll()
+        for _ in 0..<seconds(2.5) {
+            _ = r.step(still)
+            if case .intermission(let left) = r.phase, left < r.tuning.telegraphTime * 0.5 { break }
+        }
+        guard case .intermission = r.phase else {
+            Issue.record("expected to be in the break")
+            return
+        }
+        #expect(r.colonistsLeft > 0)
+        #expect(r.powerCutPending)
+        #expect(!r.isPowerCut)
+        // The wave starts in the dark and the cut is no longer pending.
+        let events = run(&r, steps: seconds(1)) { $0.isWaveStarted }
+        #expect(events.contains(.powerCutBegan))
+        #expect(r.isPowerCut)
+        #expect(!r.powerCutPending)
+    }
+
     @Test func theDarkLastsAcrossWavesWithoutADelivery() throws {
         var r = waveOne()
         for c in r.colonists.indices { r.crushColonist(at: c, by: 0) }

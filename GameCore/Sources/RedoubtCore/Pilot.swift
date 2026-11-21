@@ -22,6 +22,10 @@ public struct RedoubtPilot: Sendable {
         /// between the crowd with a repulsion field, collects colonists and takes the line to
         /// the airlock, keeps out of Spitter shots and uses Shockwave when hemmed in.
         case competent
+        /// Fights as the competent pilot does but never goes for colonists or the airlock and
+        /// leaves Gleaners alone unless they come close, so colonists are lost and the power cut
+        /// comes (as Ridgeline's `shooter` reaches Blackout). For seeing the power cut in the app.
+        case shooter
     }
 
     public let skill: Skill
@@ -41,7 +45,7 @@ public struct RedoubtPilot: Sendable {
         switch skill {
         case .idle: return RedoubtInput()
         case .novice: return noviceInput(run)
-        case .competent: return competentInput(run)
+        case .competent, .shooter: return competentInput(run)
         }
     }
 
@@ -192,6 +196,11 @@ public struct RedoubtPilot: Sendable {
             u = u < 140 ? u * 1.2 : u + 2000
         case .husk: u *= 0.6
         case .gleaner:
+            // The shooter leaves Gleaners be until they are close enough to matter.
+            if skill == .shooter {
+                if u > 80 { u += 5000 }
+                break
+            }
             if case .dragging = enemy.state { u *= 0.4 } else { u *= 0.7 }
         case .burrow:
             // Left for later while the crowd is thick; the first thing to close once it thins.
@@ -206,10 +215,10 @@ public struct RedoubtPilot: Sendable {
     /// Collect colonists, take the line out, else keep to open floor.
     private func competentGoal(_ run: RedoubtRun) -> Vec2 {
         let orb = run.orb
-        let sheltering = run.colonists.filter { $0.state == .sheltering }
+        let sheltering = skill == .shooter ? [] : run.colonists.filter { $0.state == .sheltering }
         let nearest = sheltering.min { d($0.pos, orb.pos) < d($1.pos, orb.pos) }
         let airlockPoint = insetAirlock(run)
-        if !run.line.isEmpty, run.airlock.isOpen {
+        if skill != .shooter, !run.line.isEmpty, run.airlock.isOpen {
             // Head out with a long line, with nobody else left to fetch, or when the airlock is
             // nearer than the next colonist.
             if run.line.count >= 4 || nearest == nil

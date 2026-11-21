@@ -41,6 +41,22 @@ import GameCore
         #expect(abs(r.orb.vel.length - r.tuning.orbMaxSpeed) < 1)
     }
 
+    @Test func theOrbIsHitAsIfSmallerThanItIsDrawn() throws {
+        let tuning = RedoubtTuning()
+        #expect(tuning.orbHitRadius == 7)
+        #expect(tuning.orbRadius == 10)
+        // A Burrow (it never moves) just inside the drawn size but outside the hit size: a graze.
+        let burrow = tuning.stats(for: .burrow).radius
+        var graze = quietRun()
+        graze.addEnemy(.burrow, at: graze.orb.pos + Vec2(tuning.orbHitRadius + burrow + 1.5, 0))
+        #expect(!graze.step(still).contains { $0.isOrbDestroyed })
+        #expect(graze.orb.isAlive)
+        // A little closer, inside the hit size: the orb is lost.
+        var hit = quietRun()
+        hit.addEnemy(.burrow, at: hit.orb.pos + Vec2(tuning.orbHitRadius + burrow - 0.5, 0))
+        #expect(hit.step(still).contains { $0.isOrbDestroyed })
+    }
+
     @Test func theWallStopsTheOrb() throws {
         var r = quietRun()
         run(&r, steps: seconds(4), input: RedoubtInput(move: Vec2(-1, -1)))

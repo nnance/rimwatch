@@ -114,8 +114,13 @@ These lines were written from memory of the code before step 8. What step 8 foun
   `ModeFrontEnd` in `GameCore/Session/`, written against the `ModeRun` protocol that a mode's
   simulation conforms to) and saved settings with one high-score table per mode
   (`SavedSettings`). `RidgelineCore` keeps the names `GameSession` and `FrontEnd` as typealiases.
-- Still Ridgeline's: the `Theme` protocol with its palette, and the mapping from gamepad buttons
-  to actions.
+- Owned by each mode: its theme protocol and palette (`Theme` for Ridgeline, `RedoubtTheme` for
+  Redoubt) and the mapping from gamepad buttons to actions. Each target builds the shell's
+  colours (`ShellStyle`) from its palette with near-identical code, a candidate to share.
+- Found in step 13b: Redoubt needed no change to the shell or the shared target. Ridgeline's
+  particle and callout layers are built round its wraparound camera, so Redoubt has its own
+  simpler ones rather than sharing them. Loading a mode with different sounds into the one
+  synthesiser, never exercised before, works: sounds start again after each return to Ridgeline.
 - Known Ridgeline-shaped parts of the shared session code, to settle while building Redoubt:
   the run result is fixed at score, wave and colonists saved; the pause and game-over menu
   lines are written in the shared front end (the heading says "Game over" even for a goal-met
@@ -380,7 +385,14 @@ step is pushed so you can install it.
         novice, competent) and a first tuning pass. The harness runs it with a leading
         `redoubt` argument. The builder's choices beyond the written design are listed under
         "Redoubt design". 351 tests in all (78 for Redoubt).
-  - [ ] 13b. On screen: the Redoubt mode in the app, listed on the title screen
+  - [x] 13b. On screen (2026-11-21): the Redoubt mode in the app (`Rimwatch/Modes/Redoubt/`),
+        listed on the title screen with its own high-score table. Its look is the Calder Dome
+        theme in `RedoubtCore`; the arena, pooled sprites, HUD strip, two floating sticks and
+        a Shockwave button, gamepad, bots under `-autopilot`, event banners and popups, and a
+        first power cut. Silent until 13c. No shell or shared code changed. The independent
+        check failed it twice (Skitter arrival markers invisible in early waves; sprites
+        re-textured while scaled drawn the wrong size) and passed the third time. The choices
+        made are under "Decisions made while putting it on screen (13b)". 360 tests.
   - [ ] 13c. Feedback: sounds, music moods and haptics
   - [ ] 13d and 13e. Final tuning pass and polish
 - [ ] Gate: Redoubt played and refined
@@ -493,7 +505,7 @@ rimwatch/
   Rimwatch.xcodeproj            created via the Xcode tools if they support it, otherwise by you
                                 from the iOS Game (SpriteKit) template; bundle name Rimwatch
   GameCore/                     Swift package, no UIKit/SpriteKit: builds and tests on macOS.
-                                Two targets since step 8 of the expansion.
+                                One target per mode plus the shared one.
     Sources/GameCore/           shared by every mode
       Math.swift                vectors, seeded random numbers
       Collision.swift           sweep collision maths
@@ -524,7 +536,16 @@ rimwatch/
                                 sound patches, display names
       Themes/AlienFrontier.swift, Themes/AlienFrontierSounds.swift
       Audio/MusicMoodDirector.swift
-    Tests/GameCoreTests/, Tests/RidgelineCoreTests/
+    Sources/RedoubtCore/        Redoubt's game logic
+      RedoubtRun.swift          fixed 120 Hz step; the arena, orb, shots, waves; emits events
+      Enemies.swift, Colonists.swift, Entities.swift, SpatialGrid.swift (collision grid)
+      WaveDirector.swift, Tuning.swift
+      Input.swift, PadInput.swift (two sticks; shoulders are Shockwave)
+      RedoubtMode.swift         RedoubtRun as a ModeRun; RedoubtSession and RedoubtFrontEnd
+      Events.swift, Pilot.swift (DEBUG bots), HapticCue+Events.swift
+      Theme.swift               RedoubtTheme protocol: palette and a shape per role
+      Themes/CalderDome.swift   the theme
+    Tests/GameCoreTests/, Tests/RidgelineCoreTests/, Tests/RedoubtCoreTests/
   Rimwatch/                     app target. Shell and modes since step 9 of the expansion.
     AppDelegate.swift, SceneDelegate.swift, Info.plist, Assets.xcassets
     Shell/                      shared by every mode; imports nothing of any one mode
@@ -545,6 +566,9 @@ rimwatch/
     Modes/Ridgeline/            RidgelineMode (+Backdrop, +Events, +Sync), TerrainNode,
                                 ScannerNode, HUDNode, EffectsLayer, CalloutLayer, TouchControls,
                                 RidgelineGlyphs
+    Modes/Redoubt/              RedoubtMode (+Arena, +Sync, +Events), RedoubtHUD,
+                                RedoubtTouchControls, RedoubtEffects, RedoubtCallouts,
+                                RedoubtGlyphs
   PLAN.md                       this plan plus a progress checklist, kept current as work lands
   CLAUDE.md                     loaded automatically each session: points at PLAN.md, and notes
                                 to build via the Xcode MCP tools and test GameCore with `swift test`
@@ -754,3 +778,72 @@ Things to judge when you play:
 
 Harness: `cd Tools/Harness && swift build -c release -Xswiftc -DDEBUG &&
 .build/release/Harness redoubt 80 20` (seeds, minutes cap).
+
+### Decisions made while putting it on screen (13b)
+
+The builder's calls for the look and the layout. The shapes and colours are in
+`GameCore/Sources/RedoubtCore/Themes/CalderDome.swift`; the layout is in
+`Rimwatch/Modes/Redoubt/`. All are first versions for you to judge on the phone.
+
+- **Orb:** a cyan ring (the Watch's cyan) round a pale seat, with a pointed emitter at the front
+  that shows where it aims and two hover struts. A faint wide halo helps find it in a crowd.
+- **Colonist:** Ridgeline's mint waving figure, seen from above.
+- **Enemies, one colour each:** Skitter, a small orange four-legged diamond; Gleaner, a yellow
+  open claw; Spitter, a violet hexagonal turret with a barrel; Burrow, a dark-orange ragged hole
+  with rings stepping down (the Skitters' colour family, since it spawns them); Thresher, a big
+  crimson hull with a toothed blade; Husk, Ridgeline's magenta spinning star.
+- **Shots:** the orb's are pale cyan streaks; the Spitter's is a hot-pink diamond.
+- **Airlock:** mint posts with chevrons pointing out and a faint arc marking the delivery reach;
+  a steel bar across it when shut. It pulses while colonists are following you.
+- **Arrivals:** four corner brackets in the newcomer's colour that close in over the warning
+  second.
+- **Floor:** steel-blue walls, faint floor crosses, a ring marking the centre where you return.
+- **HUD:** one thin strip above the arena. Score and wave left of the crease; lives, Shockwave
+  charges and colonists left to the right, ending before the pause button.
+- **Arena size:** as large as fits below the strip, spanning the crease: about 0.97 pt per unit
+  on the Duo's inner display.
+- **Touch controls:** a move stick and an aim stick resting low in the two bottom corners, each
+  floating to wherever a thumb lands in its half. The Shockwave button sits above the aim stick
+  with its three charges shown over it. Stick side in Options swaps the sticks and the button
+  goes with the aim stick. With a controller connected they are hidden.
+- **Thumbs over the floor:** the arena was kept full size rather than shrunk to leave gutters
+  for the thumbs, which would have cost about 20% of the size of everything. The price is that
+  thumbs sometimes cover a colonist or an airlock in a bottom corner.
+- **State you can see:** a Spitter turns white-hot while it winds up; a Husk grows and flickers
+  as it wakes; a Burrow's hole shrinks as it is shot; a seized colonist flashes red on a red
+  tether to its Gleaner; the line is joined to the orb by a mint cord; the orb strobes inside a
+  ring while it cannot be hit.
+- **Power cut:** the floor and the enemies go dark except a pool of light about 70 units round
+  the orb, fading out by 160. Shots, colonists, the airlock and arrival markers stay visible;
+  enemies in the dark show very faintly.
+- **Music mood:** the power cut uses the shared `blackout` mood.
+- **A fourth bot, `shooter`** (DEBUG only): fights like the competent bot but never rescues, so
+  it reaches the power cut (seed 7, wave 8). It exists to show and test the power cut.
+- **The colonist count** in the HUD turns red and blinks only for danger: the power is out or
+  about to fail, or every colonist still on the floor is in a Gleaner's grip. A zero after
+  everyone was delivered stays calm.
+
+Things to judge on the phone (first versions, none measured by a person yet):
+
+- Whether ten shots a second reads as a constant stream. In a still it is a row of dashes.
+- The orb is about 10 pt across on the Duo. The halo helps; judge it in a real crowd.
+- The thumbs cover the lower corners, and sometimes a colonist or a low airlock there.
+- A dense clump of Skitters merges into an orange mass, and the Burrow's rust is close to the
+  Skitter's orange (the shapes differ).
+- The colonist reads as a small "u" at game size, less clearly a person than Ridgeline's.
+- From wave 9 a wave opens with up to 90 arrival markers at once, which is busy.
+- The power cut's darkness, the size of the pool of light, and whether enemies in the dark
+  should show at all (they show very faintly now).
+- The red wash when the orb is lost is strong, and the wave banner sits over the left half of
+  the floor for about two seconds.
+- Rings and bursts near a wall, the airlock's posts and the orb's halo can draw slightly past
+  the wall. To be tidied in the polish stage.
+
+A fault found here that Ridgeline shares, left alone until you decide: a sprite given a new
+texture while it is scaled comes out the wrong size. Redoubt now guards against it in one
+place (`RedoubtSprites.dress`). In Ridgeline it affects reused particles all the time
+(`Modes/Ridgeline/EffectsLayer.swift`, sparks and shards of slightly wrong sizes), an enemy
+whose tint flickers during a hit pulse for about a tenth of a second
+(`RidgelineMode+Sync.swift`), and a held touch button on relayout. Ridgeline's look as you
+approved it includes this, so fixing it changes the particle sizes you have seen; it is not
+fixed.
