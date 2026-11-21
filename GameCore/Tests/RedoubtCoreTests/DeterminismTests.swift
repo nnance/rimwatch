@@ -39,22 +39,23 @@ import GameCore
         #expect(c.hash != a.hash)
     }
 
-    /// Three minutes of the competent pilot on seed 1: waves 1 to 6, five of the six roles,
+    /// Three minutes of the competent pilot on seed 1: waves 1 to 7, five of the six roles,
     /// top-up groups, deliveries, Shockwaves, an extra life and the airlock moving. Debug and
     /// Release builds give the same values. If a deliberate change to the rules, the
     /// tuning, the wave makeup or the pilot breaks it, capture the new values from the printed
-    /// line and say so in the commit. Last captured in 13d, when top-up groups began landing
-    /// ahead of an orb running along a wall (this run delivers along the walls).
+    /// line and say so in the commit. Last captured in 13d for the early-game ease (crowds from
+    /// entry walls, a gentler early crowd, slower debut Spitters), after an earlier 13d capture
+    /// for the wall-run rule.
     @Test func aScriptedRunReplaysExactly() throws {
         let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180)
         print("REDOUBT GOLDEN hash \(hash) events \(events) score \(r.score) wave \(r.wave) saved \(r.colonistsSaved) delivered \(r.colonistsDelivered) lives \(r.orb.lives) tick \(r.tick)")
-        #expect(hash == 17_471_345_773_872_641_339)
-        #expect(events == 6775)
-        #expect(r.score == 95_200)
-        #expect(r.wave == 6)
-        #expect(r.colonistsSaved == 32)
-        #expect(r.colonistsDelivered == 32)
-        #expect(r.orb.lives == 4)
+        #expect(hash == 16_656_838_565_572_388_220)
+        #expect(events == 7053)
+        #expect(r.score == 107_250)
+        #expect(r.wave == 7)
+        #expect(r.colonistsSaved == 42)
+        #expect(r.colonistsDelivered == 39)
+        #expect(r.orb.lives == 3)
         #expect(r.tick == 21_600)
     }
 }

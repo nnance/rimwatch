@@ -101,6 +101,12 @@ public struct RedoubtTuning: Sendable {
     public var wallRunSpeed = 100.0
     public var wallRunAlong = 0.9
     public var wallRunReach = 400.0...520.0
+    /// While a wave has entry walls (`RedoubtWaves.entrySides`), its opening crowd lands within
+    /// this distance of one of them. Added in 13d.
+    public var entryBandDepth = 180.0
+    /// Choosing the entry walls: each wall scores its distance from the orb plus a random amount
+    /// up to this, and the highest win, so the far walls are favoured but not always chosen.
+    public var entrySideJitter = 300.0
 
     // Skitter: the flood.
     public var skitterSpeed = 50.0

@@ -38,13 +38,14 @@ import GameCore
     @Test func theFloorIsFullFromTheFirstSecond() throws {
         // The opening crowd is telegraphed in the break's last second...
         var r = RedoubtRun(seed: 3)
+        let crowd = r.director.floorCrowd(forWave: 1)
         let before = run(&r, steps: seconds(3)) { $0.isWaveStarted }
-        #expect(count(before, "arrivalTelegraphed") == 20)
+        #expect(count(before, "arrivalTelegraphed") == crowd)
         #expect(count(before, "enemyArrived") <= 1)
-        // ...and lands as the wave begins, all twenty within the first second.
+        // ...and lands as the wave begins, all of it within the first second.
         let events = run(&r, steps: seconds(0.9))
-        #expect(count(events, "enemyArrived") + count(before, "enemyArrived") == 20)
-        #expect(r.enemies.count == 20)
+        #expect(count(events, "enemyArrived") + count(before, "enemyArrived") == crowd)
+        #expect(r.enemies.count == crowd)
         #expect(r.enemies.allSatisfy { $0.role == .skitter })
     }
 
@@ -116,6 +117,69 @@ import GameCore
         let elsewhere = cornered.compactMap { if case .arrivalTelegraphed(_, .skitter, let at) = $0 { at } else { nil } }
         #expect(!elsewhere.isEmpty)
         #expect(elsewhere.allSatisfy { distance($0, r.orb.pos) >= r.tuning.safeDistance })
+    }
+
+    @Test func earlyWavesComeInFromOneWallAndLaterOnesFromAnywhere() throws {
+        let waves = RedoubtWaves()
+        #expect((1...4).allSatisfy { waves.entrySides(forWave: $0) == 1 })
+        #expect(waves.entrySides(forWave: 5) == 2)
+        #expect(waves.entrySides(forWave: 7) == 3)
+        #expect((8...30).allSatisfy { waves.entrySides(forWave: $0) == 4 })
+
+        // Wave 1: the whole opening crowd lands in a band along one wall, the one the run chose,
+        // clear of the orb, leaving the rest of the floor to back into.
+        for seed: UInt64 in [3, 8, 21] {
+            var r = RedoubtRun(seed: seed)
+            let events = run(&r, steps: seconds(3)) { $0.isWaveStarted }
+            let wall = try #require(r.entrySides.first)
+            #expect(r.entrySides.count == 1)
+            let spots = events.compactMap { if case .arrivalTelegraphed(_, _, let at) = $0 { at } else { nil } }
+            #expect(spots.count == waves.floorCrowd(forWave: 1))
+            for spot in spots {
+                let gap = switch wall {
+                case .north: r.tuning.arenaHeight - spot.y
+                case .south: spot.y
+                case .east: r.tuning.arenaWidth - spot.x
+                case .west: spot.x
+                }
+                #expect(gap <= r.tuning.entryBandDepth + 1e-9, "\(spot) not along \(wall)")
+                #expect(distance(spot, r.orb.pos) >= r.tuning.safeDistance)
+            }
+            // Top-up groups come from the same wall.
+            run(&r, steps: seconds(1))
+            r.enemies.removeAll()
+            r.orb.invulnerableTimer = 1e9
+            let group = run(&r, steps: 1).compactMap { if case .arrivalTelegraphed(_, _, let at) = $0 { at } else { nil } }
+            #expect(!group.isEmpty)
+            for spot in group {
+                let gap = switch wall {
+                case .north: r.tuning.arenaHeight - spot.y
+                case .south: spot.y
+                case .east: r.tuning.arenaWidth - spot.x
+                case .west: spot.x
+                }
+                #expect(gap <= 160, "\(spot) not along \(wall)")
+            }
+        }
+
+        // From wave 8 the crowd lands anywhere, as it always did.
+        var late = RedoubtRun(seed: 3)
+        late.wave = 7
+        late.prepareWave(startingIn: 1)
+        #expect(late.entrySides.isEmpty)
+    }
+
+    @Test func spittersFireSlowlyInTheirFirstWaves() throws {
+        let waves = RedoubtWaves()
+        let tuning = RedoubtTuning()
+        // Twice the interval in their debut wave (3), easing back to normal by wave 7.
+        #expect(abs(waves.spitterFireScale(forWave: 3, tuning: tuning) - 2.0) < 1e-9)
+        let scales = (3...7).map { waves.spitterFireScale(forWave: $0, tuning: tuning) }
+        #expect(zip(scales, scales.dropFirst()).allSatisfy { $0 > $1 })
+        var flat = RedoubtWaves()
+        flat.spitterDebutSlowdown = 1
+        #expect(abs(waves.spitterFireScale(forWave: 7, tuning: tuning) - flat.spitterFireScale(forWave: 7, tuning: tuning)) < 1e-9)
+        #expect(abs(flat.spitterFireScale(forWave: 3, tuning: tuning) - 1) < 1e-9)
     }
 
     @Test func theWallRunRuleCanBeTurnedOff() throws {
@@ -268,10 +332,21 @@ import GameCore
 
     @Test func colonistsAndTheCrowdGrowWaveByWave() throws {
         let waves = RedoubtWaves()
-        #expect(waves.floorCrowd(forWave: 1) == 20)
-        #expect(waves.floorCrowd(forWave: 2) == 28)
+        // A gentler opening (13d), the full 20 + 8 a wave from wave 8.
+        #expect(waves.floorCrowd(forWave: 1) == 18)
+        #expect(waves.floorCrowd(forWave: 2) == 26)
+        #expect(waves.floorCrowd(forWave: 8) == 76)
         #expect(waves.floorCrowd(forWave: 9) == 84)
         #expect(waves.floorCrowd(forWave: 30) == 90)
+        #expect(waves.quota(forWave: 1) == 81)
+        #expect(waves.quota(forWave: 8) == 265)
+        #expect((1...29).allSatisfy { waves.floorCrowd(forWave: $0 + 1) >= waves.floorCrowd(forWave: $0) })
+        // Undone, the numbers are the original ones.
+        var flat = RedoubtWaves()
+        flat.crowdEaseStart = 1
+        flat.crowdEaseGrowth = 0
+        #expect(flat.floorCrowd(forWave: 1) == 20 && flat.floorCrowd(forWave: 2) == 28)
+        #expect(flat.quota(forWave: 1) == 90)
         #expect(waves.colonists(forWave: 1) == 6)
         #expect((1...40).allSatisfy { (6...10).contains(waves.colonists(forWave: $0)) })
         #expect(waves.colonists(forWave: 40) == 10)

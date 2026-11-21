@@ -1,12 +1,13 @@
 // Needs `RedoubtPilot`, which only exists in debug builds.
 #if DEBUG
+import Foundation
 import Testing
 import GameCore
 @testable import RedoubtCore
 
 /// Coarse guards on Redoubt's first difficulty curve, measured with the scripted pilots in
 /// `RedoubtPilot` over a fixed set of seeds. They pin the shape (an idle orb overrun in the first
-/// wave, a novice run ending in the early waves, a competent run reaching waves 8 to 12 and
+/// wave, a novice run reaching waves 5 or 6, a competent run reaching waves 8 to 12 and
 /// keeping its colonists early on, circling the wall doing far worse than fighting), not exact
 /// numbers. The full measurement, over more seeds, is
 /// `Tools/Harness` with the `redoubt` argument.
@@ -22,6 +23,24 @@ import GameCore
         var deathsByWave: [Int: Int] = [:]
         var colonistsByWave: [Int: Int] = [:]
         var savedByWave: [Int: Int] = [:]
+        /// Wave 1, while the orb is alive: steps, and the sum over them of how many of eight
+        /// 45-degree sectors round the orb hold an enemy within 150 units (how surrounded it is).
+        var waveOneSteps = 0
+        var waveOneSectors = 0
+    }
+
+    /// How many of eight 45-degree sectors round the orb hold an enemy within 150 units (edge to
+    /// centre), as the harness measures "surrounded".
+    static func blockedSectors(_ r: RedoubtRun) -> Int {
+        var sectors = [Bool](repeating: false, count: 8)
+        for enemy in r.enemies {
+            let offset = enemy.pos - r.orb.pos
+            guard offset.length - enemy.radius < 150 else { continue }
+            var angle = atan2(offset.y, offset.x)
+            if angle < 0 { angle += 2 * .pi }
+            sectors[min(Int(angle / (.pi / 4)), 7)] = true
+        }
+        return sectors.count { $0 }
     }
 
     private static func play(_ skill: RedoubtPilot.Skill, seed: UInt64, maxSeconds: Double) -> Run {
@@ -43,6 +62,10 @@ import GameCore
                 default:
                     break
                 }
+            }
+            if r.wave == 1, r.phase == .fighting, r.orb.isAlive {
+                result.waveOneSteps += 1
+                result.waveOneSectors += blockedSectors(r)
             }
             if r.isGameOver { break }
         }
@@ -66,11 +89,25 @@ import GameCore
         #expect(runs.allSatisfy { ($0.firstDeath ?? 99) >= 4 })
     }
 
-    @Test func aNoviceRunEndsInTheEarlyWaves() throws {
-        let runs = Self.seeds.map { Self.play(.novice, seed: $0, maxSeconds: 300) }
+    /// The novice pilot stands in for a first-time player. Since the 13d early-game ease (entry
+    /// walls, a gentler crowd and slower debut Spitters) it usually reaches wave 5 or 6, the
+    /// owner's target for a first game (before it, wave 3, which matched the owner's own first
+    /// games: swarmed in waves 2 and 3).
+    @Test func aNoviceRunReachesWaveFiveOrSix() throws {
+        let runs = Self.seeds.map { Self.play(.novice, seed: $0, maxSeconds: 400) }
         let waves = runs.map { Double($0.wave) }
-        #expect((3...5).contains(Self.median(waves)))
-        #expect(runs.allSatisfy { $0.wave >= 2 && $0.wave <= 7 })
+        #expect((5...6).contains(Self.median(waves)), "\(waves)")
+        #expect(runs.allSatisfy { $0.wave >= 3 && $0.wave <= 8 }, "\(waves)")
+        // Waves 1 and 2 are nearly always cleared without loss: well under one life between them
+        // on average (about 0.2 over 80 seeds; it was about 1.05).
+        let early = runs.reduce(0) { $0 + ($1.deathsByWave[1] ?? 0) + ($1.deathsByWave[2] ?? 0) }
+        #expect(Double(early) / Double(runs.count) <= 0.5, "\(early) lives lost in waves 1 and 2")
+        // Not surrounded in wave 1: on average under one of eight directions round the orb holds
+        // an enemy within 150 units (about 0.7; it was about 1.3 when the crowd landed all over
+        // the floor).
+        let steps = runs.reduce(0) { $0 + $1.waveOneSteps }
+        let sectors = Double(runs.reduce(0) { $0 + $1.waveOneSectors }) / Double(max(steps, 1))
+        #expect(sectors <= 1.0, "wave 1: \(sectors) of 8 directions blocked on average")
     }
 
     @Test func aCompetentRunReachesTheMiddleWavesAndSavesItsColonistsEarly() throws {
@@ -100,13 +137,15 @@ import GameCore
     @Test func circlingTheWallIsNoSaferThanFighting() throws {
         let circlers = Self.seeds.map { Self.play(.wallCircler, seed: $0, maxSeconds: 300) }
         let waves = circlers.map { Double($0.wave) }
-        // Every game over inside five minutes (the competent pilot lasts about six).
+        // Every game over inside five minutes (the competent pilot lasts about six). Since the
+        // early-game ease brings the crowd in from the walls, it does worse than the novice
+        // (median wave 4, about 90 seconds, over 80 seeds).
         #expect(circlers.allSatisfy { $0.isOver }, "\(circlers.map { Int($0.survival) })")
-        #expect((4...6).contains(Self.median(waves)), "\(waves)")
-        #expect(circlers.allSatisfy { $0.wave <= 7 }, "\(waves)")
-        #expect(Self.median(circlers.map(\.survival)) <= 150)
-        // It scores far less than playing properly (about 230,000 for the competent pilot).
-        #expect(Self.median(circlers.map { Double($0.score) }) <= 60_000)
+        #expect((3...5).contains(Self.median(waves)), "\(waves)")
+        #expect(circlers.allSatisfy { $0.wave <= 6 }, "\(waves)")
+        #expect(Self.median(circlers.map(\.survival)) <= 130)
+        // It scores far less than playing properly (about 220,000 for the competent pilot).
+        #expect(Self.median(circlers.map { Double($0.score) }) <= 50_000)
 
         let seeds = Array(Self.seeds.prefix(6))
         let reversers = seeds.map { Self.play(.reversingCircler, seed: $0, maxSeconds: 420) }

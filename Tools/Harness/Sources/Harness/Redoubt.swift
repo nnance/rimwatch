@@ -5,7 +5,9 @@ import RedoubtCore
 // `Harness redoubt [seeds] [maxMinutes] [skill...]`: runs Redoubt's scripted pilots over many
 // seeds and prints difficulty statistics. Skills: idle, novice, competent, shooter, wallCircler, innerCircler,
 // reversingCircler (default idle, novice, competent and wallCircler).
-// Environment overrides for sweeps, e.g. SKSPEED=55 SKGROW=0.05 CROWD... (see `redoubtTuning`).
+// Environment overrides for sweeps, e.g. SKSPEED=55 SKGROW=0.05 (see `redoubtTuning`), and for
+// the early-game ease: SIDES=4 EASE0=1 EASESTEP=0 SPITEASE=1 together restore the waves as they
+// were before it (see `redoubtWaves`).
 
 private func redoubtTuning() -> RedoubtTuning {
     var t = RedoubtTuning()
@@ -26,7 +28,21 @@ private func redoubtTuning() -> RedoubtTuning {
     if let v = env["SPITGROW"].flatMap(Double.init) { t.spitterFireGrowth = v }
     if let v = env["HUSKACC"].flatMap(Double.init) { t.huskAcceleration = v }
     if let v = env["WALLRUN"].flatMap(Double.init) { t.wallRunGap = v }
+    if let v = env["BAND"].flatMap(Double.init) { t.entryBandDepth = v }
+    if let v = env["JITTER"].flatMap(Double.init) { t.entrySideJitter = v }
+    if let v = env["LIVES"].flatMap(Int.init) { t.extraLifeEvery = v }
     return t
+}
+
+private func redoubtWaves() -> RedoubtWaves {
+    var w = RedoubtWaves()
+    let env = ProcessInfo.processInfo.environment
+    if let v = env["SIDES"] { w.entrySides = v.split(separator: ",").compactMap { Int($0) } }
+    if let v = env["EASE0"].flatMap(Double.init) { w.crowdEaseStart = v }
+    if let v = env["EASESTEP"].flatMap(Double.init) { w.crowdEaseGrowth = v }
+    if let v = env["SPITEASE"].flatMap(Double.init) { w.spitterDebutSlowdown = v }
+    if let v = env["SPITWAVES"].flatMap(Double.init) { w.spitterEaseWaves = v }
+    return w
 }
 
 private struct RedoubtStats {
@@ -63,6 +79,44 @@ private struct RedoubtStats {
     var waveSeconds: [Int: Double] = [:]
     /// Distance from the orb (alive) of every enemy as it lands from its telegraph.
     var landings: [Double] = []
+    /// Pressure on the orb while it is alive and fighting, per wave: histograms of the enemies
+    /// within 120 and within 200 units, and of how many of eight 45-degree sectors round it hold
+    /// an enemy within 150 (how surrounded it is). Also all enemies on the floor (sum, peak).
+    var near120: [Int: [Int]] = [:]
+    var near200: [Int: [Int]] = [:]
+    var blocked: [Int: [Int]] = [:]
+    var floorSum: [Int: Int] = [:]
+    var floorPeak: [Int: Int] = [:]
+    /// Each loss of the orb: wave, enemies within 150 just before, sectors blocked, seconds since
+    /// an enemy last landed within 250 of it.
+    var deaths: [(wave: Int, near: Int, blocked: Int, sinceLanding: Double, cause: String)] = []
+    var lastNearLanding = -1e9
+}
+
+/// Enemies within 120 and 200 of the orb, and the sectors of eight holding one within 150.
+private func redoubtPressure(_ run: RedoubtRun) -> (Int, Int, Int) {
+    var n120 = 0, n200 = 0
+    var sectors = [Bool](repeating: false, count: 8)
+    let o = run.orb.pos
+    for e in run.enemies {
+        let d = e.pos - o
+        let r = d.length - e.radius
+        if r < 200 { n200 += 1 }
+        if r < 120 { n120 += 1 }
+        if r < 150 {
+            var a = atan2(d.y, d.x)
+            if a < 0 { a += 2 * .pi }
+            sectors[min(Int(a / (.pi / 4)), 7)] = true
+        }
+    }
+    return (n120, n200, sectors.count { $0 })
+}
+
+private func bump(_ h: inout [Int: [Int]], _ w: Int, _ v: Int) {
+    var a = h[w] ?? []
+    if a.count <= v { a += [Int](repeating: 0, count: v + 1 - a.count) }
+    a[v] += 1
+    h[w] = a
 }
 
 /// What most likely touched the orb: the closest enemy shot or enemy before the step.
@@ -80,7 +134,7 @@ private func redoubtCause(_ run: RedoubtRun) -> String {
 }
 
 private func playRedoubt(skill: RedoubtPilot.Skill, seed: UInt64, maxMinutes: Double, tuning: RedoubtTuning) -> RedoubtStats {
-    var run = RedoubtRun(seed: seed, tuning: tuning)
+    var run = RedoubtRun(seed: seed, tuning: tuning, waves: redoubtWaves())
     var pilot = RedoubtPilot(skill: skill, seed: seed)
     var stats = RedoubtStats()
     let maxSteps = Int(maxMinutes * 60 * 120)
@@ -102,11 +156,22 @@ private func playRedoubt(skill: RedoubtPilot.Skill, seed: UInt64, maxMinutes: Do
             stats.shootableSum[w, default: 0] += shootable
             if shootable < 5 { stats.sparseSteps[w, default: 0] += 1 }
             if shootable == 0 { stats.emptySteps[w, default: 0] += 1 }
+            stats.floorSum[w, default: 0] += run.enemies.count
+            stats.floorPeak[w] = max(stats.floorPeak[w] ?? 0, run.enemies.count)
+            if run.orb.isAlive {
+                let (a, b, c) = redoubtPressure(run)
+                bump(&stats.near120, w, a)
+                bump(&stats.near200, w, b)
+                bump(&stats.blocked, w, c)
+            }
         }
         for event in events {
             switch event {
             case .enemyArrived(_, _, let at):
-                if run.orb.isAlive { stats.landings.append((at - run.orb.pos).length) }
+                if run.orb.isAlive {
+                    stats.landings.append((at - run.orb.pos).length)
+                    if (at - run.orb.pos).length < 250 { stats.lastNearLanding = t }
+                }
             case .waveStarted(let w, let colonists):
                 stats.waveStarts[w] = t
                 stats.colonistsByWave[w] = colonists
@@ -118,6 +183,9 @@ private func playRedoubt(skill: RedoubtPilot.Skill, seed: UInt64, maxMinutes: Do
             case .orbDestroyed:
                 stats.deathsByWave[run.wave, default: 0] += 1
                 stats.causes[redoubtCause(before), default: 0] += 1
+                let (_, _, sectors) = redoubtPressure(before)
+                let near = before.enemies.count { ($0.pos - before.orb.pos).length - $0.radius < 150 }
+                stats.deaths.append((run.wave, near, sectors, t - stats.lastNearLanding, redoubtCause(before)))
                 if stats.firstDeath == nil { stats.firstDeath = t }
             case .colonistTaken(_, let by, _, _):
                 stats.taken[by.rawValue, default: 0] += 1
@@ -240,6 +308,53 @@ func runRedoubt(_ args: [String]) {
         print(empty)
         print(mean)
         print(length)
+        // Pressure on the orb, per wave: mean and 90th percentile.
+        func merged(_ key: KeyPath<RedoubtStats, [Int: [Int]]>, _ w: Int) -> [Int] {
+            var h: [Int] = []
+            for g in all {
+                guard let a = g[keyPath: key][w] else { continue }
+                if h.count < a.count { h += [Int](repeating: 0, count: a.count - h.count) }
+                for (i, v) in a.enumerated() { h[i] += v }
+            }
+            return h
+        }
+        func describe(_ h: [Int]) -> String {
+            let n = h.reduce(0, +)
+            guard n > 0 else { return "-" }
+            let mean = Double(h.enumerated().reduce(0) { $0 + $1.offset * $1.element }) / Double(n)
+            var acc = 0, p90 = 0
+            for (i, v) in h.enumerated() { acc += v; if Double(acc) >= 0.9 * Double(n) { p90 = i; break } }
+            return String(format: "%.1f/%d", mean, p90)
+        }
+        let lastWave = max(min(maxWave, 16), 1)
+        var p120 = "near120 mean/p90   ", p200 = "near200 mean/p90   ", pBlk = "sectors8 mean/p90  "
+        var fl = "floor all mean/pk  "
+        for w in 1...lastWave {
+            let steps = all.reduce(0) { $0 + ($1.fightSteps[w] ?? 0) }
+            guard steps > 0 else { continue }
+            p120 += " w\(w):" + describe(merged(\.near120, w))
+            p200 += " w\(w):" + describe(merged(\.near200, w))
+            pBlk += " w\(w):" + describe(merged(\.blocked, w))
+            let sum = all.reduce(0) { $0 + ($1.floorSum[w] ?? 0) }
+            let peak = all.map { $0.floorPeak[w] ?? 0 }.max() ?? 0
+            fl += String(format: " w%d:%.0f/%d", w, Double(sum) / Double(steps), peak)
+        }
+        print(p120)
+        print(p200)
+        print(pBlk)
+        print(fl)
+        var dl = "deaths: near150/sectors/since-landing (mean, median s) by wave"
+        for w in 1...min(lastWave, 8) {
+            let d = all.flatMap(\.deaths).filter { $0.wave == w }
+            guard !d.isEmpty else { continue }
+            let since = d.map(\.sinceLanding).sorted()
+            var causes: [String: Int] = [:]
+            for x in d { causes[x.cause, default: 0] += 1 }
+            dl += String(format: " w%d[n%d %.1f %.1f %.1f ", w, d.count, Double(d.reduce(0) { $0 + $1.near }) / Double(d.count),
+                         Double(d.reduce(0) { $0 + $1.blocked }) / Double(d.count), since[since.count / 2])
+                + causes.sorted { $0.value > $1.value }.map { "\($0.key.prefix(4)):\($0.value)" }.joined(separator: ",") + "]"
+        }
+        print(dl)
         let totalSteps = all.reduce(0) { $0 + $1.steps }
         let totalTime = all.reduce(0.0) { $0 + $1.stepSeconds }
         print(String(format: "step time          %.2f us mean over %d steps", totalTime / Double(max(totalSteps, 1)) * 1e6, totalSteps))
