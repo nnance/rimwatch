@@ -29,9 +29,9 @@ Defender or Robotron.
 
 ## Status
 
-Ridgeline is finished and was checked in the simulator. Redoubt is playable from the title screen
-but still being built: it is silent for now (its sounds, music and haptics come next), and its
-effects and tuning are first versions. The game has not yet been run on a real
+Ridgeline is finished and was checked in the simulator. Redoubt is playable from the title screen,
+with its own sounds, music and haptics, but still being built: its effects and tuning are first
+versions, and its sound has been measured, not yet listened to on a phone. The game has not yet been run on a real
 iPhone Duo, so the open inner display (layout around the crease and camera hole), play feel,
 speaker sound, haptics and physical controllers are untested. `PLAN.md` lists what is left and the
 plan for the other modes.
@@ -101,6 +101,15 @@ colonists still to save.
   light round the orb, until you deliver a colonist.
 - **Structure:** a wave ends when the floor is clear; colonists still safe score a bonus. Three
   lives, an extra life every 60,000 points, and its own top-10 table.
+- **Sound:** its own patches and music on the same synthesiser as Ridgeline. The stream of fire is
+  a soft, short pip in three pitches; a crowd dying is a light rattle, one sound per frame however
+  many die, with the bigger kills each heavier in proportion to their worth. By ear you can follow
+  a colonist being seized (a shrill alarm), freed, lost or crushed, a Husk forming, a Spitter
+  winding up, shots clanking off a Thresher, a Burrow cracking as it is shot, groups arriving, the
+  line growing, and a delivery whose fanfare grows with the line. The Shockwave is the loudest
+  sound in the game. The music is tense and driving while a wave is fought, drops its pulse in
+  the short break between waves and sinks to a drone in a power cut. Haptics are kept for what
+  matters: no buzz per shot or per Skitter.
 
 ## Redoubt controls
 
@@ -185,12 +194,12 @@ swift run --package-path Tools/Icon Icon Rimwatch/Assets.xcassets/AppIcon.appico
 
 | Path | What it holds |
 |---|---|
-| `GameCore/` | The game logic as a Swift package, with no UIKit or SpriteKit, and its tests. Its `RidgelineCore` target is the Ridgeline mode: world, simulation, enemies, waves, scoring and the theme, plugged into the shared session in `RidgelineMode.swift`. Its `RedoubtCore` target is Redoubt's: the run (`RedoubtRun`), enemies, colonist line, waves, bots and its theme (`Theme.swift`, `Themes/CalderDome.swift`). Its `GameCore` target is what any game mode can share: maths, shapes, the emblem, sound rendering and music, menus, options, saved settings (one high-score table per mode and the mode played last), gamepad logic, the list of modes the title offers (`ModeCatalog`), and in `Session/` the title, pause, countdown and screen flow around a run (`ModeSession`, `ModeFrontEnd`), written against the `ModeRun` protocol each mode's simulation conforms to. The game logic knows what each entity does, never how it looks; appearance and sound come from a `Theme`. |
+| `GameCore/` | The game logic as a Swift package, with no UIKit or SpriteKit, and its tests. Its `RidgelineCore` target is the Ridgeline mode: world, simulation, enemies, waves, scoring and the theme, plugged into the shared session in `RidgelineMode.swift`. Its `RedoubtCore` target is Redoubt's: the run (`RedoubtRun`), enemies, colonist line, waves, bots, its theme (`Theme.swift`, `Themes/CalderDome.swift`, with sounds and music in `Themes/CalderDomeSounds.swift`), and in `Audio/` the rules for which events are voiced (`RedoubtSoundDirector`) and the music mood (`RedoubtMoodDirector`). Its `GameCore` target is what any game mode can share: maths, shapes, the emblem, sound rendering and music, menus, options, saved settings (one high-score table per mode and the mode played last), gamepad logic, the list of modes the title offers (`ModeCatalog`), and in `Session/` the title, pause, countdown and screen flow around a run (`ModeSession`, `ModeFrontEnd`), written against the `ModeRun` protocol each mode's simulation conforms to. The game logic knows what each entity does, never how it looks; appearance and sound come from a `Theme`. |
 | `Rimwatch/` | The app. |
 | `Rimwatch/Shell/` | The parts of the app any mode shares, with no Ridgeline in them. `ShellScene` is the one SpriteKit scene: it owns the devices every mode shares (`ShellDevices`: the synth, the game controller, haptics) and loads one mode at a time, swapping modes when the title asks. `ModeHost` runs the loaded mode inside it (screen flow, menus, pause, countdown, sound, settings, touches) through the `GameMode` protocol in `GameMode.swift`. Also fold handling, the glow renderer, the emblem, and the menu screens and play overlays, whose look comes from a `ShellStyle`. |
 | `Rimwatch/Modes/` | `ModeRegistry.swift` lists the modes and is the only shell-level file that names one. |
 | `Rimwatch/Modes/Ridgeline/` | Ridgeline as a `GameMode`: `RidgelineMode.swift` (layout, screens, input, sound) with its backdrop, events and per-entity sync in `RidgelineMode+Backdrop.swift`, `+Events.swift` and `+Sync.swift`, plus the terrain, scanner, HUD, particle effects, callouts, touch controls and entity glyphs. |
-| `Rimwatch/Modes/Redoubt/` | Redoubt as a `GameMode`: `RedoubtMode.swift` (layout, screens, input, sound hooks) with the floor, airlock, darkness and sprite pools in `+Arena.swift`, the per-frame sync in `+Sync.swift` and events in `+Events.swift`, plus its HUD, twin-stick touch controls, effects, callouts and glyphs. |
+| `Rimwatch/Modes/Redoubt/` | Redoubt as a `GameMode`: `RedoubtMode.swift` (layout, screens, input, sound, music and haptics) with the floor, airlock, darkness and sprite pools in `+Arena.swift`, the per-frame sync in `+Sync.swift` and events in `+Events.swift`, plus its HUD, twin-stick touch controls, effects, callouts and glyphs. |
 | `Tools/Harness/` | The bot harness used for difficulty tuning. |
 | `Tools/Icon/` | The script that draws the app icon from the emblem in `GameCore`. |
 | `PLAN.md` | The design, the build history and what is left. |
@@ -211,7 +220,7 @@ These exist in Debug builds only.
 | `-resetSettings` | Clears saved options, the remembered mode and every mode's high scores at launch. |
 | `-logFeedback` | Logs every routed sound and haptic. |
 | `-realPads` | Uses real controllers in the simulator, which otherwise reports a phantom one. |
-| `-dumpAudio <dir>` | Writes every sound and music mood to WAV files. |
+| `-dumpAudio <dir>` | Writes every sound and music mood of the mode loaded at launch to WAV files (pick it with `-mode`). |
 | `-seed <n>` | Starts the session from seed `n` instead of the clock, so the runs are the same every launch. |
 | `-fixedFrame` | Counts every frame after the first as exactly 1/60 s, whatever the real time. With `-seed` and `-autopilot`, runs play out the same way every time; the `[Rimwatch run]` lines log each run's seed and result. |
 | `-mode <id>` | Loads mode `<id>` at launch (`ridgeline` or `redoubt`) instead of the one played last. |

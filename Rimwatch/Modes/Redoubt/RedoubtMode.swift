@@ -22,7 +22,7 @@ final class RedoubtMode: GameMode {
 
     static let descriptor = ModeDescriptor.redoubt
     static var shellStyle: ShellStyle { CalderDome().shellStyle }
-    /// Silent until step 13c fills in the theme's sounds and music; the routing is already live.
+    /// The Calder Dome's sound patches (`CalderDomeSounds.swift` in RedoubtCore) and music.
     static var audio: ModeAudio {
         let theme = CalderDome()
         return ModeAudio(sounds: theme.allSounds, music: theme.music)
@@ -107,6 +107,9 @@ final class RedoubtMode: GameMode {
     var overflowedPools: Set<String> = []
     #endif
     var decor: [(sprite: SKSpriteNode, phase: Double, speed: Double, radius: Double)] = []
+    /// Which of a frame's events are voiced, and in which version.
+    var soundDirector = RedoubtSoundDirector()
+    var moodDirector = RedoubtMoodDirector()
 
     var pointsPerUnit: CGFloat = 0
     /// The arena's bottom-left corner on screen.
@@ -246,6 +249,8 @@ final class RedoubtMode: GameMode {
         darkMix = 0
         shake = 0
         muzzleGlow = 0
+        soundDirector.reset()
+        moodDirector.reset()
         hideAllPooled()
     }
 
@@ -327,29 +332,47 @@ final class RedoubtMode: GameMode {
         return !run.colonists.isEmpty && delivered == 0
     }
 
-    // MARK: Sound and haptics (filled in by step 13c)
+    // MARK: Sound and haptics
 
+    /// The director thins a frame's events (one sound per kind per frame, Skitter deaths spaced
+    /// out, nothing for small fry a Shockwave clears) and picks the version; the theme names the
+    /// patch. The synth then applies each patch's cooldown, copy limit and priority.
     func sound(for event: RedoubtEvent) -> SoundPatch? {
-        theme.sound(for: event)
+        let run = session.run
+        guard let variant = soundDirector.variant(for: event, in: run) else { return nil }
+        return theme.sound(for: event, variant: variant)
     }
 
     func hapticCue(for event: RedoubtEvent) -> HapticCue? {
         HapticCue.cue(for: event)
     }
 
-    /// Stereo position across the floor; everything on the floor is in view, so full loudness.
+    /// Stereo position across the floor; everything on the floor is in view, so full loudness,
+    /// with two exceptions. Shots vary a little in level (by the run's tick, so it is the same
+    /// every run), which with their three pitches keeps ten a second from machine-gunning. A
+    /// Burrow or Thresher wrecked by a Shockwave plays under the Shockwave's own blast, so the
+    /// three together stay clear of the limiter.
     func placement(for event: RedoubtEvent) -> (pan: Double, gain: Double) {
         guard let x = position(of: event)?.x else { return (0, 1) }
-        return (min(max(x / tuning.arenaWidth * 2 - 1, -1), 1), 1)
+        let pan = min(max(x / tuning.arenaWidth * 2 - 1, -1), 1)
+        switch event {
+        case .orbFired:
+            let tick = session.run.tick
+            return (pan, 0.82 + 0.18 * Double((tick &* 2_654_435_761) >> 7 & 0xFF) / 255)
+        case .enemyDestroyed(_, .burrow, _, _, true), .enemyDestroyed(_, .thresher, _, _, true):
+            return (pan, 0.6)
+        default:
+            return (pan, 1)
+        }
     }
 
-    /// A first mood rule until 13c brings a mood director: the power cut is the dark mood.
+    /// Tension while a wave is fought, calm in the break, the dark mood through a power cut
+    /// (`RedoubtMoodDirector`).
     func musicMood(elapsed: Double) -> MusicMood {
-        currentMusicMood = session.run.isPowerCut ? .blackout : .calm
-        return currentMusicMood
+        moodDirector.update(run: session.run)
     }
 
-    private(set) var currentMusicMood: MusicMood = .calm
+    var currentMusicMood: MusicMood { moodDirector.mood }
 
     #if DEBUG
     // MARK: Debug

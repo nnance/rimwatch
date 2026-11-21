@@ -77,6 +77,12 @@ public protocol RedoubtTheme: Sendable {
     func displayName(for role: RedoubtRole) -> String
     /// The sound to play for an event, if any (see `SoundPatch` in GameCore's `Audio/`).
     func sound(for event: RedoubtEvent) -> SoundPatch?
+    /// The sound for an event in one of its versions. `variant` means, by event: for a shot
+    /// fired or a Skitter destroyed, which of the theme's pitches (any integer; the theme wraps
+    /// it); for a Burrow hit, its damage stage from 0 (fresh) up; for a colonist delivered, how
+    /// many colonists were delivered together. Other events ignore it. `RedoubtSoundDirector`
+    /// chooses it.
+    func sound(for event: RedoubtEvent, variant: Int) -> SoundPatch?
     /// The sound for a menu action, if any.
     func menuSound(_ sound: MenuSound) -> SoundPatch?
     /// Every patch the theme can play, so an app can prepare them all up front.
@@ -87,6 +93,7 @@ public protocol RedoubtTheme: Sendable {
 
 extension RedoubtTheme {
     public func sound(for event: RedoubtEvent) -> SoundPatch? { nil }
+    public func sound(for event: RedoubtEvent, variant: Int) -> SoundPatch? { sound(for: event) }
     public func menuSound(_ sound: MenuSound) -> SoundPatch? { nil }
     public var allSounds: [SoundPatch] { [] }
     public var music: MusicStyle? { nil }

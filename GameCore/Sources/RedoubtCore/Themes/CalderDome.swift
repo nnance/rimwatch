@@ -9,7 +9,7 @@ import GameCore
 /// Each enemy has its own colour and silhouette, so a role reads in a crowd of 90 at a few points
 /// across: the Skitter a small orange bug, the Gleaner a yellow open claw, the Spitter a violet
 /// turret with a barrel, the Burrow a dark ring in the floor, the Thresher a big crimson hull with
-/// a toothed blade, the Husk a magenta star. Silent for now: sounds and music come in step 13c.
+/// a toothed blade, the Husk a magenta star. Its sounds and music are in `CalderDomeSounds.swift`.
 public struct CalderDome: RedoubtTheme {
     public init() {}
 
@@ -59,6 +59,81 @@ public struct CalderDome: RedoubtTheme {
         case .thresher: "Thresher"
         case .husk: "Husk"
         }
+    }
+
+    // MARK: Sounds
+
+    /// Every event that makes a sound names its patch here; the patches themselves are in
+    /// `CalderDomeSounds.swift`. Names are stable identifiers, prefixed "dome." so they never
+    /// collide with Ridgeline's "frontier." patches in the one synthesiser.
+    public func sound(for event: RedoubtEvent) -> SoundPatch? {
+        sound(for: event, variant: 0)
+    }
+
+    /// `variant` picks among an event's versions (see `RedoubtTheme.sound(for:variant:)`): the
+    /// pitch of a shot or a Skitter's death, the stage of a Burrow's damage, and the number of
+    /// colonists delivered together.
+    public func sound(for event: RedoubtEvent, variant: Int) -> SoundPatch? {
+        let name: String? = switch event {
+        case .waveStarted: "wave.start"
+        case .waveCleared: "wave.clear"
+        case .airlockOpened: "airlock.open"
+        case .allColonistsLost: "colonists.gone"
+        case .powerCutBegan: "power.fail"
+        case .powerCutEnded: "power.restore"
+        case .orbFired: "orb.fire.\(Self.wrap(variant, Self.fireVariants) + 1)"
+        case .shockwave: "shockwave"
+        case .chargeEarned: "charge.earned"
+        case .orbDestroyed: "orb.lost"
+        case .orbRespawned: "orb.respawn"
+        case .extraLife: "life.extra"
+        case .arrivalTelegraphed(_, let role, _): role == .skitter ? "arrival.swarm" : "arrival.heavy"
+        case .burrowSpawned: "burrow.spawn"
+        case .spitterWindUp: "spitter.windup"
+        case .enemyFired: "spitter.spit"
+        case .enemyHit(_, let role, _):
+            switch role {
+            case .thresher: "thresher.clank"
+            case .burrow: "burrow.hit.\(min(max(variant, 0), Self.burrowHitStages - 1) + 1)"
+            default: "spitter.hit"
+            }
+        case .enemyDestroyed(_, let role, _, _, _):
+            switch role {
+            case .skitter: "skitter.pop.\(Self.wrap(variant, Self.skitterVariants) + 1)"
+            case .gleaner: "gleaner.die"
+            case .spitter: "spitter.die"
+            case .husk: "husk.die"
+            case .burrow: "burrow.collapse"
+            case .thresher: "thresher.wreck"
+            }
+        case .huskFormed: "husk.form"
+        case .colonistPickedUp(_, _, let position): "colonist.join.\(min(max(position, 1), Self.joinNotes))"
+        case .colonistSeized: "colonist.seized"
+        case .colonistFreed: "colonist.freed"
+        case .colonistTaken: "colonist.taken"
+        case .colonistCrushed: "colonist.crushed"
+        case .colonistDelivered: "delivery.\(min(max(variant, 1), Self.deliverySizes))"
+        case .gameOver: "game.over"
+        // Silent on purpose: the orb's death covers the scattering line; the wave-clear sting
+        // covers the airlock shutting and Threshers withdrawing; an arrival's telegraph is its
+        // warning, so the landing itself is silent; a shot ending is too frequent to voice.
+        case .airlockClosed, .lineScattered, .enemyWithdrew, .enemyArrived, .shotEnded: nil
+        }
+        return name.map { Self.patch($0) }
+    }
+
+    public func menuSound(_ sound: MenuSound) -> SoundPatch? {
+        Self.patch("ui.\(sound.rawValue)")
+    }
+
+    public var allSounds: [SoundPatch] {
+        Self.patches.values.sorted { $0.name < $1.name }
+    }
+
+    public var music: MusicStyle? { Self.musicStyle }
+
+    private static func wrap(_ value: Int, _ count: Int) -> Int {
+        ((value % count) + count) % count
     }
 
     // MARK: Shapes
