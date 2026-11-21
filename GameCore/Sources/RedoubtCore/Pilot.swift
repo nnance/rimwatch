@@ -26,6 +26,16 @@ public struct RedoubtPilot: Sendable {
         /// leaves Gleaners alone unless they come close, so colonists are lost and the power cut
         /// comes (as Ridgeline's `shooter` reaches Blackout). For seeing the power cut in the app.
         case shooter
+        /// The kiting tactic, kept as a regression guard (13d): flies laps of the floor hugging
+        /// the wall (its centre 12 units in, 2 more than its radius) at top speed, always
+        /// counterclockwise, aiming with lead at the nearest enemy shots can destroy. Never
+        /// rescues; fires a Shockwave only when something is about to touch it. Before 13d it
+        /// out-survived the competent pilot and lasted 10 minutes in about a third of its games.
+        case wallCircler
+        /// The same, on a smaller loop well inside the wall (190 units in).
+        case innerCircler
+        /// The wall loop, but it turns round whenever something is within 50 units ahead.
+        case reversingCircler
     }
 
     public let skill: Skill
@@ -34,6 +44,11 @@ public struct RedoubtPilot: Sendable {
     private var held = RedoubtInput()
     /// Novice: where it is wandering to.
     private var wander: Vec2?
+    /// Circlers: the corner of the loop it is heading for, which way round it goes, and how long
+    /// before it may turn round again.
+    private var corner: Int?
+    private var clockwise = false
+    private var turnCooldown = 0.0
 
     public init(skill: Skill, seed: UInt64) {
         self.skill = skill
@@ -46,6 +61,7 @@ public struct RedoubtPilot: Sendable {
         case .idle: return RedoubtInput()
         case .novice: return noviceInput(run)
         case .competent, .shooter: return competentInput(run)
+        case .wallCircler, .innerCircler, .reversingCircler: return circlerInput(run)
         }
     }
 
@@ -89,6 +105,70 @@ public struct RedoubtPilot: Sendable {
         // Panics with a Shockwave when something is right on it, now and then.
         let onTop = live.contains { $0.role != .burrow && d($0.pos, orb.pos) - $0.radius < 30 }
         held = RedoubtInput(move: move, aim: aim, shockwave: onTop && rng.chance(0.4))
+        return held
+    }
+
+    // MARK: Circlers
+
+    private mutating func circlerInput(_ run: RedoubtRun) -> RedoubtInput {
+        let dt = RedoubtRun.timeStep
+        turnCooldown -= dt
+        replanIn -= dt
+        guard replanIn <= 0 else {
+            held.shockwave = false
+            return held
+        }
+        replanIn = 0.05
+        let orb = run.orb
+        let tuning = run.tuning
+        let size = run.arenaSize
+        // The loop's corners, counterclockwise from bottom-left.
+        let inset = skill == .innerCircler ? 190.0 : 12.0
+        let corners = [Vec2(inset, inset), Vec2(size.x - inset, inset),
+                       Vec2(size.x - inset, size.y - inset), Vec2(inset, size.y - inset)]
+        if corner == nil {
+            // Start at the nearest corner (also after a respawn: see below).
+            corner = corners.indices.min { d(corners[$0], orb.pos) < d(corners[$1], orb.pos) }
+        }
+        if d(corners[corner!], orb.pos) < 24 {
+            corner = (corner! + (clockwise ? 3 : 1)) % 4
+        }
+        // Back at the centre after a respawn: rejoin the loop at the nearest corner.
+        if d(orb.pos, run.centre) < 20 {
+            corner = corners.indices.min { d(corners[$0], orb.pos) < d(corners[$1], orb.pos) }
+        }
+        var move = unit(corners[corner!] - orb.pos)
+        if skill == .reversingCircler, turnCooldown <= 0 {
+            // Something in the way ahead: turn round and head for the corner behind.
+            let blocked = run.enemies.contains { enemy in
+                let offset = enemy.pos - orb.pos
+                let dist = offset.length - enemy.radius
+                return dist < 50 && dist > 0 && (offset.x * move.x + offset.y * move.y) > 0.6 * offset.length
+            }
+            if blocked {
+                clockwise.toggle()
+                corner = (corner! + (clockwise ? 3 : 1)) % 4
+                move = unit(corners[corner!] - orb.pos)
+                turnCooldown = 0.6
+            }
+        }
+
+        var aim = Vec2.zero
+        // The nearest thing shots can destroy (a Thresher only when nothing else is left).
+        let shootable = run.enemies.filter { $0.role != .thresher }
+        if let target = (shootable.isEmpty ? run.enemies : shootable)
+            .min(by: { d($0.pos, orb.pos) < d($1.pos, orb.pos) }) {
+            let flight = d(target.pos, orb.pos) / tuning.shotSpeed
+            let lead = target.pos + (target.vel + target.push) * flight
+            aim = unit(lead - orb.pos)
+        }
+        var shockwave = false
+        if orb.charges > 0, !orb.isInvulnerable {
+            shockwave = run.enemies.contains {
+                $0.role != .burrow && d($0.pos, orb.pos) - $0.radius - tuning.orbRadius < 10
+            }
+        }
+        held = RedoubtInput(move: move, aim: aim, shockwave: shockwave)
         return held
     }
 

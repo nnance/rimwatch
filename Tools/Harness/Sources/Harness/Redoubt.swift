@@ -3,7 +3,8 @@ import GameCore
 import RedoubtCore
 
 // `Harness redoubt [seeds] [maxMinutes] [skill...]`: runs Redoubt's scripted pilots over many
-// seeds and prints difficulty statistics. Skills: idle, novice, competent (default all three).
+// seeds and prints difficulty statistics. Skills: idle, novice, competent, shooter, wallCircler, innerCircler,
+// reversingCircler (default idle, novice, competent and wallCircler).
 // Environment overrides for sweeps, e.g. SKSPEED=55 SKGROW=0.05 CROWD... (see `redoubtTuning`).
 
 private func redoubtTuning() -> RedoubtTuning {
@@ -24,6 +25,7 @@ private func redoubtTuning() -> RedoubtTuning {
     if let v = env["SPITMIN"].flatMap(Double.init) { t.spitterMinScale = v }
     if let v = env["SPITGROW"].flatMap(Double.init) { t.spitterFireGrowth = v }
     if let v = env["HUSKACC"].flatMap(Double.init) { t.huskAcceleration = v }
+    if let v = env["WALLRUN"].flatMap(Double.init) { t.wallRunGap = v }
     return t
 }
 
@@ -59,6 +61,8 @@ private struct RedoubtStats {
     var emptySteps: [Int: Int] = [:]
     var shootableSum: [Int: Int] = [:]
     var waveSeconds: [Int: Double] = [:]
+    /// Distance from the orb (alive) of every enemy as it lands from its telegraph.
+    var landings: [Double] = []
 }
 
 /// What most likely touched the orb: the closest enemy shot or enemy before the step.
@@ -101,6 +105,8 @@ private func playRedoubt(skill: RedoubtPilot.Skill, seed: UInt64, maxMinutes: Do
         }
         for event in events {
             switch event {
+            case .enemyArrived(_, _, let at):
+                if run.orb.isAlive { stats.landings.append((at - run.orb.pos).length) }
             case .waveStarted(let w, let colonists):
                 stats.waveStarts[w] = t
                 stats.colonistsByWave[w] = colonists
@@ -150,7 +156,7 @@ private func q3(_ values: [Double]) -> String {
 func runRedoubt(_ args: [String]) {
     let seeds = args.count > 0 ? Int(args[0]) ?? 40 : 40
     let maxMinutes = args.count > 1 ? Double(args[1]) ?? 20 : 20
-    let names = args.count > 2 ? Array(args[2...]) : ["idle", "novice", "competent"]
+    let names = args.count > 2 ? Array(args[2...]) : ["idle", "novice", "competent", "wallCircler"]
     let tuning = redoubtTuning()
     let debut = Dictionary(uniqueKeysWithValues: RedoubtWaves.debut.map { ($0.wave, $0.role.rawValue) })
     for name in names {
@@ -164,7 +170,10 @@ func runRedoubt(_ args: [String]) {
         print("survival s        ", col { $0.survival })
         print("first death s     ", col { $0.firstDeath ?? $0.survival })
         print("wave reached      ", col { Double($0.wave) })
-        print("score             ", col { Double($0.score) })
+        print("score             ", col { Double($0.score) }, " / min", col { Double($0.score) / max($0.survival / 60, 0.01) })
+        print("survival min..max  ", String(format: "%.0f..%.0f s", all.map(\.survival).min() ?? 0, all.map(\.survival).max() ?? 0),
+              " wave min..max \(all.map(\.wave).min() ?? 0)..\(all.map(\.wave).max() ?? 0)",
+              " reached the cap: \(all.filter { $0.survival >= maxMinutes * 60 - 0.01 }.count)")
         print("colonists saved   ", col { Double($0.saved) }, " delivered", col { Double($0.delivered) })
         print("colonists lost    ", col { Double($0.lost) }, " crushed", col { Double($0.crushed) })
         var taken: [String: Int] = [:]
@@ -175,6 +184,12 @@ func runRedoubt(_ args: [String]) {
         print("shockwaves / game ", col { Double($0.shockwaves) }, " extra lives", col { Double($0.extraLives) })
         print("power cuts / game ", col { Double($0.powerCuts) }, " games with one: \(all.filter { $0.powerCuts > 0 }.count)",
               " first in w", q3(all.compactMap { $0.powerCutWaves.first.map(Double.init) }))
+        let landings = all.flatMap(\.landings).sorted()
+        if !landings.isEmpty {
+            func at(_ p: Double) -> Double { landings[min(Int(Double(landings.count) * p), landings.count - 1)] }
+            print(String(format: "landing dist       min %.0f  0.1%% %.0f  1%% %.0f  5%% %.0f  median %.0f   under 150: %.2f%%", landings[0],
+                         at(0.001), at(0.01), at(0.05), at(0.5), 100 * Double(landings.count { $0 < 150 }) / Double(landings.count)))
+        }
         print("enemies on floor  ", col { Double($0.enemySteps) / Double(max($0.steps, 1)) }, " peak", col { Double($0.peakEnemies) })
         var causes: [String: Int] = [:]
         for g in all { for (k, v) in g.causes { causes[k, default: 0] += v } }

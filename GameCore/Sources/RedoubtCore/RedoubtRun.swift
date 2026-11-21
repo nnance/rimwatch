@@ -259,11 +259,12 @@ public struct RedoubtRun: Sendable {
         groupCooldown = RedoubtWaves.groupGap
     }
 
-    /// Telegraphs `count` Skitters clustered near one wall, clear of the orb.
+    /// Telegraphs `count` Skitters clustered near one wall, clear of the orb: on its path ahead
+    /// if it is running the wall, else at a random side.
     private mutating func telegraphGroup(_ count: Int) {
         let margin = tuning.spawnWallMargin
-        var centre: Vec2?
-        for _ in 0..<12 {
+        var centre = wallRunAhead()
+        for _ in 0..<12 where centre == nil {
             let inset = rng.range(40...100)
             let along = rng.range(0.1...0.9)
             let p: Vec2 = switch ArenaWall.allCases[Int(rng.next() % 4)] {
@@ -294,6 +295,22 @@ public struct RedoubtRun: Sendable {
             arrivals.append(RedoubtArrival(id: id, role: .skitter, pos: at, remaining: tuning.telegraphTime))
             events.append(.arrivalTelegraphed(id: id, role: .skitter, at: at))
         }
+    }
+
+    /// Where a top-up group lands while the orb runs along a wall (see `RedoubtTuning.wallRunGap`):
+    /// a point on its path, `wallRunReach` ahead, kept clear of it. Nil when it is not running
+    /// the wall, or the point ahead is not clear (a corner close ahead).
+    private mutating func wallRunAhead() -> Vec2? {
+        guard tuning.wallRunGap > 0, orb.isAlive else { return nil }
+        let w = tuning.arenaWidth, h = tuning.arenaHeight, p = orb.pos, v = orb.vel
+        let toSide = min(p.x, w - p.x), toEnd = min(p.y, h - p.y)
+        let speed = v.length
+        // The speed along the nearest wall.
+        let along = toSide < toEnd ? abs(v.y) : abs(v.x)
+        guard min(toSide, toEnd) < tuning.wallRunGap, speed > tuning.wallRunSpeed,
+              along >= tuning.wallRunAlong * speed else { return nil }
+        let ahead = clampToFloor(p + v * (rng.range(tuning.wallRunReach) / speed), radius: 40)
+        return isClearOfOrb(ahead, by: tuning.safeDistance + 60) ? ahead : nil
     }
 
     /// Starts an arrival's telegraph at a free spot away from the orb.

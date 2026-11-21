@@ -92,6 +92,15 @@ public struct RedoubtTuning: Sendable {
     public var spawnWallMargin = 24.0
     /// Hard cap on enemies on the floor, Burrow spawns included.
     public var maxEnemies = 120
+    /// Running the wall. While the orb hugs a wall and runs along it (its centre within
+    /// `wallRunGap` of a wall, faster than `wallRunSpeed`, with at least `wallRunAlong` of that
+    /// speed along the wall), each top-up group is telegraphed on its path `wallRunReach` ahead
+    /// of it instead of at a random side. Added in 13d: without it, laps of the wall while firing
+    /// at the nearest enemy were safer than fighting. Set `wallRunGap` to 0 to turn it off.
+    public var wallRunGap = 40.0
+    public var wallRunSpeed = 100.0
+    public var wallRunAlong = 0.9
+    public var wallRunReach = 400.0...520.0
 
     // Skitter: the flood.
     public var skitterSpeed = 50.0

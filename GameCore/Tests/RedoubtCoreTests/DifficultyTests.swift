@@ -7,7 +7,8 @@ import GameCore
 /// Coarse guards on Redoubt's first difficulty curve, measured with the scripted pilots in
 /// `RedoubtPilot` over a fixed set of seeds. They pin the shape (an idle orb overrun in the first
 /// wave, a novice run ending in the early waves, a competent run reaching waves 8 to 12 and
-/// keeping its colonists early on), not exact numbers. The full measurement, over more seeds, is
+/// keeping its colonists early on, circling the wall doing far worse than fighting), not exact
+/// numbers. The full measurement, over more seeds, is
 /// `Tools/Harness` with the `redoubt` argument.
 @Suite struct RedoubtDifficultyTests {
     private static let seeds: [UInt64] = (0..<12).map { 1000 + UInt64($0) * 7919 }
@@ -16,6 +17,8 @@ import GameCore
         var firstDeath: Double?
         var survival = 0.0
         var wave = 0
+        var score = 0
+        var isOver = false
         var deathsByWave: [Int: Int] = [:]
         var colonistsByWave: [Int: Int] = [:]
         var savedByWave: [Int: Int] = [:]
@@ -45,6 +48,8 @@ import GameCore
         }
         result.survival = Double(r.tick) * RedoubtRun.timeStep
         result.wave = r.wave
+        result.score = r.score
+        result.isOver = r.isGameOver
         return result
     }
 
@@ -85,6 +90,66 @@ import GameCore
         let colonists = runs.reduce(0) { total, run in total + (1...4).reduce(0) { $0 + (run.colonistsByWave[$1] ?? 0) } }
         let saved = runs.reduce(0) { total, run in total + (1...4).reduce(0) { $0 + (run.savedByWave[$1] ?? 0) } }
         #expect(Double(saved) >= 0.85 * Double(colonists), "\(saved) of \(colonists)")
+    }
+
+    /// The hole the 13d balance pass closed: laps of the floor hugging the wall, firing at the
+    /// nearest enemy, never rescuing. Before the wall-run rule (`RedoubtTuning.wallRunGap`) the
+    /// wall circler out-survived the competent pilot (median wave 12, 10 minutes in a third of its
+    /// games over 80 seeds). Now it is overrun a wave or two after the novice, and the variants
+    /// that turn round when blocked or keep to a smaller loop do no better than the fighter.
+    @Test func circlingTheWallIsNoSaferThanFighting() throws {
+        let circlers = Self.seeds.map { Self.play(.wallCircler, seed: $0, maxSeconds: 300) }
+        let waves = circlers.map { Double($0.wave) }
+        // Every game over inside five minutes (the competent pilot lasts about six).
+        #expect(circlers.allSatisfy { $0.isOver }, "\(circlers.map { Int($0.survival) })")
+        #expect((4...6).contains(Self.median(waves)), "\(waves)")
+        #expect(circlers.allSatisfy { $0.wave <= 7 }, "\(waves)")
+        #expect(Self.median(circlers.map(\.survival)) <= 150)
+        // It scores far less than playing properly (about 230,000 for the competent pilot).
+        #expect(Self.median(circlers.map { Double($0.score) }) <= 60_000)
+
+        let seeds = Array(Self.seeds.prefix(6))
+        let reversers = seeds.map { Self.play(.reversingCircler, seed: $0, maxSeconds: 420) }
+        #expect(reversers.allSatisfy { $0.isOver }, "\(reversers.map { Int($0.survival) })")
+        #expect(reversers.allSatisfy { (6...10).contains($0.wave) }, "\(reversers.map(\.wave))")
+        #expect(Self.median(reversers.map(\.survival)) <= 300)
+
+        let loopers = seeds.map { Self.play(.innerCircler, seed: $0, maxSeconds: 200) }
+        #expect(loopers.allSatisfy { $0.isOver })
+        #expect(loopers.allSatisfy { $0.wave <= 5 }, "\(loopers.map(\.wave))")
+    }
+
+    /// A Burrow left alive keeps pouring Skitters, so a player can sit at a distance and shoot
+    /// them. Pinned so it stays a way to rest and never becomes the best way to score: three
+    /// Burrows in wave 14, farmed from across the floor without ever hitting a Burrow, pay
+    /// about 7,000 points a minute against about 36,000 for playing on.
+    @Test func farmingABurrowPaysFarLessThanPlayingOn() throws {
+        var r = quietRun()
+        r.wave = 14
+        r.orb.pos = Vec2(450, 80)
+        for spot in [Vec2(200, 470), Vec2(450, 520), Vec2(700, 470)] { r.addEnemy(.burrow, at: spot) }
+        var lost = 0
+        for _ in 0..<seconds(60) {
+            let orb = r.orb
+            var aim = Vec2.zero
+            // The nearest Skitter that has walked well clear of the holes, when no Burrow is in
+            // the line of fire behind it.
+            if let target = r.enemies.filter({ $0.role == .skitter && distance($0.pos, orb.pos) < 250 })
+                .min(by: { distance($0.pos, orb.pos) < distance($1.pos, orb.pos) }) {
+                let lead = target.pos + target.vel * (distance(target.pos, orb.pos) / r.tuning.shotSpeed) - orb.pos
+                let dir = lead * (1 / max(lead.length, 1e-9))
+                let clear = r.enemies.filter { $0.role == .burrow }.allSatisfy { burrow in
+                    let o = burrow.pos - orb.pos
+                    return o.x * dir.x + o.y * dir.y < 0 || abs(o.x * dir.y - o.y * dir.x) > burrow.radius + 12
+                }
+                if clear { aim = dir }
+            }
+            lost += count(r.step(RedoubtInput(move: .zero, aim: aim)), "orbDestroyed")
+        }
+        #expect(lost == 0)
+        #expect(r.enemies.count { $0.role == .burrow } == 3)
+        // Points a minute: well under a third of playing on.
+        #expect(r.score >= 3_000 && r.score <= 10_000, "\(r.score) a minute")
     }
 }
 #endif

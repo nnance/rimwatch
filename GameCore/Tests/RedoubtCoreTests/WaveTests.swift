@@ -87,6 +87,61 @@ import GameCore
         #expect(spots.allSatisfy { distance($0, first) <= 130 })
     }
 
+    @Test func runningAlongAWallBringsTopUpGroupsInAheadOfTheOrb() throws {
+        var (r, _) = waveOne(seed: 8)
+        run(&r, steps: seconds(1))
+        r.orb.invulnerableTimer = 1e9
+        // Hugging the south wall, flying east at top speed.
+        r.orb.pos = Vec2(150, 12)
+        r.orb.vel = Vec2(r.tuning.orbMaxSpeed, 0)
+        r.enemies.removeAll()
+        let events = run(&r, steps: 1, input: RedoubtInput(move: Vec2(1, 0)))
+        let spots = events.compactMap { if case .arrivalTelegraphed(_, .skitter, let at) = $0 { at } else { nil } }
+        #expect(spots.count == RedoubtWaves.groupSize)
+        for spot in spots {
+            // On its path, 400 to 520 ahead (give or take the group's spread), still clear of it.
+            #expect(spot.x >= r.orb.pos.x + 300 && spot.x <= r.orb.pos.x + 600, "\(spot)")
+            #expect(spot.y <= 100, "\(spot)")
+            #expect(distance(spot, r.orb.pos) >= r.tuning.safeDistance)
+        }
+
+        // With a corner close ahead there is no room on its path: the group comes in elsewhere,
+        // as usual, clear of the orb.
+        r.orb.pos = Vec2(840, 12)
+        r.orb.vel = Vec2(r.tuning.orbMaxSpeed, 0)
+        r.enemies.removeAll()
+        r.arrivals.removeAll()
+        r.groupCooldown = 0
+        let cornered = run(&r, steps: 1, input: RedoubtInput(move: Vec2(1, 0)))
+        let elsewhere = cornered.compactMap { if case .arrivalTelegraphed(_, .skitter, let at) = $0 { at } else { nil } }
+        #expect(!elsewhere.isEmpty)
+        #expect(elsewhere.allSatisfy { distance($0, r.orb.pos) >= r.tuning.safeDistance })
+    }
+
+    @Test func theWallRunRuleCanBeTurnedOff() throws {
+        /// The spots of the group telegraphed when the floor is emptied with the orb at the south
+        /// wall, either still or running east along it.
+        func groupSpots(wallRunGap: Double, running: Bool) -> [Vec2] {
+            var tuning = RedoubtTuning()
+            tuning.wallRunGap = wallRunGap
+            var r = RedoubtRun(seed: 8, tuning: tuning)
+            run(&r, steps: seconds(3)) { $0.isWaveStarted }
+            run(&r, steps: seconds(1))
+            r.orb.invulnerableTimer = 1e9
+            r.orb.pos = Vec2(150, 12)
+            r.orb.vel = running ? Vec2(tuning.orbMaxSpeed, 0) : .zero
+            r.enemies.removeAll()
+            return run(&r, steps: 1).compactMap { if case .arrivalTelegraphed(_, _, let at) = $0 { at } else { nil } }
+        }
+        let still = groupSpots(wallRunGap: 0, running: false)
+        #expect(still.count == RedoubtWaves.groupSize)
+        // Turned off, running the wall changes nothing: the same random spots as standing still.
+        #expect(groupSpots(wallRunGap: 0, running: true) == still)
+        // On (the default), it is what moves the group onto the orb's path.
+        #expect(groupSpots(wallRunGap: RedoubtTuning().wallRunGap, running: false) == still)
+        #expect(groupSpots(wallRunGap: RedoubtTuning().wallRunGap, running: true) != still)
+    }
+
     @Test func arrivalsAreTelegraphedForASecondAwayFromTheOrb() throws {
         var r = RedoubtRun(seed: 11)
         var telegraphed: [Int: (tick: Int, at: Vec2)] = [:]

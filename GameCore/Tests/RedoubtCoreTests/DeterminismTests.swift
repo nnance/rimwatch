@@ -43,16 +43,17 @@ import GameCore
     /// top-up groups, deliveries, Shockwaves, an extra life and the airlock moving. Debug and
     /// Release builds give the same values. If a deliberate change to the rules, the
     /// tuning, the wave makeup or the pilot breaks it, capture the new values from the printed
-    /// line and say so in the commit.
+    /// line and say so in the commit. Last captured in 13d, when top-up groups began landing
+    /// ahead of an orb running along a wall (this run delivers along the walls).
     @Test func aScriptedRunReplaysExactly() throws {
         let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180)
         print("REDOUBT GOLDEN hash \(hash) events \(events) score \(r.score) wave \(r.wave) saved \(r.colonistsSaved) delivered \(r.colonistsDelivered) lives \(r.orb.lives) tick \(r.tick)")
-        #expect(hash == 12_757_582_349_164_082_327)
-        #expect(events == 6970)
-        #expect(r.score == 105_000)
+        #expect(hash == 17_471_345_773_872_641_339)
+        #expect(events == 6775)
+        #expect(r.score == 95_200)
         #expect(r.wave == 6)
-        #expect(r.colonistsSaved == 40)
-        #expect(r.colonistsDelivered == 40)
+        #expect(r.colonistsSaved == 32)
+        #expect(r.colonistsDelivered == 32)
         #expect(r.orb.lives == 4)
         #expect(r.tick == 21_600)
     }
