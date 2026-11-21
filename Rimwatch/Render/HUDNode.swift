@@ -104,11 +104,10 @@ final class HUDNode: SKNode {
         addChild(score)
         scoreRow = score
 
-        // Row 2: lives as small ships, then Shockwave charges as rings. The ships stand nose up,
-        // one to a slot, which leaves a clear gap between their prongs and the next ship.
+        // Row 2: lives as small ships, then Shockwave charges as rings.
         let slots = CGFloat(maxLives + maxShockwaves) + 1.5
         let icon: CGFloat = min(rowH * 0.95, leftW / slots)
-        let shipShape = theme.icon(for: .player)
+        let shipShape = theme.shape(for: .player)
         let shipSpan = (shipShape.bounds.max.x - shipShape.bounds.min.x) * shipShape.scale
         for index in 0..<maxLives {
             let sprite = SKSpriteNode()

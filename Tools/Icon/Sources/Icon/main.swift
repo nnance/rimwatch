@@ -138,21 +138,17 @@ for (path, color) in paths(of: theme.shape(for: .colonist), colonistPlace) {
 // MARK: Ship
 
 let ship = theme.shape(for: .player)
-let shipScale: CGFloat = 275
+let shipScale: CGFloat = 300
 let shipAngle: CGFloat = 6 * .pi / 180
-let shipPlace = CGAffineTransform(translationX: 535, y: 590).rotated(by: shipAngle)
+let shipPlace = CGAffineTransform(translationX: 525, y: 625).rotated(by: shipAngle)
     .scaledBy(x: shipScale, y: shipScale)
 
-// Engine trail: tapering streaks out of the engine (the middle of the ship's rearmost points),
-// faded out along their length by a gradient mask.
+// Engine trail: tapering streaks out of the tail, faded out along their length by a gradient mask.
 let shipTint = ship.strokes[0].color
-let rearmost = ship.strokes.flatMap(\.points).filter { $0.x <= ship.bounds.min.x + 0.001 }
-let engineX = CGFloat(ship.bounds.min.x)
-let engineY = CGFloat(rearmost.map(\.y).reduce(0, +) / Double(max(rearmost.count, 1)))
 for (offset, length, weight) in [(0.0, 1.7, 1.0), (0.2, 1.15, 0.6), (-0.2, 1.15, 0.6)] as
     [(CGFloat, CGFloat, CGFloat)] {
-    let start = CGPoint(x: engineX - 0.02, y: engineY + offset * 0.5).applying(shipPlace)
-    let end = CGPoint(x: engineX - 0.12 - length, y: engineY + offset * 0.75).applying(shipPlace)
+    let start = CGPoint(x: -0.7, y: offset).applying(shipPlace)
+    let end = CGPoint(x: -0.84 - length, y: offset * 0.75).applying(shipPlace)
     let half = 30 * weight
     let dx = end.x - start.x, dy = end.y - start.y
     let len = (dx * dx + dy * dy).squareRoot()
@@ -186,7 +182,7 @@ for (offset, length, weight) in [(0.0, 1.7, 1.0), (0.2, 1.15, 0.6), (-0.2, 1.15,
 }
 
 for (path, color) in paths(of: ship, shipPlace) {
-    neon(path, color: color, width: 20)
+    neon(path, color: color, width: 24)
 }
 
 // MARK: Write

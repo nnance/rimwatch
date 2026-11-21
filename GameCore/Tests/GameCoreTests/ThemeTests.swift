@@ -43,20 +43,22 @@ import Testing
         }
     }
 
-    /// The ship is seen from above, so it is its own mirror image top to bottom: flipping it to
-    /// face left can never turn it upside down, and the plume and shots leave from its middle.
-    /// It stays about as big as what can hit it.
-    @Test func theShipIsATopDownForkSymmetricTopToBottom() {
+    /// The ship is an arrowhead seen from above. Its hull is its own mirror image top to bottom,
+    /// so flipping it to face left never turns it upside down, and its nose, where the shots
+    /// leave, is the one foremost point, on the centre line. It stays about as big as what can
+    /// hit it.
+    @Test func theShipIsAnArrowheadSymmetricTopToBottom() {
         let ship = theme.shape(for: .player)
-        for stroke in ship.strokes {
-            let points = Set(stroke.points.map { "\($0.x),\($0.y == 0 ? 0 : $0.y)" })
-            let mirrored = Set(stroke.points.map { "\($0.x),\($0.y == 0 ? 0 : -$0.y)" })
-            #expect(points == mirrored, "\(stroke.points)")
-        }
-        // The cannon lies on the centre line, behind the nose, where the shots leave.
-        let cannon = ship.strokes.filter { $0.points.allSatisfy { $0.y == 0 } }
-        #expect(cannon.count == 1)
-        #expect(cannon.first.map { $0.points.map(\.x).max()! < ship.bounds.max.x } == true)
+        let hull = ship.strokes[0]
+        #expect(hull.closed)
+        let points = Set(hull.points.map { "\($0.x),\($0.y == 0 ? 0 : $0.y)" })
+        let mirrored = Set(hull.points.map { "\($0.x),\($0.y == 0 ? 0 : -$0.y)" })
+        #expect(points == mirrored, "\(hull.points)")
+        // The nose: the single foremost point of the whole shape, on the centre line.
+        let all = ship.strokes.flatMap(\.points)
+        let front = all.filter { $0.x == ship.bounds.max.x }
+        #expect(front.count == 1)
+        #expect(front.first?.y == 0)
         // Its footprint is close to the hit circle: from as long as the circle is wide to half as
         // long again, and from most of the circle tall to no taller than it.
         let radius = Tuning().playerRadius
@@ -65,10 +67,6 @@ import Testing
         let height = (bounds.max.y - bounds.min.y) * ship.scale
         #expect(length >= 2 * radius && length <= 2 * radius * 1.6)
         #expect(height >= radius * 1.2 && height <= 2 * radius)
-        // The life icon is a simpler ship, never a different one.
-        let icon = theme.icon(for: .player)
-        #expect(!icon.strokes.isEmpty && icon.strokes.count <= ship.strokes.count)
-        #expect(icon.strokes.allSatisfy { ship.strokes.contains($0) })
     }
 
     @Test func colonistAndOutpostStandOnTheirOrigin() {

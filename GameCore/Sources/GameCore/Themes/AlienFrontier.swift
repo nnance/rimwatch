@@ -46,13 +46,6 @@ public struct AlienFrontier: Theme {
         }
     }
 
-    /// The ship as a life icon: just the forked hull and the cannon between its prongs, since the
-    /// canopy and engine blur into the back of the hull at that size.
-    public func icon(for role: EntityRole) -> ShapeDescription {
-        guard role == .player else { return shape(for: role) }
-        return ShapeDescription(scale: Self.skimmer.scale, strokes: Array(Self.skimmer.strokes.prefix(2)))
-    }
-
     public func displayName(for role: EntityRole) -> String {
         switch role {
         case .player: "Skimmer"
@@ -136,25 +129,15 @@ public struct AlienFrontier: Theme {
 
     private static func v(_ x: Double, _ y: Double) -> Vec2 { Vec2(x, y) }
 
-    /// The Pincer: a forked gunship seen from above. Two prongs run forward either side of a
-    /// cannon that sits in the gap between them, a canopy rides behind the fork and an engine
-    /// flares at the back. Symmetric top to bottom, so a left-facing ship is just a mirror.
+    /// A swept dart with a split tail.
     static let skimmer: ShapeDescription = {
-        let hull = RGB(hex: 0x3FF6FF)
-        let canopy = RGB(hex: 0xE0FFFF)
-        let hot = RGB(hex: 0xFF7A5A)
+        let top = [v(1, 0), v(0.25, 0.2), v(-0.5, 0.45), v(-0.9, 0.45), v(-0.62, 0.12), v(-0.78, 0)]
+        let hull = top + ShapeKit.mirroredY(top.dropLast().reversed())
+        let c = RGB(hex: 0x3FF6FF)
         return ShapeDescription(scale: 18, strokes: [
-            // The hull, from the tip of the upper prong back along the top, round the tail, out
-            // to the tip of the lower prong and back into the fork between them.
-            ShapeStroke([v(1.0, 0.3), v(0.3, 0.4), v(-0.5, 0.42), v(-0.85, 0.25), v(-0.85, -0.25), v(-0.5, -0.42),
-                         v(0.3, -0.4), v(1.0, -0.3), v(0.25, -0.16), v(-0.15, -0.12), v(-0.15, 0.12), v(0.25, 0.16)],
-                        closed: true, color: hull),
-            // The cannon, run forward from the back of the fork.
-            ShapeStroke([v(-0.15, 0), v(0.6, 0)], color: hot),
-            // The canopy behind the fork.
-            ShapeStroke([v(-0.3, 0.1), v(-0.55, 0.14), v(-0.55, -0.14), v(-0.3, -0.1)], closed: true, color: canopy),
-            // The engine, flaring out of the tail.
-            ShapeStroke([v(-0.85, 0.15), v(-0.97, 0.1), v(-0.97, -0.1), v(-0.85, -0.15)], color: hot),
+            ShapeStroke(Array(hull.dropLast()), closed: true, color: c),
+            ShapeStroke([v(0.5, 0.02), v(0.15, 0.12), v(-0.15, 0.09)], color: RGB(hex: 0xE0FFFF)),
+            ShapeStroke([v(-0.45, 0.25), v(-0.45, -0.25)], color: c),
         ])
     }()
 
