@@ -3,6 +3,10 @@
 An original side-scrolling rescue shooter for the iPhone Duo's inner display. Native iOS, Swift,
 SpriteKit, no third-party dependencies, no asset files (art drawn in code, sound synthesised).
 
+It is growing into three modes in one world (Ridgeline, which is the game built so far, then
+Redoubt and Riftwing) and later a campaign. See "Expansion" in `PLAN.md`. Stop at each gate in
+the progress list, and write a mode's design into the plan for approval before building it.
+
 ## Start here
 
 Read `PLAN.md`. Its **Progress** checklist says what is done. Continue from the first unticked item,

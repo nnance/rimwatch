@@ -1,4 +1,4 @@
-# Rimwatch: an original rescue shooter for the iPhone Duo inner screen
+# Rimwatch: rescue games in one world, for the iPhone Duo inner screen
 
 ## Context
 
@@ -10,6 +10,11 @@ build.
 Rimwatch is an original game: its own name, ship, enemies, sounds and HUD. It borrows genre mechanics
 (wraparound world, scanner, protect-and-rescue loop, momentum flight) but does not copy the original's
 sprites, sounds, names or screen layout.
+
+On 2026-11-20, after playing the finished game on a phone, you decided to grow it into three modes
+set in one world, with a campaign later. That plan is in "Expansion" below. The game built so far
+becomes the first mode, Ridgeline. The sections from "Game design" to "Verification" describe it and
+were written while it was the whole game.
 
 ## Decisions I made (say so if you disagree)
 
@@ -24,9 +29,94 @@ sprites, sounds, names or screen layout.
   `xcodebuild`. Game logic still lives in a plain Swift package so it can be tested from the
   terminal with Xcode closed.
 
+## Expansion: three modes and a campaign (decided 2026-11-20)
+
+Rimwatch grows from one game into three modes that share a world, and later a campaign. No code has
+changed for this yet.
+
+### What was decided
+
+- **The whole game stays Rimwatch.** The bundle ID, Xcode project, repository and icon keep their
+  names. In the story, Rimwatch is the force you serve in.
+- **The world is Calder**, a colony built inside a vast crater. The crater wall is the Rim. The
+  setting is Outpost Calder, which can sit under the title as a subtitle.
+- **Three modes, one per place:**
+
+  | Mode | Where | What you do | Kind of game |
+  |---|---|---|---|
+  | Ridgeline | The sky over the crater | Fly the patrol ship and catch colonists the Harvesters lift away | Side-scrolling rescue shooter. This is the game built in steps 1 to 7. |
+  | Redoubt | Inside a breached dome | Hold the floor and get colonists to the airlock | Twin-stick arena shooter |
+  | Riftwing | The caves and tunnels of the crater wall | Fight Husks wing to wing on a flap-wing rig, in spaces too small for a ship | Flap-to-fly combat where the higher fighter wins a clash |
+
+- **Every mode is about saving colonists**, and the modes share one cast where it fits. In
+  Riftwing, a Husk struck from above drops a pod holding the colonist it was made from. Reach the
+  pod in time to free them; leave it and it hatches into a tougher Husk.
+- **Each new mode is an original game in its genre**, as Ridgeline is. You named Robotron as the
+  inspiration for Redoubt and Joust for Riftwing. The modes take the genre mechanics and nothing
+  else: their names, characters, art, sounds and layouts are their own.
+- **Free Play first.** Each mode is built as an endless score game with its own top-10 table. The
+  existing high scores become Ridgeline's table.
+- **You play and refine each mode before the next one starts.** The progress list has a gate after
+  each mode.
+- **The campaign is not designed yet.** It gets its own design and planning step with you before
+  anything is built (step 16). One idea so far is three acts (sky, dome, caves) with the colony's
+  population carrying from chapter to chapter. You may not want it built on acts, so that is an
+  idea, not a decision. One allowance is made before then: a mode's session can end because a goal
+  was met, not only because the player died, so a campaign can use the modes without reworking
+  them. Nothing else is built for the campaign ahead of its design step.
+
+### What is shared and what belongs to a mode
+
+| | Shared by every mode | Owned by each mode |
+|---|---|---|
+| Game logic (the Swift package) | Maths and random numbers, the shape and theme types, the sound renderer, the menu model, options, high-score tables, pause and countdown session logic, gamepad mapping | World, entities, waves, tuning numbers, bots, theme content (shapes, sounds, names) |
+| App | Fold handling, touch and gamepad input, audio playback, haptics, menu screens, the glow renderer, particles | The SpriteKit scene and the HUD |
+
+These lines are from memory of the code. Step 8 starts by confirming them against it. The mode
+contract stays thin at first, and I expect to revise it while building Redoubt, since a shared
+layer shaped around one game guesses wrong about what the second needs.
+
+Rules that carry over to every mode:
+
+- Gameplay only runs on the open inner display, and the fold behaviour below applies unchanged.
+- Game logic has no UIKit or SpriteKit and knows roles, never appearance.
+- No asset files: art is drawn in code and sound is synthesised.
+- Each mode has its own tuning file, its own bots and a harness run that pins its difficulty.
+
+### Build order
+
+Each step is built, independently verified and committed before the next one starts.
+
+8. **Split the shared game logic out of Ridgeline** inside the Swift package: one shared target and
+   one target for Ridgeline. Nothing may behave differently: every test passes and the harness
+   gives the same results for the same seeds.
+9. **Split the app the same way**: a shared shell, with Ridgeline's scene and HUD plugged into it
+   as a mode. High scores become one table per mode, and the existing table moves to Ridgeline.
+10. **Title screen with Free Play.** Rimwatch is the title and the player picks a mode; only
+    Ridgeline is listed until the others exist. The pause menu gains a way back to the title. A
+    DEBUG launch argument starts a given mode directly. `README.md` and `CLAUDE.md` are updated to
+    the new names here.
+    - Gate: you check on your phone that Ridgeline plays as it did before.
+11. **Twin-stick input in the shared shell**: a second floating stick for aiming on touch, and the
+    right stick on a gamepad.
+12. **Redoubt design.** The full design (arena, enemies, controls, scoring, waves) is written into
+    this plan for you to approve. No code before that.
+13. **Redoubt build**, in the same order Ridgeline was built: game logic with tests and bots,
+    rendering, sound and haptics, waves and tuning, polish.
+    - Gate: you play Redoubt and we refine it until you are happy to move on.
+14. **Riftwing design**, written into this plan for you to approve. No code before that.
+15. **Riftwing build**, in the same order.
+    - Gate: you play Riftwing and we refine it until you are happy to move on.
+16. **Campaign design and planning** with you: what the campaign is, how it is structured (acts or
+    something else), what carries between sessions, how the story is told. The result is written
+    into this plan as its own build steps. Nothing is built before you approve it.
+17. **Campaign build**, following the steps written in 16.
+
 ## Progress
 
-Tick each item when it is built and verified. Continue from the first unticked one.
+Tick each item when it is built and verified. Continue from the first unticked one. Steps 0 to 7
+built Ridgeline (then the whole game) and are done; the unticked items are in the expansion list
+at the end of this section.
 
 - [x] Step 0: plan saved here, `CLAUDE.md` written, folder renamed to `rimwatch` (2026-11-16)
 - [x] Prerequisites (2026-11-16): macOS 26.6.2, Xcode 27.2, `xcode-select` on Xcode, the `xcode`
@@ -140,9 +230,31 @@ drawn from the theme's simplified `icon(for:)`; the kill sounds `enemy.explode`,
 their energy above 300 Hz. 204 tests pass. Sound was confirmed working on the phone; it is silent
 in Silent mode by design.
 
+### Expansion
+
+The steps are described under "Build order" in "Expansion" above. A gate is yours to tick: do not
+start the step after a gate until you have said to move on.
+
+- [x] Expansion planned and the names chosen: Rimwatch (the whole game), Calder (the world),
+      Ridgeline, Redoubt, Riftwing (2026-11-20)
+- [ ] 8. Split the shared game logic out of Ridgeline in the Swift package
+- [ ] 9. Split the app into a shared shell and the Ridgeline mode; one high-score table per mode
+- [ ] 10. Title screen with Free Play mode selection; `README.md` and `CLAUDE.md` updated
+- [ ] Gate: Ridgeline checked on the phone and unchanged
+- [ ] 11. Twin-stick input (touch and gamepad)
+- [ ] 12. Redoubt design written here and approved
+- [ ] 13. Redoubt build
+- [ ] Gate: Redoubt played and refined
+- [ ] 14. Riftwing design written here and approved
+- [ ] 15. Riftwing build
+- [ ] Gate: Riftwing played and refined
+- [ ] 16. Campaign design and planning, approved
+- [ ] 17. Campaign build
+
 ## What is left
 
-Everything in the build order is done. What remains needs a person and a device:
+The next piece of building is step 8 of the expansion. Ridgeline itself is built; what remains for
+it needs a person and a device, and can happen alongside the expansion:
 
 1. Run on a real iPhone Duo (set the signing team in Xcode). Nothing has been seen on the open
    inner display: check the layout, the crease band, the camera hole, partial-open poses and
@@ -154,7 +266,8 @@ Everything in the build order is done. What remains needs a person and a device:
 3. Listen on the phone speaker: overall mix, music level, whether the Shockwave and ship-death
    sounds are prominent enough.
 4. Try a real controller (input, Menu button, controller haptics) and feel the phone haptics.
-5. Later expansion: the deep-sea theme, as one new `Theme` file.
+5. A possible later addition: the deep-sea theme for Ridgeline, as one new `Theme` file. It is
+   not part of the three-mode expansion.
 
 ## Prerequisites (yours; I can't do these)
 
@@ -207,6 +320,8 @@ change; supported orientations switch between landscape (open) and portrait (clo
 `setNeedsUpdateOfSupportedInterfaceOrientations()`. Backgrounding the app pauses the same way.
 
 ## Game design
+
+This section and the four after it describe Ridgeline.
 
 - **World:** a wraparound planet strip about 8 screens wide, with a scanner minimap across the top
   showing the whole world.
@@ -270,7 +385,7 @@ rimwatch/
 The simulation knows entity *roles*, never their appearance. The deep-sea expansion is then one new
 `Theme` file (palette, shapes, terrain style, sounds, names) with no gameplay changes.
 
-## Build order
+## Build order (Ridgeline, done)
 
 1. `GameCore`: world, player flight, projectiles, collisions, Harvester/colonist loop, session
    states, with tests. No Xcode needed.
