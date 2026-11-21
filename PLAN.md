@@ -109,8 +109,18 @@ Each step is built, independently verified and committed before the next one sta
     Ridgeline is listed until the others exist. The pause menu gains a way back to the title. A
     DEBUG launch argument starts a given mode directly. `README.md` and `CLAUDE.md` are updated to
     the new names here. The app icon is redesigned in this step as an emblem for the whole game
-    instead of Ridgeline's ship: you pick from five candidates (the current icon included for
-    comparison), and the title screen uses the same emblem.
+    instead of Ridgeline's ship, and the title screen uses the same emblem. You chose "The Rim"
+    from five candidates on 2026-11-20: the crater's rim seen from above as a rough ring, with the
+    arrowhead ship crossing it. Its geometry, in a 100 x 100 icon space with y down, on black:
+    - Outer ring, orange `0xFF7A3D`, line width 2.8: a closed 20-point polygon centred at
+      (50, 50); point i is at angle 2*pi*i/20 with radius 36 + J[i mod 16], where
+      J = [0, 2.2, -1.2, 1.6, -2.0, 0.8, 2.6, -1.6, 0.4, 1.8, -2.4, 1.0, -0.6, 2.0, -1.8, 0.6].
+    - Inner ring, darker orange `0xC2552B`, line width 1.5: a closed 18-point polygon, angle
+      2*pi*i/18 + 0.3, radius 27 + 0.5 * J[i mod 16].
+    - The ship: the theme's arrowhead hull outline only, cyan `0x3FF6FF`, line width 2.4, centred
+      at (50, 50), scale 19, nose turned 28 degrees up from pointing right.
+    - Four faint stars near the corners. Lines are drawn as neon (halos, line, pale core) like the
+      current icon.
     - Check, in parallel: you confirm on your phone that Ridgeline plays as it did before. This
       does not hold up the next step; a difference you find is fixed before other work.
 11. **Twin-stick input in the shared shell**: a second floating stick for aiming on touch, and the
@@ -266,7 +276,7 @@ step is pushed so you can install it.
       harness's "death causes" lines print ties in an unstable order, as they did before the
       split. What landed where is under "What is shared and what belongs to a mode".
 - [ ] 9. Split the app into a shared shell and the Ridgeline mode; one high-score table per mode
-- [ ] 10. Title screen with Free Play mode selection; new app icon chosen from five candidates;
+- [ ] 10. Title screen with Free Play mode selection; new app icon and emblem ("The Rim");
       `README.md` and `CLAUDE.md` updated
 - [ ] Parallel check (not a gate): Ridgeline checked on the phone and unchanged
 - [ ] 11. Twin-stick input (touch and gamepad)
