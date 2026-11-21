@@ -1001,6 +1001,25 @@ everything by 50%.
 - **To look for when you play:** whether 50% is enough or too much; whether hits still look
   fair now that the orb is a bigger target; whether the floor feels cramped in waves 5 and
   later; whether the Spitters' first wave is now too gentle.
+- **The independent check afterwards passed with notes.** Nothing broken: sizes are right on
+  screen beside the old build (orb, enemies, colonists, arrival rings about 1.5 times; HUD
+  icons identical), the line fits the airlock, the respawn ring and shield fit the orb, the
+  forced power cut still works (the builder's captures were simply taken after the first
+  delivery had ended it), no figure is scaled twice or on one side only, the switch back is
+  exact, and the balance numbers reproduce. Its notes:
+  - **Spitters barely fire in their first wave.** With the debut slow-down at 3.8 the novice
+    sees 1.1 Spitter shots in wave 3 (it was 3.5), and in 43% of games none at all, so the
+    wave that introduces them teaches nothing. The slow-down also now lasts to wave 6, making
+    wave 6 to 7 a bigger jump in Spitter fire (about 1.8 times; it was 1.3).
+  - **The difficulty moved later.** The average is the same but the shape is not: the novice
+    loses more lives in wave 5, the Burrow's first wave (1.33 against 0.93), and wave 6; its
+    first death comes later (100 s against 73 s); far fewer games reach wave 7. Wave 5 is now
+    the hardest step for a first game. Deaths to Threshers and Burrows rose and deaths to
+    Spitter shots fell.
+  - Not seen on the simulator: a Husk, Spitter shots in flight, death pops close up.
+  - **Not changed yet.** The better trade is probably to put the Spitter slow-down back
+    toward 2 and ease wave 5 instead. It waits for your verdict on the size, since a different
+    size needs the balance re-run anyway.
 
 ### What the independent check of sound, polish and balance found
 
