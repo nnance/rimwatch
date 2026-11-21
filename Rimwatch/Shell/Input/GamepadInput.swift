@@ -6,7 +6,7 @@ import GameCore
 /// The game controller, read into `GameCore`'s device-neutral `PadReader`. This file only
 /// translates `GCController` state into `PadSnapshot`s and follows controllers coming and going;
 /// the dead zone, press latching and menu repeat live in `GameCore`, and the button layout in
-/// `RidgelineCore`.
+/// each mode's game logic. The scene keeps one for the app's life (see `ShellDevices`).
 ///
 /// One controller is used at a time: the system's current one if it is an extended gamepad,
 /// otherwise the first extended gamepad connected. A controller already connected at launch is

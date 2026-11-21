@@ -10,6 +10,9 @@ import UIKit
 /// - landscape (the open inner display): heading on the left half, items on the right half, each
 ///   kept clear of the crease band down the middle;
 /// - portrait (the closed outer display): heading at the top, items stacked below.
+///
+/// The title adds the game's emblem above its heading, and under the heading shows the details
+/// of the highlighted item (a mode's summary and best score).
 @MainActor
 final class MenuNode: SKNode {
     struct Choice: Equatable {
@@ -149,6 +152,10 @@ final class MenuNode: SKNode {
         let tableBesideItems = menu.kind == .highScores
         let headingLines = tableBesideItems ? [] : menu.lines
         let listLines = tableBesideItems ? menu.lines : []
+        // Room is kept for the most detail lines any item has, so the heading stays put as the
+        // selection moves.
+        let reserved = headingLines.count + (menu.items.map(\.details.count).max() ?? 0)
+        func clampSide(_ v: CGFloat, _ hi: CGFloat) -> CGFloat { menu.kind == .title ? clamp(v, 56, hi) : 0 }
 
         if size.width > size.height * 1.1 {
             let middleLow = keepClear?.lowerBound ?? size.width / 2
@@ -157,32 +164,46 @@ final class MenuNode: SKNode {
                               width: max(middleLow - m.margin - content.minX, 60), height: content.height)
             let right = CGRect(x: middleHigh + m.margin, y: content.minY,
                                width: max(content.maxX - middleHigh - m.margin, 60), height: content.height)
-            let headingBlock = blockHeight(lines: headingLines.count, m: m, withHeading: true, kind: menu.kind)
-            placeHeading(menu, lines: headingLines, centerX: left.midX, top: left.midY + headingBlock / 2, m: m,
-                         maxWidth: left.width)
+            let emblem = clampSide(min(left.width * 0.5, left.height * 0.34), 200)
+            let headingBlock = blockHeight(lines: reserved, m: m, withHeading: true, menu: menu, emblem: emblem)
+            placeHeading(menu, lines: headingLines, reserved: reserved, emblem: emblem, centerX: left.midX,
+                         top: left.midY + headingBlock / 2, m: m, maxWidth: left.width)
             placeItems(menu, lines: listLines, in: right, m: m)
         } else {
-            let top = content.maxY - m.heading * 0.4
-            let used = placeHeading(menu, lines: headingLines, centerX: content.midX, top: top, m: m,
-                                    maxWidth: content.width)
+            let emblem = clampSide(min(content.width * 0.42, content.height * 0.2), 180)
+            let top = content.maxY - (emblem > 0 ? 0 : m.heading * 0.4)
+            let used = placeHeading(menu, lines: headingLines, reserved: reserved, emblem: emblem,
+                                    centerX: content.midX, top: top, m: m, maxWidth: content.width)
             let rest = CGRect(x: content.minX, y: content.minY, width: content.width,
                               height: max(top - used - m.gap * 2 - content.minY, 60))
             placeItems(menu, lines: listLines, in: rest, m: m)
         }
     }
 
-    private func blockHeight(lines: Int, m: Metrics, withHeading: Bool, kind: Menu.Kind? = nil) -> CGFloat {
+    private func blockHeight(lines: Int, m: Metrics, withHeading: Bool, menu: Menu, emblem: CGFloat) -> CGFloat {
         var height = (withHeading ? m.heading * 1.3 : 0) + (lines > 0 ? m.gap + CGFloat(lines) * m.lineHeight : 0)
-        if kind == .title { height += m.heading * 0.35 * 1.3 + m.lineHeight * 1.1 }
-        if kind == .gameOver, lines > 0 { height += m.lineHeight * 0.4 }
+        if emblem > 0 { height += emblem + m.gap }
+        if menu.kind == .title { height += m.heading * 0.35 * 1.3 }
+        if menu.subtitle != nil { height += m.lineHeight * 1.1 }
+        if menu.kind == .gameOver, lines > 0 { height += m.lineHeight * 0.4 }
         return height
     }
 
-    /// Places the heading and its lines going down from `top`. Returns the height used.
+    /// Places the emblem (side `emblem`, none at 0), the heading, the subtitle, `lines` and the
+    /// selection's detail lines going down from `top`, keeping room for `reserved` lines. Returns
+    /// the height used.
     @discardableResult
-    private func placeHeading(_ menu: Menu, lines: [String], centerX: CGFloat, top: CGFloat, m: Metrics,
-                              maxWidth: CGFloat) -> CGFloat {
+    private func placeHeading(_ menu: Menu, lines: [String], reserved: Int, emblem: CGFloat, centerX: CGFloat,
+                              top: CGFloat, m: Metrics, maxWidth: CGFloat) -> CGFloat {
         var y = top
+        if emblem > 0 {
+            let node = EmblemNode()
+            node.show(side: emblem)
+            node.position = CGPoint(x: centerX, y: y - emblem / 2)
+            addChild(node)
+            y -= emblem + m.gap
+        }
+        let lines = lines + menu.detailLines
         let headingText = menu.heading.uppercased()
         var headingSize = menu.kind == .title ? m.heading * 1.35 : m.heading
         // Shrink a heading that would not fit its panel.
@@ -193,13 +214,14 @@ final class MenuNode: SKNode {
         addChild(heading)
         y -= headingSize * 1.3
 
-        if menu.kind == .title {
-            // A quiet tagline under the name.
-            var tagSize = m.body * 0.95
-            let tag = "Hold the rim. Bring them home."
-            let natural = GlowText.width(of: tag, style: .body(tagSize))
-            if natural > maxWidth { tagSize = max(tagSize * maxWidth / natural, 10) }
-            let line = GlowText.sprite(tag, style: .body(tagSize), color: shellStyle.text.scaled(0.8))
+        if let subtitle = menu.subtitle {
+            // A quieter line under the heading.
+            var subtitleSize = m.body * 0.95
+            let text = subtitle.uppercased()
+            let style = { (size: CGFloat) in GlowText.Style(size: size, weight: .regular, tracking: 0.22) }
+            let natural = GlowText.width(of: text, style: style(subtitleSize))
+            if natural > maxWidth { subtitleSize = max(subtitleSize * maxWidth / natural, 10) }
+            let line = GlowText.sprite(text, style: style(subtitleSize), color: shellStyle.text.scaled(0.8))
             line.position = CGPoint(x: centerX, y: y - m.lineHeight * 0.4)
             addChild(line)
             y -= m.lineHeight * 1.1
@@ -228,6 +250,10 @@ final class MenuNode: SKNode {
             }
             addChild(label)
             y -= height
+        }
+        if lines.count < reserved {
+            if lines.isEmpty { y -= m.gap }
+            y -= CGFloat(reserved - lines.count) * m.lineHeight
         }
         return top - y
     }

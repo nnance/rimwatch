@@ -3,8 +3,9 @@ import Foundation
 import GameCore
 import UIKit
 
-/// The game's sound: sound patches rendered once to PCM, played through a small pool of voices,
-/// plus the generative music bed. Decisions (which voice, what to drop) are made on the main
+/// The game's sound: the loaded mode's sound patches rendered to PCM, played through a small pool
+/// of voices, plus the generative music bed. One synth (one audio engine) serves the whole app;
+/// a mode hands it its patches and music with `load` when it is loaded. Decisions (which voice, what to drop) are made on the main
 /// thread and are cheap; everything that touches AVAudioEngine runs on one serial queue, so a
 /// sound starting never waits on the audio system.
 ///
@@ -46,35 +47,55 @@ final class Synth: SoundOutput {
     private var musicGain = 0.0
     private var mood: MusicMood = .title
     private var observers: [NSObjectProtocol] = []
+    /// What `load` was last given, so loading the same again does nothing.
+    private var loaded: (sounds: [SoundPatch], music: MusicStyle?)?
+    /// Bumped by each `load`, so a slower earlier render does not mark a later one ready.
+    private var loadGeneration = 0
 
     #if DEBUG
     private static let logs = ProcessInfo.processInfo.arguments.contains("-logFeedback")
     #endif
 
-    init(sounds: [SoundPatch], music: MusicStyle?, options: GameOptions) {
+    /// Silent until a mode is loaded.
+    init(options: GameOptions) {
         graph = AudioGraph(gameplayVoices: Self.gameplayVoiceCount, menuVoices: Self.menuVoiceCount,
-                           sampleRate: Self.sampleRate, music: music)
-        for patch in sounds { patches[patch.name] = patch }
+                           sampleRate: Self.sampleRate)
         setLevels(sound: options.soundLevel, music: options.musicLevel)
+        graph.queue.async { [graph] in graph.start(reason: "launch") }
+        observeSystem()
+    }
 
-        let all = sounds
+    /// A mode's sound patches and music, in place of the last mode's. They render in the
+    /// background; sounds asked for before that are dropped, as at launch. Loading what is already
+    /// loaded does nothing.
+    func load(sounds: [SoundPatch], music: MusicStyle?) {
+        if let loaded, loaded.sounds == sounds, loaded.music == music { return }
+        #if DEBUG
+        if loaded == nil { AudioDump.runIfAsked(sounds: sounds, music: music) }
+        #endif
+        loaded = (sounds, music)
+        patches = [:]
+        for patch in sounds { patches[patch.name] = patch }
+        isReady = false
+        voices = [Voice](repeating: Voice(), count: voices.count)
+        menuVoices = [Voice](repeating: Voice(), count: menuVoices.count)
+        lastStart = [:]
+        loadGeneration += 1
+        let generation = loadGeneration
+        let mood = self.mood
         graph.queue.async { [graph, weak self] in
             let started = Date()
-            graph.prepare(all)
-            let count = all.count
+            graph.load(sounds, music: music, mood: mood)
+            let count = sounds.count
             let seconds = Date().timeIntervalSince(started)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    self?.isReady = true
+                    guard let self, self.loadGeneration == generation else { return }
+                    self.isReady = true
                     debugLog("[Rimwatch audio] \(count) patches rendered in \(String(format: "%.2f", seconds)) s")
                 }
             }
         }
-        graph.queue.async { [graph] in graph.start(reason: "launch") }
-        observeSystem()
-        #if DEBUG
-        AudioDump.runIfAsked(sounds: sounds, music: music)
-        #endif
     }
 
     isolated deinit {
@@ -272,13 +293,10 @@ nonisolated final class AudioGraph: @unchecked Sendable {
     /// Effects run below the limiter with this much headroom.
     private static let effectsHeadroom: Float = 0.8
 
-    init(gameplayVoices: Int, menuVoices: Int, sampleRate: Double, music style: MusicStyle?) {
+    init(gameplayVoices: Int, menuVoices: Int, sampleRate: Double) {
         format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
         voiceCounts = (gameplayVoices, menuVoices)
         limiter = Self.makeLimiter()
-        if let style {
-            music = AmbientMusic(style: style, seed: UInt64(Date().timeIntervalSince1970), sampleRate: sampleRate)
-        }
         build()
     }
 
@@ -336,8 +354,26 @@ nonisolated final class AudioGraph: @unchecked Sendable {
         }
     }
 
-    /// Renders every patch to a buffer. Slow-ish; runs once, on the queue.
-    func prepare(_ patches: [SoundPatch]) {
+    /// Replaces the patches and the music with a mode's: stops what is sounding, renders every
+    /// patch to a buffer (slow-ish) and starts the new music in `mood`.
+    func load(_ patches: [SoundPatch], music style: MusicStyle?, mood: MusicMood) {
+        if engine.isRunning {
+            for voice in gameplayVoices + menuVoices { voice.stop() }
+        }
+        buffers = [:]
+        prepare(patches)
+        musicGeneration += 1
+        musicQueued = 0
+        if engine.isRunning { musicPlayer.stop() }
+        music = style.map {
+            AmbientMusic(style: $0, seed: UInt64(Date().timeIntervalSince1970), sampleRate: format.sampleRate,
+                         mood: mood)
+        }
+        restartMusic()
+    }
+
+    /// Renders every patch to a buffer.
+    private func prepare(_ patches: [SoundPatch]) {
         for patch in patches {
             let samples = SoundRenderer.render(patch, sampleRate: format.sampleRate)
             guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)) else {

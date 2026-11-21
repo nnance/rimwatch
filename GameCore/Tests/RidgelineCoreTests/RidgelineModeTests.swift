@@ -50,6 +50,16 @@ import GameCore
         #expect(ModeDescriptor.ridgeline.id == ModeID(rawValue: "ridgeline"))
         #expect(ModeDescriptor.ridgeline.displayName == "Ridgeline")
         #expect(SettingsKeys.highScores(ModeDescriptor.ridgeline.id) == "rimwatch.highScores.ridgeline.v1")
+        #expect(ModeDescriptor.ridgeline.summary == "Rescue patrol over the crater")
+    }
+
+    @Test func theShipsHullIsTheEmblemsArrowhead() {
+        let ship = AlienFrontier().shape(for: .player)
+        #expect(ship.scale == 18)
+        #expect(ship.strokes.count == 3)
+        #expect(ship.strokes[0].points == Emblem.shipHull)
+        #expect(ship.strokes[0].closed)
+        #expect(ship.strokes[0].color == Emblem.ship.color)
     }
 
     @Test func theShellStyleComesFromTheTheme() {

@@ -14,13 +14,15 @@ public enum SettingsKeys {
     public static let options = "rimwatch.options.v1"
     /// The single high-score table saved before there were modes. It belonged to Ridgeline.
     public static let legacyHighScores = "rimwatch.highScores.v1"
+    /// The mode played last, loaded at the next launch.
+    public static let lastMode = "rimwatch.lastMode.v1"
 
     public static func highScores(_ mode: ModeID) -> String {
         "rimwatch.highScores.\(mode.rawValue).v1"
     }
 }
 
-/// Options and one high-score table per mode, stored as JSON.
+/// Options, one high-score table per mode and the mode played last, stored as JSON.
 public struct SavedSettings {
     public let store: any KeyValueStore
 
@@ -31,6 +33,14 @@ public struct SavedSettings {
     public var options: GameOptions {
         get { load(GameOptions.self, SettingsKeys.options) ?? GameOptions() }
         nonmutating set { save(newValue, SettingsKeys.options) }
+    }
+
+    /// The mode played last, or nil before any mode has been played.
+    public var lastMode: ModeID? {
+        get { load(ModeID.self, SettingsKeys.lastMode) }
+        nonmutating set {
+            if let newValue { save(newValue, SettingsKeys.lastMode) } else { store.removeObject(forKey: SettingsKeys.lastMode) }
+        }
     }
 
     public func highScores(for mode: ModeID) -> HighScoreTable {
@@ -54,10 +64,11 @@ public struct SavedSettings {
         store.removeObject(forKey: SettingsKeys.legacyHighScores)
     }
 
-    /// Clears the options, the old table and every listed mode's table. Run it before
-    /// `migrateLegacyHighScores`.
+    /// Clears the options, the remembered mode, the old table and every listed mode's table. Run
+    /// it before `migrateLegacyHighScores`.
     public func reset(modes: [ModeID]) {
         store.removeObject(forKey: SettingsKeys.options)
+        store.removeObject(forKey: SettingsKeys.lastMode)
         store.removeObject(forKey: SettingsKeys.legacyHighScores)
         for mode in modes {
             store.removeObject(forKey: SettingsKeys.highScores(mode))

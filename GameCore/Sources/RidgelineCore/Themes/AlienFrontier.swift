@@ -130,13 +130,11 @@ public struct AlienFrontier: Theme {
 
     private static func v(_ x: Double, _ y: Double) -> Vec2 { Vec2(x, y) }
 
-    /// A swept dart with a split tail.
+    /// A swept dart with a split tail. The hull is the game's emblem ship (`Emblem.shipHull`).
     static let skimmer: ShapeDescription = {
-        let top = [v(1, 0), v(0.25, 0.2), v(-0.5, 0.45), v(-0.9, 0.45), v(-0.62, 0.12), v(-0.78, 0)]
-        let hull = top + ShapeKit.mirroredY(top.dropLast().reversed())
         let c = RGB(hex: 0x3FF6FF)
         return ShapeDescription(scale: 18, strokes: [
-            ShapeStroke(Array(hull.dropLast()), closed: true, color: c),
+            ShapeStroke(Emblem.shipHull, closed: true, color: c),
             ShapeStroke([v(0.5, 0.02), v(0.15, 0.12), v(-0.15, 0.09)], color: RGB(hex: 0xE0FFFF)),
             ShapeStroke([v(-0.45, 0.25), v(-0.45, -0.25)], color: c),
         ])

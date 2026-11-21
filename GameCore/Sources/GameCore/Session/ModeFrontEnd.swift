@@ -20,6 +20,8 @@ public enum FlowEffect: Sendable, Equatable {
     case newRun
     case optionsChanged
     case highScoresChanged
+    /// The player chose another mode on the title: load it, then start a run of it there.
+    case switchMode(ModeID)
 }
 
 /// What a menu command did.
@@ -61,7 +63,12 @@ public struct ModeFrontEnd<Run: ModeRun>: Sendable {
     @usableFromInline var _screenTime = 0.0
     public private(set) var pose: FoldPose
     public private(set) var options: GameOptions
+    /// The loaded mode's high scores.
     public private(set) var highScores: HighScoreTable
+    /// The modes on the title screen and the other modes' tables.
+    public private(set) var catalog: ModeCatalog
+    /// The mode whose table the high-score screen shows.
+    public private(set) var scoresShown: ModeID
     /// The menu on screen, or nil while playing, counting down or on the Made for iPhone Duo screen.
     public private(set) var menu: Menu?
     /// Where the last recorded run placed in the table (0 is the top), or nil if it didn't place.
@@ -100,11 +107,13 @@ public struct ModeFrontEnd<Run: ModeRun>: Sendable {
     private var screenKey = ""
 
     public init(session: ModeSession<Run>, pose: FoldPose, options: GameOptions = GameOptions(),
-                highScores: HighScoreTable = HighScoreTable()) {
+                highScores: HighScoreTable = HighScoreTable(), catalog: ModeCatalog = ModeCatalog()) {
         _session = session
         self.pose = pose
         self.options = options
         self.highScores = highScores
+        self.catalog = catalog
+        scoresShown = catalog.loaded
         _session.setPlayfieldAvailable(pose.isPlayfieldAvailable)
         refreshMenu()
         screenKey = Self.key(of: screen)
@@ -190,8 +199,13 @@ public struct ModeFrontEnd<Run: ModeRun>: Sendable {
             moveSelection(by: command == .up ? -1 : 1)
             return CommandResult(accepted: menu?.selection != before)
         case .left, .right:
+            let step = command == .left ? -1 : 1
+            // With several modes, left and right page through their tables wherever the selection is.
+            if screen == .highScores, catalog.offersChoice {
+                return CommandResult(accepted: true, effects: perform(.scoresMode, step: step, wrap: true))
+            }
             let before = options
-            let effects = adjust(by: command == .left ? -1 : 1)
+            let effects = adjust(by: step)
             return CommandResult(accepted: options != before, effects: effects)
         case .activate:
             guard isActivationLive, menu?.selectedItem != nil else { return .ignored }
@@ -285,6 +299,24 @@ public struct ModeFrontEnd<Run: ModeRun>: Sendable {
                 lastRank = nil
                 effects.append(.newRun)
             }
+        case .chooseMode(let id):
+            if id == catalog.loaded {
+                return perform(.play)
+            }
+            // Another mode starts the same way Play would: only from the title or game over, and
+            // only with the playfield there. The app loads it and starts the run.
+            if catalog.descriptor(id) != nil, _session.isPlayfieldAvailable, !_session.isInGame {
+                effects.append(.switchMode(id))
+            }
+        case .scoresMode:
+            // Like the other choices, it always wraps.
+            let ids = catalog.modes.map(\.id)
+            if let index = ids.firstIndex(of: scoresShown) {
+                let next = index + step
+                scoresShown = ids[((next % ids.count) + ids.count) % ids.count]
+            } else {
+                scoresShown = catalog.loaded
+            }
         case .resume:
             _session.resume()
         case .startOver:
@@ -301,6 +333,7 @@ public struct ModeFrontEnd<Run: ModeRun>: Sendable {
             overlay = .options
         case .highScores:
             overlay = .highScores
+            scoresShown = catalog.loaded
         case .back:
             overlay = nil
         case .option(let key):
@@ -359,12 +392,14 @@ public struct ModeFrontEnd<Run: ModeRun>: Sendable {
         // A screen that is only now appearing has not served its grace yet.
         let live = Self.key(of: screen) == screenKey && isActivationLive
         guard let fresh = Self.menu(for: screen, session: _session, pose: pose, options: options,
-                                    highScores: highScores, lastRank: lastRank, gameOverLive: live) else {
+                                    highScores: highScores, lastRank: lastRank, gameOverLive: live,
+                                    catalog: catalog, scoresShown: scoresShown) else {
             menu = nil
             return
         }
         if var current = menu, current.kind == fresh.kind {
             current.heading = fresh.heading
+            current.subtitle = fresh.subtitle
             current.lines = fresh.lines
             current.table = fresh.table
             current.replaceItems(fresh.items)
@@ -395,20 +430,35 @@ public struct ModeFrontEnd<Run: ModeRun>: Sendable {
 
     /// The menu each screen shows. Pure, so it can be checked on its own.
     /// `gameOverLive` is false during the game-over hold-off, when Continue shows dimmed.
+    /// `highScores` is the loaded mode's table; `scoresShown` (the loaded mode when nil) picks the
+    /// table the high-score screen shows.
     public static func menu(for screen: Screen, session: ModeSession<Run>, pose: FoldPose, options: GameOptions,
-                            highScores: HighScoreTable, lastRank: Int? = nil, gameOverLive: Bool = true) -> Menu? {
+                            highScores: HighScoreTable, lastRank: Int? = nil, gameOverLive: Bool = true,
+                            catalog: ModeCatalog = ModeCatalog(), scoresShown: ModeID? = nil) -> Menu? {
+        func table(_ id: ModeID) -> HighScoreTable {
+            id == catalog.loaded ? highScores : catalog.tables[id] ?? HighScoreTable()
+        }
         let open = pose.isPlayfieldAvailable
         switch screen {
         case .madeForDuo, .playing, .countdown:
             return nil
 
         case .title:
-            let lines = highScores.best.map { ["Best \(groupedDigits($0.score))"] } ?? []
-            return Menu(kind: .title, heading: "Rimwatch", lines: lines, items: [
-                MenuItem(.play, "Play", disabledTitle: "Open to play", isEnabled: open),
-                MenuItem(.options, "Options"),
-                MenuItem(.highScores, "High scores"),
-            ])
+            // One item per mode, by name; the loaded one plays, the others switch first. Each
+            // carries its summary and best score for the title to show while it is selected.
+            // While closed they wait for the phone to open: one mode says so on its item, several
+            // say it once under the heading.
+            let several = catalog.offersChoice
+            let modes = catalog.modes.map { mode in
+                var details = mode.summary.isEmpty ? [] : [mode.summary]
+                if let best = table(mode.id).best { details.append("Best \(groupedDigits(best.score))") }
+                return MenuItem(mode.id == catalog.loaded ? .play : .chooseMode(mode.id), mode.displayName,
+                                disabledTitle: several ? nil : "Open to play", isEnabled: open, details: details)
+            }
+            return Menu(kind: .title, heading: "Rimwatch", subtitle: "Outpost Calder",
+                        lines: several && !open ? ["Open to play"] : [],
+                        items: modes + [MenuItem(.options, "Options"), MenuItem(.highScores, "High scores")],
+                        preferredDefaults: [.play])
 
         case .paused:
             let result = session.run.result
@@ -446,12 +496,20 @@ public struct ModeFrontEnd<Run: ModeRun>: Sendable {
             return Menu(kind: .options, heading: "Options", items: rows + [MenuItem(.back, "Back")])
 
         case .highScores:
-            guard !highScores.entries.isEmpty else {
-                return Menu(kind: .highScores, heading: "High scores", lines: ["No scores yet"],
-                            items: [MenuItem(.back, "Back")])
+            // Names the mode whose table this is; with several modes a row steps between them.
+            let shown = scoresShown ?? catalog.loaded
+            let name = catalog.descriptor(shown)?.displayName
+            var items = [MenuItem(.back, "Back")]
+            if catalog.offersChoice {
+                items.insert(MenuItem(.scoresMode, "Mode", value: name, isAdjustable: true), at: 0)
             }
-            return Menu(kind: .highScores, heading: "High scores", table: highScoreTable(highScores),
-                        items: [MenuItem(.back, "Back")])
+            let scores = table(shown)
+            guard !scores.entries.isEmpty else {
+                return Menu(kind: .highScores, heading: "High scores", subtitle: name, lines: ["No scores yet"],
+                            items: items)
+            }
+            return Menu(kind: .highScores, heading: "High scores", subtitle: name, table: highScoreTable(scores),
+                        items: items)
         }
     }
 }

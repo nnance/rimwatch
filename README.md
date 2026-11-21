@@ -1,17 +1,22 @@
 # Rimwatch
 
-A side-scrolling rescue shooter for the iPhone Duo's inner display, inspired by the classic arcade
-game Defender (Williams Electronics, 1981). Native iOS, written in Swift with SpriteKit. It has no
-third-party dependencies and no asset files: the art is drawn in code and the sound is synthesised.
-The one image in the app, its icon, is drawn by a script too.
+Rescue games for the iPhone Duo's inner display, set in one world: Calder, a colony built inside a
+vast crater, whose wall is the Rim. Rimwatch is the game; it is made of modes, each its own game
+about saving colonists. The first mode, **Ridgeline**, is a side-scrolling rescue shooter inspired
+by the classic arcade game Defender (Williams Electronics, 1981). Two more, Redoubt (a twin-stick
+arena shooter) and Riftwing (flap-to-fly combat), are planned.
 
-![Rimwatch gameplay in wave 2: the ship firing at a Harvester above an outpost with two colonists](docs/screenshot.png)
+Native iOS, written in Swift with SpriteKit. It has no third-party dependencies and no asset files:
+the art is drawn in code and the sound is synthesised. The one image in the app, its icon, is drawn
+by a script too.
 
-*Captured on an ordinary iPhone simulator, letterboxed to the Duo's inner-display shape.*
+![Ridgeline, Rimwatch's first mode, in wave 2: the ship firing at a Harvester above an outpost with two colonists](docs/screenshot.png)
+
+*Ridgeline, captured on an ordinary iPhone simulator, letterboxed to the Duo's inner-display shape.*
 
 ## Inspiration
 
-Rimwatch sets out to capture the feel of Defender: fast momentum flight over a wraparound world, a
+Ridgeline sets out to capture the feel of Defender: fast momentum flight over a wraparound world, a
 scanner that shows all of it, and a loop built on protecting people on the ground and catching them
 when they are carried off.
 
@@ -21,12 +26,22 @@ Blackout. Rimwatch is not affiliated with or endorsed by the owners of Defender.
 
 ## Status
 
-All seven steps of the build plan are done and were checked in the simulator. The game has not yet
-been run on a real iPhone Duo, so the open inner display (layout around the crease and camera
-hole), play feel, speaker sound, haptics and physical controllers are untested. `PLAN.md` lists
-what is left.
+Ridgeline is finished and was checked in the simulator. The title screen lets the player choose a
+mode, and lists only Ridgeline until the others are built. The game has not yet been run on a real
+iPhone Duo, so the open inner display (layout around the crease and camera hole), play feel,
+speaker sound, haptics and physical controllers are untested. `PLAN.md` lists what is left and the
+plan for the other modes.
 
-## The game
+## The title screen
+
+The title shows the Rimwatch emblem, the name and the setting, Outpost Calder. Below them is one
+item per mode, then Options and High scores. Highlighting a mode shows a line about it and its best
+score; choosing it starts a run. Each mode keeps its own top-10 table, and the high-score screen
+names the mode whose table it shows (with more than one mode, left and right switch between
+them). The game opens on the mode played last, with that mode's scenery behind the title. Ending a
+game, or continuing after game over, comes back here.
+
+## Ridgeline
 
 You patrol a wraparound planet strip about eight screens wide. A scanner across the top shows the
 whole world.
@@ -45,7 +60,7 @@ whole world.
 - **Structure:** escalating waves, three lives, an extra life every 40,000 points and a local
   top-10 high-score table.
 
-## Controls
+## Ridgeline controls
 
 | Action | Touch | Gamepad |
 |---|---|---|
@@ -67,7 +82,7 @@ Gameplay only runs on the open inner display.
 | Phone | What happens |
 |---|---|
 | Open | The game plays in landscape on the inner display. |
-| Closed | The game pauses at once and the outer display shows the pause menu in portrait: start over, end game, options and high scores. Resume waits until the phone is opened. |
+| Closed | The game pauses at once and the outer display shows the pause menu in portrait: start over, end game, options and high scores. Resume waits until the phone is opened. The title screen, options and high scores work closed too; choosing a mode waits until the phone is opened. |
 | Reopened | The pause menu appears on the inner display, and Resume leads into a short countdown. |
 | No hinge (any other iPhone) | A "Made for iPhone Duo" screen. |
 
@@ -112,8 +127,13 @@ The arguments are the number of seeds, a cap in minutes per game, and the bots t
 
 ## App icon
 
-The icon is generated, not drawn by hand. After changing the ship or colonist shapes or the
-palette in the theme, regenerate it from the repository root:
+The icon is the game's emblem, "The Rim": the crater's rim seen from above as a rough orange ring,
+a thinner inner ring, and the patrol ship's arrowhead crossing the centre, in neon lines on black.
+The title screen draws the same emblem. Its geometry lives in one place,
+`GameCore/Sources/GameCore/Emblem.swift`, which Ridgeline's ship hull also comes from.
+
+The icon is generated, not drawn by hand. After changing the emblem, regenerate it from the
+repository root:
 
 ```sh
 swift run --package-path Tools/Icon Icon Rimwatch/Assets.xcassets/AppIcon.appiconset/AppIcon.png
@@ -123,17 +143,17 @@ swift run --package-path Tools/Icon Icon Rimwatch/Assets.xcassets/AppIcon.appico
 
 | Path | What it holds |
 |---|---|
-| `GameCore/` | The game logic as a Swift package, with no UIKit or SpriteKit, and its tests. Its `RidgelineCore` target is the game: world, simulation, enemies, waves, scoring and the theme, plugged into the shared session in `RidgelineMode.swift`. Its `GameCore` target is what any game mode can share: maths, shapes, sound rendering and music, menus, options, saved settings with one high-score table per mode, gamepad logic, and in `Session/` the pause, countdown and screen flow around a run (`ModeSession`, `ModeFrontEnd`), written against the `ModeRun` protocol each mode's simulation conforms to. The game logic knows what each entity does, never how it looks; appearance and sound come from a `Theme`. |
+| `GameCore/` | The game logic as a Swift package, with no UIKit or SpriteKit, and its tests. Its `RidgelineCore` target is the Ridgeline mode: world, simulation, enemies, waves, scoring and the theme, plugged into the shared session in `RidgelineMode.swift`. Its `GameCore` target is what any game mode can share: maths, shapes, the emblem, sound rendering and music, menus, options, saved settings (one high-score table per mode and the mode played last), gamepad logic, the list of modes the title offers (`ModeCatalog`), and in `Session/` the title, pause, countdown and screen flow around a run (`ModeSession`, `ModeFrontEnd`), written against the `ModeRun` protocol each mode's simulation conforms to. The game logic knows what each entity does, never how it looks; appearance and sound come from a `Theme`. |
 | `Rimwatch/` | The app. |
-| `Rimwatch/Shell/` | The parts of the app any mode shares, with no Ridgeline in them. `ShellScene` is the one SpriteKit scene; `ModeHost` runs one mode inside it (screen flow, menus, pause, countdown, audio, haptics, settings, gamepad, touches) through the `GameMode` protocol in `GameMode.swift`. Also fold handling, the glow renderer, and the menu screens and play overlays, whose look comes from a `ShellStyle`. |
+| `Rimwatch/Shell/` | The parts of the app any mode shares, with no Ridgeline in them. `ShellScene` is the one SpriteKit scene: it owns the devices every mode shares (`ShellDevices`: the synth, the game controller, haptics) and loads one mode at a time, swapping modes when the title asks. `ModeHost` runs the loaded mode inside it (screen flow, menus, pause, countdown, sound, settings, touches) through the `GameMode` protocol in `GameMode.swift`. Also fold handling, the glow renderer, the emblem, and the menu screens and play overlays, whose look comes from a `ShellStyle`. |
 | `Rimwatch/Modes/` | `ModeRegistry.swift` lists the modes and is the only shell-level file that names one. |
 | `Rimwatch/Modes/Ridgeline/` | Ridgeline as a `GameMode`: `RidgelineMode.swift` (layout, screens, input, sound) with its backdrop, events and per-entity sync in `RidgelineMode+Backdrop.swift`, `+Events.swift` and `+Sync.swift`, plus the terrain, scanner, HUD, particle effects, callouts, touch controls and entity glyphs. |
 | `Tools/Harness/` | The bot harness used for difficulty tuning. |
-| `Tools/Icon/` | The script that draws the app icon from the theme's ship and colonist shapes. |
+| `Tools/Icon/` | The script that draws the app icon from the emblem in `GameCore`. |
 | `PLAN.md` | The design, the build history and what is left. |
 | `CLAUDE.md` | Working notes for building the project with Claude Code. |
 
-Gameplay numbers live in `GameCore/Sources/RidgelineCore/Tuning.swift`.
+Ridgeline's gameplay numbers live in `GameCore/Sources/RidgelineCore/Tuning.swift`.
 
 ## Debug launch arguments
 
@@ -144,12 +164,14 @@ These exist in Debug builds only.
 | `-hinge open\|closed\|none` | Overrides the fold state. |
 | `-autopilot [idle\|novice\|competent\|shooter]` | A bot plays the game. Plain `-autopilot` is `competent`; `shooter` never rescues; `idle` never touches the controls and `novice` plays badly, so both reach game over quickly. |
 | `-showStats` | Shows node count, draw count and frame rate. |
-| `-resetSettings` | Clears saved options and every mode's high scores at launch. |
+| `-resetSettings` | Clears saved options, the remembered mode and every mode's high scores at launch. |
 | `-logFeedback` | Logs every routed sound and haptic. |
 | `-realPads` | Uses real controllers in the simulator, which otherwise reports a phantom one. |
 | `-dumpAudio <dir>` | Writes every sound and music mood to WAV files. |
 | `-seed <n>` | Starts the session from seed `n` instead of the clock, so the runs are the same every launch. |
 | `-fixedFrame` | Counts every frame after the first as exactly 1/60 s, whatever the real time. With `-seed` and `-autopilot`, runs play out the same way every time; the `[Rimwatch run]` lines log each run's seed and result. |
+| `-mode <id>` | Loads mode `<id>` at launch (for example `ridgeline`) instead of the one played last. |
+| `-debugSecondMode` | Lists Ridgeline a second time as "Ridgeline B" (id `ridgelineB`, with its own high-score table), so choosing and switching modes can be tried while there is only one real mode. |
 
 `PLAN.md` also lists the Darwin notifications that change the fold state and drive the menus and a
 simulated controller at run time.

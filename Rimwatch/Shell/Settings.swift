@@ -1,8 +1,8 @@
 import Foundation
 import GameCore
 
-/// Options and one high-score table per mode, persisted in UserDefaults as JSON (see
-/// `SavedSettings`). Audio, haptics and the gamepad read their options from here once they exist.
+/// Options, one high-score table per mode and the mode played last, persisted in UserDefaults as
+/// JSON (see `SavedSettings`). Audio, haptics and the gamepad read their options from here once they exist.
 @MainActor
 final class Settings {
     private let saved: SavedSettings
@@ -24,6 +24,12 @@ final class Settings {
     var options: GameOptions {
         get { saved.options }
         set { saved.options = newValue }
+    }
+
+    /// The mode played last, loaded at the next launch.
+    var lastMode: ModeID? {
+        get { saved.lastMode }
+        set { saved.lastMode = newValue }
     }
 
     func highScores(for mode: ModeID) -> HighScoreTable {

@@ -101,27 +101,29 @@ final class GlowShapeFactory {
         return UIGraphicsImageRenderer(size: size, format: format).image { draw($0.cgContext) }
     }
 
-    /// Strokes `path` as a glowing line. `strength` scales the brightness of every pass.
-    nonisolated static func strokeGlow(_ path: CGPath, color: RGB, strength: Double = 1, in context: CGContext) {
+    /// Strokes `path` as a glowing line. `strength` scales the brightness of every pass; `weight`
+    /// scales every pass's width and blur (1 is the shapes' thin line).
+    nonisolated static func strokeGlow(_ path: CGPath, color: RGB, strength: Double = 1, weight: CGFloat = 1,
+                                       in context: CGContext) {
         context.saveGState()
         context.setLineJoin(.round)
         context.setLineCap(.round)
 
-        context.setShadow(offset: .zero, blur: Style.haloBlur, color: color.cgColor(alpha: 0.9 * strength))
+        context.setShadow(offset: .zero, blur: Style.haloBlur * weight, color: color.cgColor(alpha: 0.9 * strength))
         context.setStrokeColor(color.cgColor(alpha: 0.35 * strength))
-        context.setLineWidth(Style.haloWidth)
+        context.setLineWidth(Style.haloWidth * weight)
         context.addPath(path)
         context.strokePath()
 
-        context.setShadow(offset: .zero, blur: Style.lineBlur, color: color.cgColor(alpha: strength))
+        context.setShadow(offset: .zero, blur: Style.lineBlur * weight, color: color.cgColor(alpha: strength))
         context.setStrokeColor(color.cgColor(alpha: strength))
-        context.setLineWidth(Style.lineWidth)
+        context.setLineWidth(Style.lineWidth * weight)
         context.addPath(path)
         context.strokePath()
 
         context.setShadow(offset: .zero, blur: 0, color: nil)
         context.setStrokeColor(color.lightened(0.65).cgColor(alpha: strength))
-        context.setLineWidth(Style.coreWidth)
+        context.setLineWidth(Style.coreWidth * weight)
         context.addPath(path)
         context.strokePath()
         context.restoreGState()

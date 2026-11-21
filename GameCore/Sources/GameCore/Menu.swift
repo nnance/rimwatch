@@ -8,6 +8,8 @@ public struct Menu: Sendable, Equatable {
 
     public let kind: Kind
     public var heading: String
+    /// A quieter line under the heading (the setting on the title, the mode on High scores).
+    public var subtitle: String?
     /// Text shown under the heading: the score on the pause menu, the table on High scores.
     public var lines: [String]
     /// A table of rows and columns (the high scores), drawn beside or below the lines.
@@ -19,10 +21,11 @@ public struct Menu: Sendable, Equatable {
     /// When none of them is enabled the first enabled item is selected.
     public let preferredDefaults: [MenuItem.Command]
 
-    public init(kind: Kind, heading: String, lines: [String] = [], table: MenuTable? = nil, items: [MenuItem],
-                preferredDefaults: [MenuItem.Command] = []) {
+    public init(kind: Kind, heading: String, subtitle: String? = nil, lines: [String] = [], table: MenuTable? = nil,
+                items: [MenuItem], preferredDefaults: [MenuItem.Command] = []) {
         self.kind = kind
         self.heading = heading
+        self.subtitle = subtitle
         self.lines = lines
         self.table = table
         self.items = items
@@ -39,6 +42,13 @@ public struct Menu: Sendable, Equatable {
 
     public var selectedItem: MenuItem? {
         selection.map { items[$0] }
+    }
+
+    /// The detail lines to show for the selection: the selected item's, or when it has none (the
+    /// selection is on Options, or nothing can be selected) those of the item that plays.
+    public var detailLines: [String] {
+        if let details = selectedItem?.details, !details.isEmpty { return details }
+        return items.first { $0.command == .play }?.details ?? []
     }
 
     /// Moves the selection by `step` items, skipping disabled ones and wrapping at the ends.
@@ -92,6 +102,10 @@ public struct MenuItem: Sendable, Equatable, Identifiable {
         /// Leaves the game-over screen.
         case proceed
         case option(OptionKey)
+        /// Switches to another mode and starts a run of it. (`play` starts the loaded mode.)
+        case chooseMode(ModeID)
+        /// Steps which mode's table the high-score screen shows.
+        case scoresMode
     }
 
     public var id: Command { command }
@@ -104,15 +118,18 @@ public struct MenuItem: Sendable, Equatable, Identifiable {
     public var isEnabled: Bool
     /// True for an option that steps up and down (gamepad left and right, touch arrows).
     public var isAdjustable: Bool
+    /// Lines describing the item, shown while it is selected (a mode's summary and best score).
+    public var details: [String]
 
     public init(_ command: Command, _ title: String, disabledTitle: String? = nil, value: String? = nil,
-                isEnabled: Bool = true, isAdjustable: Bool = false) {
+                isEnabled: Bool = true, isAdjustable: Bool = false, details: [String] = []) {
         self.command = command
         self.title = title
         self.disabledTitle = disabledTitle
         self.value = value
         self.isEnabled = isEnabled
         self.isAdjustable = isAdjustable
+        self.details = details
     }
 
     /// What to show on the item right now.

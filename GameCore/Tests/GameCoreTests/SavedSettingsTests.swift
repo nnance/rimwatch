@@ -106,8 +106,27 @@ private final class MemoryStore: KeyValueStore {
         store.values[SettingsKeys.legacyHighScores] = try Self.bytes(Self.table([100]))
         settings.setHighScores(Self.table([200]), for: Self.ridgeline)
         settings.setHighScores(Self.table([300]), for: Self.other)
+        settings.lastMode = Self.other
         settings.reset(modes: [Self.ridgeline, Self.other])
         #expect(store.values.isEmpty)
+    }
+
+    @Test func theLastModeIsRememberedUnderItsOwnKey() throws {
+        let store = MemoryStore()
+        let settings = SavedSettings(store: store)
+        #expect(settings.lastMode == nil)
+        settings.options = GameOptions()
+        settings.setHighScores(Self.table([200]), for: Self.ridgeline)
+        let before = store.values.mapValues { $0 as? Data }
+        settings.lastMode = Self.other
+        #expect(SettingsKeys.lastMode == "rimwatch.lastMode.v1")
+        #expect(settings.lastMode == Self.other)
+        #expect(SavedSettings(store: store).lastMode == Self.other)
+        // The options and tables are untouched.
+        #expect(store.values.count == before.count + 1)
+        for (key, value) in before { #expect(store.data(forKey: key) == value) }
+        settings.lastMode = nil
+        #expect(store.values[SettingsKeys.lastMode] == nil)
     }
 
     @Test func userDefaultsIsAStore() throws {

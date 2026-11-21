@@ -46,7 +46,7 @@ final class GameViewController: UIViewController {
         skView.frame = playfieldFrame(in: view.bounds)
         guard skView.bounds.width > 0, skView.bounds.height > 0 else { return }
         if scene == nil {
-            let scene = ShellScene(size: skView.bounds.size, entry: ModeRegistry.launch)
+            let scene = ShellScene(size: skView.bounds.size, entries: ModeRegistry.all, launch: ModeRegistry.launch)
             scene.scaleMode = .resizeFill
             scene.safeAreaInsets = layoutInsets()
             skView.presentScene(scene)

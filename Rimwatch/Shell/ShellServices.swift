@@ -6,7 +6,8 @@ import UIKit
 @MainActor
 final class ShellServices {
     let factory: GlowShapeFactory
-    let style: ShellStyle
+    /// The loaded mode's look for the shared screens. Changes only between modes.
+    var style: ShellStyle
     /// Game time in seconds, advanced by the shell each frame.
     var clock: TimeInterval = 0
     /// The scene's geometry, refreshed by the shell before every layout.

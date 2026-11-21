@@ -31,11 +31,14 @@ private enum HostConstants {
 
 /// Drives a `ModeFrontEnd` (and through it the `ModeSession`) with real frame time for one mode,
 /// and shows whichever screen the front end is on: menus, pause button, countdown, the
-/// controller hint, with the mode's own layers underneath. Owns audio, haptics, settings and the
-/// gamepad.
+/// controller hint, with the mode's own layers underneath. Routes the mode's sound and haptics
+/// through the scene's shared devices, reads the gamepad, and saves options, high scores and the
+/// mode last played.
 @MainActor
 final class ModeHost<Mode: GameMode>: ModeDriver {
+    let descriptor: ModeDescriptor
     let services: ShellServices
+    let devices: ShellDevices
     let flow: FlowBox<Mode.Run>
     let mode: Mode
 
@@ -53,13 +56,12 @@ final class ModeHost<Mode: GameMode>: ModeDriver {
     private let countdown: CountdownNode
     private let madeForDuo: MadeForDuoNode
     private let feedback: FeedbackRouter
-    private let synth: Synth
-    private let hapticRouter: HapticRouter
+    private var synth: Synth { devices.synth }
     /// Until when play-only layers are drawn faintly to warm the renderer (see the mode's prewarm).
     private var warmUntil: TimeInterval = 0
     /// Layers dimmed for the warm-up, with the alpha each had before.
     private var warmDimmed: [ObjectIdentifier: CGFloat] = [:]
-    private let gamepad = GamepadInput()
+    private var gamepad: GamepadInput { devices.gamepad }
     /// A short line saying a controller connected or disconnected.
     private let padHint = SKNode()
     private var pauseTouch: UITouch?
@@ -83,11 +85,19 @@ final class ModeHost<Mode: GameMode>: ModeDriver {
     private var safeAreaInsets: UIEdgeInsets { scene.safeAreaInsets }
     private var keepClear: ClosedRange<CGFloat>? { scene.keepClear }
 
-    var descriptor: ModeDescriptor { Mode.descriptor }
-
-    init(services: ShellServices) {
+    /// `descriptor` names this mode (usually `Mode.descriptor`); `modes` are every registered mode,
+    /// for the title.
+    init(descriptor: ModeDescriptor, modes: [ModeDescriptor], services: ShellServices, devices: ShellDevices) {
+        self.descriptor = descriptor
         self.services = services
-        let options = Settings.shared.options
+        self.devices = devices
+        let settings = Settings.shared
+        let options = settings.options
+        var tables: [ModeID: HighScoreTable] = [:]
+        for other in modes where other.id != descriptor.id {
+            tables[other.id] = settings.highScores(for: other.id)
+        }
+        let catalog = ModeCatalog(modes: modes, loaded: descriptor.id, tables: tables)
         let clockSeed = UInt64(Date().timeIntervalSince1970 * 1000) & 0xFFFF_FFFF
         #if DEBUG
         // Launch with -seed <n> for the same runs every time (for comparing builds).
@@ -97,7 +107,8 @@ final class ModeHost<Mode: GameMode>: ModeDriver {
         #endif
         let flow = FlowBox(frontEnd: ModeFrontEnd(session: Mode.makeSession(seed: seed),
                                                   pose: .closed, options: options,
-                                                  highScores: Settings.shared.highScores(for: Mode.descriptor.id)))
+                                                  highScores: settings.highScores(for: descriptor.id),
+                                                  catalog: catalog))
         self.flow = flow
         mode = Mode(services: services, session: { [flow] in flow.frontEnd.session })
         mode.touchControls?.handedness = options.handedness
@@ -106,9 +117,7 @@ final class ModeHost<Mode: GameMode>: ModeDriver {
         pauseButton = PauseButton(style: style)
         countdown = CountdownNode(style: style)
         madeForDuo = MadeForDuoNode(style: style)
-        hapticRouter = HapticRouter()
-        synth = Synth(sounds: Mode.audio.sounds, music: Mode.audio.music, options: options)
-        feedback = FeedbackRouter(style: style, options: options, sound: synth, haptics: hapticRouter)
+        feedback = FeedbackRouter(style: style, options: options, sound: devices.synth, haptics: devices.haptics)
     }
 
     func attach() {
@@ -129,13 +138,39 @@ final class ModeHost<Mode: GameMode>: ModeDriver {
             scene.addChild(node)
         }
 
+        synth.load(sounds: Mode.audio.sounds, music: Mode.audio.music)
         layoutForSize()
         presentScreen()
         #if DEBUG
         DebugMenuCommands.listen { [weak self] command in self?.runMenuCommand(command) }
         #endif
-        gamepad.onChange = { [weak self] change in self?.gamepadChanged(change) }
-        gamepad.start()
+    }
+
+    #if DEBUG
+    deinit {
+        debugLog("[Rimwatch mode] released \(descriptor.id.rawValue)")
+    }
+    #endif
+
+    func detach() {
+        guard isSetUp else { return }
+        isSetUp = false
+        mode.touchControls?.releaseAll()
+        pauseTouch = nil
+        for node in [padHint, mode.root, pauseButton, countdown, menuNode, madeForDuo] as [SKNode] {
+            node.removeAllActions()
+            node.removeFromParent()
+        }
+        menuNode.hide()
+        warmDimmed = [:]
+    }
+
+    func startRun() {
+        guard isPoseKnown else { return }
+        apply(frontEnd.perform(.play))
+        menuActivationMayHaveStartedPlay()
+        noteScreenForGamepad()
+        presentScreen()
     }
 
     // MARK: Gamepad and menu commands
@@ -203,15 +238,13 @@ final class ModeHost<Mode: GameMode>: ModeDriver {
         gamepad.reader.screenChanged()
     }
 
-    private func gamepadChanged(_ change: GamepadInput.Change) {
+    func gamepadChanged(_ change: GamepadInput.Change) {
         mode.touchControls?.releaseAll()
         switch change {
         case .connected(let name, _):
-            hapticRouter.setController(connected: true, player: gamepad.haptics)
             debugLog("[Rimwatch pad] connected: \(name)")
             showPadHint("Controller connected")
         case .disconnected(let name):
-            hapticRouter.setController(connected: false, player: nil)
             debugLog("[Rimwatch pad] disconnected: \(name)")
             // The player has lost their controls: pause, and the touch controls come back.
             frontEnd.controllerDisconnected()
@@ -374,13 +407,16 @@ final class ModeHost<Mode: GameMode>: ModeDriver {
         for effect in effects {
             switch effect {
             case .newRun:
+                if settings.lastMode != descriptor.id { settings.lastMode = descriptor.id }
                 startRunVisuals()
             case .optionsChanged:
                 settings.options = frontEnd.options
                 mode.touchControls?.handedness = frontEnd.options.handedness
                 feedback.options = frontEnd.options
             case .highScoresChanged:
-                settings.setHighScores(frontEnd.highScores, for: Mode.descriptor.id)
+                settings.setHighScores(frontEnd.highScores, for: descriptor.id)
+            case .switchMode(let id):
+                scene.requestModeSwitch(to: id)
             }
         }
     }

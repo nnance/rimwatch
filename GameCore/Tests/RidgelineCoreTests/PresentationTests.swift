@@ -36,10 +36,10 @@ private func deliverTwo(_ sim: inout Simulation) throws -> [GameEvent] {
         let table = HighScoreTable(entries: [HighScoreEntry(score: 12_340, wave: 6, date: Date())])
         let menu = FrontEnd.menu(for: .title, session: GameSession(seed: 1), pose: .open,
                                  options: GameOptions(), highScores: table)
-        #expect(menu?.lines == ["Best 12,340"])
+        #expect(menu?.detailLines == ["Best 12,340"])
         let empty = FrontEnd.menu(for: .title, session: GameSession(seed: 1), pose: .open,
                                   options: GameOptions(), highScores: HighScoreTable())
-        #expect(empty?.lines == [])
+        #expect(empty?.detailLines == [])
     }
 
     @Test func gameOverShowsWaveSavedAndPlacement() {
@@ -236,7 +236,7 @@ private func deliverTwo(_ sim: inout Simulation) throws -> [GameEvent] {
         let table = try JSONDecoder().decode(HighScoreTable.self, from: Data(Self.messy.utf8))
         let menu = FrontEnd.menu(for: .title, session: GameSession(seed: 1), pose: .open,
                                  options: GameOptions(), highScores: table)
-        #expect(menu?.lines == ["Best 15,000"])
+        #expect(menu?.detailLines == ["Best 15,000"])
     }
 
     @Test func equalScoresKeepTheirOrder() {
