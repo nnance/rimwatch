@@ -1,47 +1,40 @@
 import Foundation
 import GameCore
+import RidgelineCore
 
-/// Options and the high-score table, persisted in UserDefaults as JSON. Audio, haptics and the
-/// gamepad read their options from here once they exist.
+/// Options and one high-score table per mode, persisted in UserDefaults as JSON (see
+/// `SavedSettings`). Audio, haptics and the gamepad read their options from here once they exist.
 @MainActor
 final class Settings {
     static let shared = Settings()
 
-    private enum Key {
-        static let options = "rimwatch.options.v1"
-        static let highScores = "rimwatch.highScores.v1"
-    }
+    /// Every mode with a table, and the mode that owns the table saved before there were modes.
+    private static let modes: [ModeID] = [ModeDescriptor.ridgeline.id]
+    private static let legacyHighScoreOwner = ModeDescriptor.ridgeline.id
 
-    private let defaults: UserDefaults
+    private let saved: SavedSettings
 
     init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
+        saved = SavedSettings(store: defaults)
         #if DEBUG
-        // Launch with -resetSettings to start from defaults and an empty table.
+        // Launch with -resetSettings to start from defaults and empty tables.
         if ProcessInfo.processInfo.arguments.contains("-resetSettings") {
-            defaults.removeObject(forKey: Key.options)
-            defaults.removeObject(forKey: Key.highScores)
+            saved.reset(modes: Self.modes)
         }
         #endif
+        saved.migrateLegacyHighScores(to: Self.legacyHighScoreOwner)
     }
 
     var options: GameOptions {
-        get { load(GameOptions.self, Key.options) ?? GameOptions() }
-        set { save(newValue, Key.options) }
+        get { saved.options }
+        set { saved.options = newValue }
     }
 
-    var highScores: HighScoreTable {
-        get { load(HighScoreTable.self, Key.highScores) ?? HighScoreTable() }
-        set { save(newValue, Key.highScores) }
+    func highScores(for mode: ModeID) -> HighScoreTable {
+        saved.highScores(for: mode)
     }
 
-    private func load<T: Decodable>(_ type: T.Type, _ key: String) -> T? {
-        guard let data = defaults.data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode(type, from: data)
-    }
-
-    private func save<T: Encodable>(_ value: T, _ key: String) {
-        guard let data = try? JSONEncoder().encode(value) else { return }
-        defaults.set(data, forKey: key)
+    func setHighScores(_ table: HighScoreTable, for mode: ModeID) {
+        saved.setHighScores(table, for: mode)
     }
 }

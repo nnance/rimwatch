@@ -1,0 +1,68 @@
+import Testing
+import GameCore
+@testable import RidgelineCore
+
+/// How Ridgeline plugs into the shared session: its run's result and ending, its id, and the look
+/// its theme gives the shared screens.
+@Suite struct RidgelineModeTests {
+    @Test func theResultReadsScoreWaveAndColonistsSaved() {
+        var sim = quietSimulation()
+        sim.addScore(1250)
+        sim.wave = 4
+        sim.colonistsSaved = 3
+        #expect(sim.result == RunResult(score: sim.score, wave: 4, saved: 3))
+        #expect(sim.score == 1250)
+    }
+
+    @Test func theRunEndsInDefeatOnlyAtGameOver() {
+        var sim = quietSimulation()
+        #expect(sim.ending == nil)
+        sim.player.lives = 1
+        sim.addEnemy(kind: .husk, at: sim.player.pos, state: .hunting)
+        run(&sim, maxSteps: 60, until: \.isGameOver)
+        #expect(sim.isGameOver)
+        #expect(sim.ending == .defeated)
+    }
+
+    @Test func theSharedInitialiserBuildsTheSameRun() {
+        var tuning = Tuning()
+        tuning.maxSpeed = 500
+        var a = Simulation(seed: 11, config: tuning)
+        var b = Simulation(seed: 11, tuning: tuning)
+        #expect(a.tuning.maxSpeed == 500)
+        for _ in 0..<600 {
+            #expect(a.step(InputState()) == b.step(InputState()))
+        }
+        #expect(a.result == b.result)
+    }
+
+    @Test func theSessionStillSpeaksRidgeline() {
+        var tuning = Tuning()
+        tuning.maxLives = 5
+        let session = GameSession(seed: 3, tuning: tuning)
+        #expect(session.tuning.maxLives == 5)
+        #expect(session.config.maxLives == 5)
+        #expect(session.simulation.tuning.maxLives == 5)
+        #expect(Simulation.timeStep == 1.0 / 120)
+    }
+
+    @Test func theModeIsCalledRidgeline() {
+        #expect(ModeDescriptor.ridgeline.id == ModeID(rawValue: "ridgeline"))
+        #expect(ModeDescriptor.ridgeline.displayName == "Ridgeline")
+        #expect(SettingsKeys.highScores(ModeDescriptor.ridgeline.id) == "rimwatch.highScores.ridgeline.v1")
+    }
+
+    @Test func theShellStyleComesFromTheTheme() {
+        let theme = AlienFrontier()
+        let style = theme.shellStyle
+        #expect(style.background == theme.palette.background)
+        #expect(style.text == theme.palette.hud)
+        #expect(style.highlight == theme.palette.falling)
+        #expect(style.heading == theme.terrain.ridge)
+        #expect(style.controls == theme.palette.controls)
+        #expect(style.menuSounds.count == MenuSound.allCases.count)
+        for sound in MenuSound.allCases {
+            #expect(style.menuSounds[sound] == theme.menuSound(sound))
+        }
+    }
+}

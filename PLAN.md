@@ -83,11 +83,16 @@ These lines were written from memory of the code before step 8. What step 8 foun
 - Shared now (`GameCore` target): maths and random numbers, sweep collision maths, colour and
   shape types, the menu model, options, high-score tables, the gamepad reader and menu
   navigation, haptic cue names, the sound patch types and renderer, and the music synthesis.
-- Still Ridgeline's (`RidgelineCore` target) although the table lists it as shared: the pause and
-  countdown session logic (`GameSession`), the screen and menu flow (`FrontEnd`), the `Theme`
-  protocol with its palette, and the mapping from gamepad buttons to actions. Each is written
-  against Ridgeline's simulation, events or abilities, so sharing them needs the mode contract.
-  That is step 9's work.
+- Shared since step 9a: the pause, countdown and screen-flow logic (`ModeSession`,
+  `ModeFrontEnd` in `GameCore/Session/`, written against the `ModeRun` protocol that a mode's
+  simulation conforms to) and saved settings with one high-score table per mode
+  (`SavedSettings`). `RidgelineCore` keeps the names `GameSession` and `FrontEnd` as typealiases.
+- Still Ridgeline's: the `Theme` protocol with its palette, and the mapping from gamepad buttons
+  to actions.
+- Known Ridgeline-shaped parts of the shared session code, to settle while building Redoubt:
+  the run result is fixed at score, wave and colonists saved; the pause and game-over menu
+  lines are written in the shared front end (the heading says "Game over" even for a goal-met
+  ending); the options carry Ridgeline's stick side and gamepad layout.
 - Some shared types still carry Ridgeline wording (a `blackout` music mood, `wave` and `saved`
   on a high-score entry, option names that mention Blink and Shockwave). They get tidied when
   the second mode shows what the general form should be.
@@ -148,9 +153,9 @@ Each step is built, independently verified and committed before the next one sta
     - Check, in parallel: you confirm on your phone that Ridgeline plays as it did before. This
       does not hold up the next step; a difference you find is fixed before other work.
 11. **Twin-stick input in the shared shell**: a second floating stick for aiming on touch, and the
-    right stick on a gamepad.
-12. **Redoubt design.** The full design (arena, enemies, controls, scoring, waves) is written into
-    this plan for you to approve. No code before that.
+    right stick and shoulder buttons on a gamepad.
+12. **Redoubt design.** Written under "Redoubt design" at the end of this plan and approved on
+    2026-11-20.
 13. **Redoubt build**, in the same order Ridgeline was built: game logic with tests and bots,
     rendering, sound and haptics, waves and tuning, polish.
     - Gate: you play Redoubt and we refine it until you are happy to move on.
@@ -302,14 +307,20 @@ step is pushed so you can install it.
 - [ ] 9. Split the app into a shared shell and the Ridgeline mode; one high-score table per mode
   - [x] Safety net: golden replay test and the DEBUG `-seed`, `-fixedFrame` and
         `-autopilot <skill>` arguments (2026-11-20). 205 tests.
-  - [ ] 9a. Session and screen-flow logic shared; per-mode high scores with migration
+  - [x] 9a. Session and screen-flow logic shared; per-mode high scores with migration
+        (2026-11-20). `ModeRun`, `ModeSession` and `ModeFrontEnd` are in the shared target; a run
+        can end by goal as well as by defeat. The old high-score table moves to Ridgeline's key
+        (`rimwatch.highScores.ridgeline.v1`) on first launch, byte for byte, and options are
+        untouched. The golden replay passes unchanged and the app's logs match the baseline line
+        for line. 231 tests: 56 in `GameCoreTests`, 175 in `RidgelineCoreTests`. The generic
+        session code is `@inlinable`; without that the session pipeline ran about 25% slower.
   - [ ] 9b. Shared app files cut free of Ridgeline; folders reorganised
   - [ ] 9c. `GameScene` split into shell scene, mode host and Ridgeline mode
 - [ ] 10. Title screen with Free Play mode selection; new app icon and emblem ("The Rim");
       `README.md` and `CLAUDE.md` updated
 - [ ] Parallel check (not a gate): Ridgeline checked on the phone and unchanged
 - [ ] 11. Twin-stick input (touch and gamepad)
-- [ ] 12. Redoubt design written here and approved
+- [x] 12. Redoubt design written here and approved (2026-11-20; see "Redoubt design")
 - [ ] 13. Redoubt build
 - [ ] Gate: Redoubt played and refined
 - [ ] 14. Riftwing design written here and approved
@@ -430,6 +441,10 @@ rimwatch/
       Gamepad.swift             pad snapshot, reader, menu navigation
       Feedback.swift            haptic cue names
       Audio/                    SoundPatch, SoundRenderer, Music (synthesis)
+      Session/                  ModeRun, ModeSession (playing / paused / countdown / game over),
+                                ModeFrontEnd (which screen and menu to show); generic over a
+                                mode's run
+      Modes.swift, ShellStyle.swift, SavedSettings.swift (options, one score table per mode)
     Sources/RidgelineCore/      Ridgeline's game logic
       World.swift               wraparound maths, terrain heightmap, outposts
       Simulation.swift          fixed 120 Hz step; owns all entities; emits events
@@ -438,8 +453,7 @@ rimwatch/
       Tuning.swift              gameplay numbers
       Input.swift               device-neutral InputState
       PadInput.swift            gamepad buttons to actions
-      GameSession.swift         playing / paused / game over; start over; end game
-      FrontEnd.swift            which screen and menu to show
+      RidgelineMode.swift       Simulation as a ModeRun; GameSession and FrontEnd typealiases
       Events.swift, Scanner.swift, Autopilot.swift (DEBUG bots), HapticCue+Events.swift
       Theme.swift               Theme protocol: palette, shape per entity role, terrain style,
                                 sound patches, display names
@@ -494,3 +508,102 @@ The simulation knows entity *roles*, never their appearance. The deep-sea expans
 - Not verifiable without hardware: real thumb reach, haptics, physical controller pairing and true
   120 Hz performance. Those need a run on an actual Duo, which also needs your signing team set in
   Xcode.
+
+## Redoubt design
+
+Approved 2026-11-20. You accepted my eight recommendations and added one requirement, which leads
+the list below. Every number here is a starting value, to be tuned with bots and then by you.
+
+### The feel
+
+- **A constant stream of fire and floods of enemies.** This is the point of the mode. Pushing
+  the aim stick fires without pause: about 10 shots a second, no heat meter, no reload. The floor
+  is crowded from the first second of a wave: about 20 enemies in wave 1, rising by about 8 a
+  wave to around 90 on the floor at once, with more pouring in while you fight. You are always
+  cutting a path, never waiting for a target.
+- Redoubt is an original twin-stick arena shooter. It takes that genre's mechanics and the pace
+  you asked for; its names, characters, art, sounds and layout are its own.
+
+### The place and the player
+
+- **Arena:** the floor of a breached outpost dome, seen from above, on one fixed screen with no
+  scrolling. A wall runs round the edge. An airlock sits in the wall; its position changes from
+  wave to wave. A thin strip at the top holds the HUD (score, wave, lives, Shockwave charges,
+  colonists left). There is no scanner, because the whole floor is visible.
+- **You** are a Watch trooper on foot. Touching an enemy or a shot costs a life. You come back
+  at the centre with a moment of invulnerability, and any colonists following you scatter.
+
+### Controls
+
+| Action | Touch | Gamepad |
+|---|---|---|
+| Move | Floating stick, left thumb | Left stick or D-pad |
+| Aim and fire | Floating stick, right thumb; fires while pushed | Right stick; fires while pushed |
+| Shockwave | A button above the aim stick's area | Either shoulder button |
+| Pause | Pause button | Menu |
+
+The handedness option swaps the two sticks. Aim is analogue, not eight-way.
+
+### Rescue
+
+- Each wave starts with 6 to 10 colonists sheltering around the floor.
+- Touch a colonist and they follow you in a line. Walk the line to the airlock to deliver them.
+- A delivery scores more for each colonist in the line (500 for the first, 1,000 for the
+  second, and so on), so a long line is worth far more than several short trips. It is also a
+  long tail to protect: enemies can take followers off the end.
+- Every fourth colonist delivered earns a Shockwave charge.
+
+### Abilities
+
+- **Shockwave** only: it clears everything near you and pushes back the rest. You start each
+  life with one charge and hold at most three. Blink is left out for now, since both thumbs are
+  on sticks; it can be added during refinement if you miss it.
+
+### Enemies
+
+Six kinds, in the same cast as Ridgeline's. Each new kind first appears in a wave of its own.
+
+| Name | What it does |
+|---|---|
+| Skitter | The flood. Walks straight at you in large numbers; one shot kills it. |
+| Gleaner | Ignores you and goes for colonists. It drags one to the nearest Burrow or to the wall; if it gets there, a Husk comes back in its place. |
+| Spitter | Keeps its distance and fires slow shots you have to weave through. |
+| Burrow | A hole torn in the floor that pours out Skitters until you destroy it. Takes many hits. |
+| Thresher | A slow heavy that shots only push back. It crushes colonists it walks over and is destroyed only by a Shockwave. It does not have to be killed to clear the wave. |
+| Husk | The fast hunter, as in Ridgeline: a colonist the invaders have turned. |
+
+Nothing appears within a safe distance of you, and arrivals are telegraphed for about a second.
+
+### Structure and scoring
+
+- A wave ends when the floor is cleared of everything that can be shot. Colonists still safe
+  then score a bonus.
+- Three lives, and an extra life at a score threshold.
+- The high-score table records score, wave and colonists saved, like Ridgeline's.
+- **Power cut:** lose every colonist in a wave (taken or crushed) and the dome's power fails.
+  The next wave is fought in the dark, with a small pool of light around you and muzzle flashes
+  for the rest, until you deliver a colonist. This is Redoubt's answer to Ridgeline's Blackout.
+
+### Look and sound
+
+- The same neon vector lines on black. Top-down shapes for the trooper, colonists and each
+  enemy, all drawn in code from a Redoubt theme.
+- Its own sound patches and music moods on the shared synthesiser, and its own haptic cues.
+- The crowd and the stream of shots must hold 120 Hz: the simulation targets 120 enemies and
+  60 shots at once, with a grid for collisions, and the renderer reuses pooled sprites.
+
+### How it is built (step 13)
+
+The same order as Ridgeline, each stage built, independently verified and committed:
+
+- **13a. Game logic:** a `RedoubtCore` target in the package (arena, trooper, shots, the six
+  enemies, colonist lines, airlock, Shockwave, waves, scoring, power cut), conforming to the
+  shared run contract, with tests and scripted bots.
+- **13b. On screen:** the Redoubt mode in the app (arena, sprites, HUD, twin-stick controls),
+  listed on the title screen.
+- **13c. Feedback:** sounds, music moods and haptics for every event.
+- **13d. Waves and tuning:** the difficulty curve tuned against bots with the harness, pinned
+  by tests.
+- **13e. Polish:** particles, death effects, wave banners, the power-cut lighting.
+
+Then the gate: you play Redoubt and we refine it until you are happy to move on.

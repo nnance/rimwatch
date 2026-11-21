@@ -38,8 +38,13 @@ and tick items as they are built and verified.
   `AppIcon.png` by hand; re-run the generator (command in `README.md`) after changing those.
 - `#expect` cannot wrap a mutating call. Write `#expect(session.resume() == true)`, not
   `#expect(session.resume())`.
-- The app drives `GameSession` (never `Simulation` directly) and reacts to the `GameEvent`s it
-  returns. Gameplay numbers live in `GameCore/Sources/RidgelineCore/Tuning.swift`.
+- The app drives a `FrontEnd` and its `GameSession` (Ridgeline's names for the shared
+  `ModeFrontEnd` and `ModeSession` in `GameCore/Sources/GameCore/Session/`, which are generic
+  over a mode's run), never `Simulation` directly, and reacts to the `GameEvent`s it returns.
+  Gameplay numbers live in `GameCore/Sources/RidgelineCore/Tuning.swift`.
+- `FrontEndReplayTests` is a golden replay of a whole session. If it fails after a refactor, the
+  refactor changed behaviour: fix the code, not the expected values. Re-capture the values only
+  after a deliberate gameplay change (the test prints a `REPLAY` summary for that).
 - The app: build, run and test through the Xcode MCP server (`xcode`, added with
   `claude mcp add --transport stdio xcode -- xcrun mcpbridge`). The project must be open in Xcode.
   If the `xcode` tools are missing, check `claude mcp list` and the "Prerequisites" in `PLAN.md`

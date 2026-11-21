@@ -123,7 +123,7 @@ swift run --package-path Tools/Icon Icon Rimwatch/Assets.xcassets/AppIcon.appico
 
 | Path | What it holds |
 |---|---|
-| `GameCore/` | The game logic as a Swift package, with no UIKit or SpriteKit, and its tests. Its `RidgelineCore` target is the game: world, simulation, enemies, waves, scoring and the theme. Its `GameCore` target is what any game mode can share: maths, shapes, sound rendering and music, menus, options, high scores and gamepad logic. The game logic knows what each entity does, never how it looks; appearance and sound come from a `Theme`. |
+| `GameCore/` | The game logic as a Swift package, with no UIKit or SpriteKit, and its tests. Its `RidgelineCore` target is the game: world, simulation, enemies, waves, scoring and the theme, plugged into the shared session in `RidgelineMode.swift`. Its `GameCore` target is what any game mode can share: maths, shapes, sound rendering and music, menus, options, saved settings with one high-score table per mode, gamepad logic, and in `Session/` the pause, countdown and screen flow around a run (`ModeSession`, `ModeFrontEnd`), written against the `ModeRun` protocol each mode's simulation conforms to. The game logic knows what each entity does, never how it looks; appearance and sound come from a `Theme`. |
 | `Rimwatch/` | The app: SpriteKit scene and rendering, touch and gamepad input, fold handling, audio playback, haptics and the menu screens. |
 | `Tools/Harness/` | The bot harness used for difficulty tuning. |
 | `Tools/Icon/` | The script that draws the app icon from the theme's ship and colonist shapes. |
@@ -141,7 +141,7 @@ These exist in Debug builds only.
 | `-hinge open\|closed\|none` | Overrides the fold state. |
 | `-autopilot [idle\|novice\|competent\|shooter]` | A bot plays the game. Plain `-autopilot` is `competent`; `shooter` never rescues; `idle` never touches the controls and `novice` plays badly, so both reach game over quickly. |
 | `-showStats` | Shows node count, draw count and frame rate. |
-| `-resetSettings` | Clears saved options and high scores at launch. |
+| `-resetSettings` | Clears saved options and every mode's high scores at launch. |
 | `-logFeedback` | Logs every routed sound and haptic. |
 | `-realPads` | Uses real controllers in the simulator, which otherwise reports a phantom one. |
 | `-dumpAudio <dir>` | Writes every sound and music mood to WAV files. |

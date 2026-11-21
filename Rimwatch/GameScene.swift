@@ -155,7 +155,8 @@ final class GameScene: SKScene {
         let seed = clockSeed
         #endif
         frontEnd = FrontEnd(session: GameSession(seed: seed),
-                            pose: .closed, options: options, highScores: Settings.shared.highScores)
+                            pose: .closed, options: options,
+                            highScores: Settings.shared.highScores(for: ModeDescriptor.ridgeline.id))
         factory = GlowShapeFactory(theme: theme, screenScale: 2)
         terrain = TerrainNode(world: frontEnd.session.simulation.world, factory: factory)
         effects = EffectsLayer(world: frontEnd.session.simulation.world, factory: factory)
@@ -534,7 +535,7 @@ final class GameScene: SKScene {
                 controls.handedness = frontEnd.options.handedness
                 feedback.options = frontEnd.options
             case .highScoresChanged:
-                settings.highScores = frontEnd.highScores
+                settings.setHighScores(frontEnd.highScores, for: ModeDescriptor.ridgeline.id)
             }
         }
     }

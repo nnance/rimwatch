@@ -15,6 +15,11 @@ public struct HighScoreEntry: Sendable, Equatable, Codable {
         self.saved = saved
     }
 
+    /// The entry for a finished run. A run that ended before its first wave counts as wave 1.
+    public init(_ result: RunResult, date: Date) {
+        self.init(score: result.score, wave: max(result.wave, 1), date: date, saved: result.saved)
+    }
+
     private enum CodingKeys: String, CodingKey {
         case score, wave, date, saved
     }

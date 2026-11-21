@@ -1,36 +1,64 @@
 import Foundation
-import GameCore
+
+/// The screens of the shared flow.
+public enum FlowScreen: Sendable, Equatable {
+    /// Running on a phone without a hinge.
+    case madeForDuo
+    case title
+    case playing
+    case countdown(remaining: Double)
+    /// The pause menu.
+    case paused
+    case gameOver(score: Int)
+    case options
+    case highScores
+}
+
+/// Things the app must act on after a front-end call.
+public enum FlowEffect: Sendable, Equatable {
+    /// A new run replaced the old one (new world, clear old nodes).
+    case newRun
+    case optionsChanged
+    case highScoresChanged
+}
+
+/// What a menu command did.
+public struct FlowCommandResult: Sendable, Equatable {
+    /// False when the command was ignored (nothing to move to, held back by the activation
+    /// grace, nothing to go back to). Only accepted commands should be confirmed with a sound
+    /// or a haptic.
+    public var accepted: Bool
+    public var effects: [FlowEffect]
+
+    public init(accepted: Bool, effects: [FlowEffect] = []) {
+        self.accepted = accepted
+        self.effects = effects
+    }
+
+    public static let ignored = FlowCommandResult(accepted: false)
+}
 
 /// Everything around a run: which screen shows, the menus, options and high scores. It drives a
-/// `GameSession` (never the `Simulation`) and is told about the fold pose and app focus. The app
+/// `ModeSession` (never the run itself) and is told about the fold pose and app focus. The app
 /// draws whatever `screen` and `menu` say and forwards touches and gamepad presses here.
-public struct FrontEnd: Sendable {
-    public enum Screen: Sendable, Equatable {
-        /// Running on a phone without a hinge.
-        case madeForDuo
-        case title
-        case playing
-        case countdown(remaining: Double)
-        /// The pause menu.
-        case paused
-        case gameOver(score: Int)
-        case options
-        case highScores
-    }
+public struct ModeFrontEnd<Run: ModeRun>: Sendable {
+    public typealias Screen = FlowScreen
+    public typealias Effect = FlowEffect
+    public typealias CommandResult = FlowCommandResult
 
-    /// Things the app must act on after a call.
-    public enum Effect: Sendable, Equatable {
-        /// A new simulation replaced the old one (new terrain, clear old nodes).
-        case newRun
-        case optionsChanged
-        case highScoresChanged
-    }
-
-    private enum Overlay: Sendable, Equatable {
+    @usableFromInline
+    enum Overlay: Sendable, Equatable {
         case options, highScores
     }
 
-    public internal(set) var session: GameSession
+    public package(set) var session: ModeSession<Run> {
+        @inlinable get { _session }
+        set { _session = newValue }
+    }
+    /// Storage behind `session` and `screenTime`, so `update` can be `@inlinable` and specialised
+    /// for each mode's run (see `ModeSession`).
+    @usableFromInline var _session: ModeSession<Run>
+    @usableFromInline var _screenTime = 0.0
     public private(set) var pose: FoldPose
     public private(set) var options: GameOptions
     public private(set) var highScores: HighScoreTable
@@ -39,16 +67,17 @@ public struct FrontEnd: Sendable {
     /// Where the last recorded run placed in the table (0 is the top), or nil if it didn't place.
     public private(set) var lastRank: Int?
 
-    private var overlay: Overlay?
+    @usableFromInline var overlay: Overlay?
 
     /// How long a screen must have been showing before a gamepad press activates or backs out
     /// of it, so a player still pressing fire when a menu appears doesn't choose something.
-    public static let activationGrace = 0.35
+    public static var activationGrace: Double { 0.35 }
     /// The game-over screen's longer hold-off: the summary stays up through a burst of fire
     /// presses at the moment of death, and Continue is dimmed until it is live.
-    public static let gameOverGrace = 1.2
+    public static var gameOverGrace: Double { 1.2 }
 
     /// The activation grace of a screen.
+    @inlinable
     public static func activationGrace(for screen: Screen) -> Double {
         if case .gameOver = screen { return gameOverGrace }
         return activationGrace
@@ -56,6 +85,7 @@ public struct FrontEnd: Sendable {
 
     /// The current screen has shown long enough for an activation (by pad, or on game over by
     /// touch too).
+    @inlinable
     public var isActivationLive: Bool {
         screenTime >= Self.activationGrace(for: screen)
     }
@@ -63,23 +93,24 @@ public struct FrontEnd: Sendable {
     /// to drop presses made on the previous screen.
     public private(set) var screenID = 0
     /// Seconds the current screen has been showing.
-    public private(set) var screenTime = 0.0
+    @inlinable public var screenTime: Double { _screenTime }
     /// The pause menu on show appeared without the player asking (the phone closed, the app lost
     /// focus, the controller went away).
     public private(set) var isUnrequestedPause = false
     private var screenKey = ""
 
-    public init(session: GameSession, pose: FoldPose, options: GameOptions = GameOptions(),
+    public init(session: ModeSession<Run>, pose: FoldPose, options: GameOptions = GameOptions(),
                 highScores: HighScoreTable = HighScoreTable()) {
-        self.session = session
+        _session = session
         self.pose = pose
         self.options = options
         self.highScores = highScores
-        self.session.setPlayfieldAvailable(pose.isPlayfieldAvailable)
+        _session.setPlayfieldAvailable(pose.isPlayfieldAvailable)
         refreshMenu()
         screenKey = Self.key(of: screen)
     }
 
+    @inlinable
     public var screen: Screen {
         if pose == .noHinge { return .madeForDuo }
         switch overlay {
@@ -87,7 +118,7 @@ public struct FrontEnd: Sendable {
         case .highScores: return .highScores
         case nil: break
         }
-        switch session.phase {
+        switch _session.phase {
         case .title: return .title
         case .playing: return .playing
         case .countdown(let remaining): return .countdown(remaining: remaining)
@@ -102,7 +133,7 @@ public struct FrontEnd: Sendable {
     public mutating func setPose(_ newPose: FoldPose) {
         let wasInPlay = isInPlay
         pose = newPose
-        session.setPlayfieldAvailable(newPose.isPlayfieldAvailable)
+        _session.setPlayfieldAvailable(newPose.isPlayfieldAvailable)
         refreshMenu()
         noteScreen(unrequestedPause: wasInPlay && screen == .paused)
     }
@@ -111,25 +142,26 @@ public struct FrontEnd: Sendable {
     /// the pause menu; nothing resumes by itself.
     public mutating func appWillResignActive() {
         let wasInPlay = isInPlay
-        session.pause()
+        _session.pause()
         refreshMenu()
         noteScreen(unrequestedPause: wasInPlay)
     }
 
     /// The pause button (or a gamepad's menu button) during play or the countdown.
     public mutating func requestPause() {
-        session.pause()
+        _session.pause()
         refreshMenu()
         noteScreen()
     }
 
     /// Advances the game by real time. Records the score when a run ends in game over.
-    public mutating func update(elapsed: Double, input: InputState) -> (events: [GameEvent], effects: [Effect]) {
-        let wasInGame = session.isInGame
+    @inlinable
+    public mutating func update(elapsed: Double, input: Run.Input) -> (events: [Run.Event], effects: [Effect]) {
+        let wasInGame = _session.isInGame
         let wasCountingDown = isCountingDown
-        let events = session.update(elapsed: elapsed, input: input)
+        let events = _session.update(elapsed: elapsed, input: input)
         var effects: [Effect] = []
-        if wasInGame, case .gameOver(let score) = session.phase {
+        if wasInGame, case .gameOver(let score) = _session.phase {
             effects += record(score: score)
             refreshMenu()
         } else if wasCountingDown != isCountingDown {
@@ -137,7 +169,7 @@ public struct FrontEnd: Sendable {
         }
         if !noteScreen() {
             let wasLive = isActivationLive
-            screenTime += elapsed
+            _screenTime += elapsed
             // Continue lights up when the game-over hold-off ends.
             if !wasLive, isActivationLive, case .gameOver = screen { refreshMenu() }
         }
@@ -145,22 +177,6 @@ public struct FrontEnd: Sendable {
     }
 
     // MARK: Menu input
-
-    /// What a menu command did.
-    public struct CommandResult: Sendable, Equatable {
-        /// False when the command was ignored (nothing to move to, held back by the activation
-        /// grace, nothing to go back to). Only accepted commands should be confirmed with a sound
-        /// or a haptic.
-        public var accepted: Bool
-        public var effects: [Effect]
-
-        public init(accepted: Bool, effects: [Effect] = []) {
-            self.accepted = accepted
-            self.effects = effects
-        }
-
-        public static let ignored = CommandResult(accepted: false)
-    }
 
     /// A device-neutral menu command (gamepad, debug notifications). Up and down move the
     /// selection, left and right step an option, activate and back act once the screen's
@@ -188,7 +204,7 @@ public struct FrontEnd: Sendable {
             case .playing, .countdown:
                 requestPause()
                 return CommandResult(accepted: true)
-            case .paused where session.canResume:
+            case .paused where _session.canResume:
                 return CommandResult(accepted: true, effects: perform(.resume))
             default:
                 return .ignored
@@ -200,7 +216,7 @@ public struct FrontEnd: Sendable {
     /// controls, so the game pauses.
     public mutating func controllerDisconnected() {
         guard isInPlay else { return }
-        session.pause()
+        _session.pause()
         refreshMenu()
         noteScreen(unrequestedPause: true)
     }
@@ -265,22 +281,22 @@ public struct FrontEnd: Sendable {
         var effects: [Effect] = []
         switch command {
         case .play:
-            if session.startGame() {
+            if _session.startGame() {
                 lastRank = nil
                 effects.append(.newRun)
             }
         case .resume:
-            session.resume()
+            _session.resume()
         case .startOver:
-            guard session.isInGame else { break }
-            session.startOver()
+            guard _session.isInGame else { break }
+            _session.startOver()
             effects.append(.newRun)
         case .endGame:
-            if session.isInGame, let score = session.endGame() {
+            if _session.isInGame, let score = _session.endGame() {
                 effects += record(score: score)
             }
         case .proceed:
-            if case .gameOver = session.phase { session.endGame() }
+            if case .gameOver = _session.phase { _session.endGame() }
         case .options:
             overlay = .options
         case .highScores:
@@ -313,32 +329,36 @@ public struct FrontEnd: Sendable {
     /// Restarts the screen clock when the screen changed, or when a pause was forced on the
     /// player. Returns true if it restarted.
     @discardableResult
-    private mutating func noteScreen(unrequestedPause: Bool = false) -> Bool {
+    @usableFromInline
+    mutating func noteScreen(unrequestedPause: Bool = false) -> Bool {
         let key = Self.key(of: screen)
         guard key != screenKey || unrequestedPause else { return false }
         screenKey = key
         screenID &+= 1
-        screenTime = 0
+        _screenTime = 0
         isUnrequestedPause = unrequestedPause && screen == .paused
         return true
     }
 
-    private var isCountingDown: Bool {
-        if case .countdown = session.phase { true } else { false }
+    @usableFromInline
+    var isCountingDown: Bool {
+        if case .countdown = _session.phase { true } else { false }
     }
 
-    private mutating func record(score: Int) -> [Effect] {
-        let sim = session.simulation
-        lastRank = highScores.insert(HighScoreEntry(score: score, wave: max(sim.wave, 1), date: Date(),
-                                                    saved: sim.colonistsSaved))
+    @usableFromInline
+    mutating func record(score: Int) -> [Effect] {
+        let result = _session.run.result
+        lastRank = highScores.insert(HighScoreEntry(score: score, wave: max(result.wave, 1), date: Date(),
+                                                    saved: result.saved))
         return lastRank == nil ? [] : [.highScoresChanged]
     }
 
     /// Rebuilds the menu for the current screen. Keeps the selection when the screen is the same.
-    private mutating func refreshMenu() {
+    @usableFromInline
+    mutating func refreshMenu() {
         // A screen that is only now appearing has not served its grace yet.
         let live = Self.key(of: screen) == screenKey && isActivationLive
-        guard let fresh = Self.menu(for: screen, session: session, pose: pose, options: options,
+        guard let fresh = Self.menu(for: screen, session: _session, pose: pose, options: options,
                                     highScores: highScores, lastRank: lastRank, gameOverLive: live) else {
             menu = nil
             return
@@ -375,7 +395,7 @@ public struct FrontEnd: Sendable {
 
     /// The menu each screen shows. Pure, so it can be checked on its own.
     /// `gameOverLive` is false during the game-over hold-off, when Continue shows dimmed.
-    public static func menu(for screen: Screen, session: GameSession, pose: FoldPose, options: GameOptions,
+    public static func menu(for screen: Screen, session: ModeSession<Run>, pose: FoldPose, options: GameOptions,
                             highScores: HighScoreTable, lastRank: Int? = nil, gameOverLive: Bool = true) -> Menu? {
         let open = pose.isPlayfieldAvailable
         switch screen {
@@ -391,9 +411,10 @@ public struct FrontEnd: Sendable {
             ])
 
         case .paused:
+            let result = session.run.result
             return Menu(kind: .pause, heading: "Paused", lines: [
-                "Score \(groupedDigits(session.simulation.score))",
-                "Wave \(max(session.simulation.wave, 1))",
+                "Score \(groupedDigits(result.score))",
+                "Wave \(max(result.wave, 1))",
             ], items: [
                 MenuItem(.resume, "Resume", disabledTitle: "Open to resume", isEnabled: session.canResume),
                 MenuItem(.startOver, "Start over"),
@@ -406,11 +427,11 @@ public struct FrontEnd: Sendable {
             preferredDefaults: [.resume, .options])
 
         case .gameOver(let score):
-            let sim = session.simulation
+            let result = session.run.result
             var lines = [
                 "Score \(groupedDigits(score))",
-                "Wave \(max(sim.wave, 1))",
-                "Colonists saved \(sim.colonistsSaved)",
+                "Wave \(max(result.wave, 1))",
+                "Colonists saved \(result.saved)",
             ]
             if let lastRank { lines.append("New high score: #\(lastRank + 1)") }
             return Menu(kind: .gameOver, heading: "Game over", lines: lines, items: [
