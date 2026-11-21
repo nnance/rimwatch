@@ -62,9 +62,20 @@ extension RedoubtMode {
         darkness.zPosition = Depth.darkness
         darkness.blendMode = .alpha
         darkness.isHidden = true
-        effects.zPosition = Depth.effects
+        clipLayer.zPosition = Depth.effects
+        let mask = SKSpriteNode(color: .white, size: CGSize(width: tuning.arenaWidth, height: tuning.arenaHeight))
+        mask.anchorPoint = .zero
+        clipLayer.maskNode = mask
+        #if DEBUG
+        // -noClip: draw effects unclipped, to measure what the crop costs.
+        if ProcessInfo.processInfo.arguments.contains("-noClip") { clipLayer.maskNode = nil }
+        #endif
+        orbAura.zPosition = -0.5
+        orbAura.isHidden = true
+        clipLayer.addChild(orbAura)
+        clipLayer.addChild(effects)
         for node in [floorSprite, wallSprite, airlockMask, airlockSprite, beacon, darkness, entityLayer, decorLayer,
-                     effects] as [SKNode] {
+                     clipLayer] as [SKNode] {
             arenaLayer.addChild(node)
         }
 
@@ -92,12 +103,21 @@ extension RedoubtMode {
             entityLayer.addChild(line)
             return line
         }
+        ghostSprites = (0..<Self.ghostPool).map { _ in
+            let sprite = SKSpriteNode()
+            sprite.isHidden = true
+            sprite.zPosition = Depth.colonist
+            entityLayer.addChild(sprite)
+            return sprite
+        }
         orbSprite.zPosition = Depth.orb
         orbSprite.isHidden = true
         entityLayer.addChild(orbSprite)
-        for child in [orbHalo, orbShield, muzzle] {
+        muzzle.isHidden = true
+        orbSprite.addChild(muzzle)
+        for child in [orbHalo, orbShield] {
             child.isHidden = true
-            orbSprite.addChild(child)
+            orbAura.addChild(child)
         }
         orbHalo.isHidden = false
         orbHalo.alpha = 0.32
@@ -205,6 +225,11 @@ extension RedoubtMode {
             ShapeStroke(ShapeKit.arc(radius: 0.55, from: 0, to: Double.pi * 1.5, segments: 24), color: cyan),
         ]), pointsPerUnit: pointsPerUnit), factory: factory)
         respawnMarker.position = CGPoint(x: tuning.arenaWidth / 2, y: tuning.arenaHeight / 2)
+        let colonist = glyphs.glyph(.colonist, pointsPerUnit: pointsPerUnit)
+        for sprite in ghostSprites {
+            RedoubtSprites.dress(sprite, with: colonist, factory: factory)
+            sprite.blendMode = .alpha
+        }
     }
 
     func hideAllPooled() {
@@ -213,6 +238,8 @@ extension RedoubtMode {
         for sprite in shotSprites { sprite.isHidden = true }
         for sprite in colonistSprites { sprite.isHidden = true }
         for sprite in linkSprites { sprite.isHidden = true }
+        for sprite in ghostSprites { sprite.isHidden = true }
+        orbAura.isHidden = true
         shownEnemies = 0
         shownArrivals = 0
         shownShots = 0

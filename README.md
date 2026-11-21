@@ -30,8 +30,9 @@ Defender or Robotron.
 ## Status
 
 Ridgeline is finished and was checked in the simulator. Redoubt is playable from the title screen,
-with its own sounds, music and haptics, but still being built: its effects and tuning are first
-versions, and its sound has been measured, not yet listened to on a phone. The game has not yet been run on a real
+with its own sounds, music, haptics and effects, and waits on its tuning pass and on being played:
+its look and sound have been checked in the simulator and by measurement, not yet on a phone. The
+game has not yet been run on a real
 iPhone Duo, so the open inner display (layout around the crease and camera hole), play feel,
 speaker sound, haptics and physical controllers are untested. `PLAN.md` lists what is left and the
 plan for the other modes.
@@ -98,7 +99,12 @@ colonists still to save.
   Shockwave destroys it) and Husk (the fast hunter). Every arrival is marked on the floor a second
   before it lands.
 - **Power cut:** lose every colonist of a wave and the next is fought in the dark, with a pool of
-  light round the orb, until you deliver a colonist.
+  light round the orb, until you deliver a colonist. The lights stutter out and back; your fire
+  throws the light forward along your aim, impacts spark in the dark, a Spitter's wind-up glows
+  through it, and a Shockwave lights the whole room for a moment.
+- **Look:** every kill has its own effect in proportion to its worth, from a Skitter's quick spark
+  to a Thresher breaking up; the shots have tails and spark where they land; a delivered line
+  runs in through the airlock. Wave banners are brief and sit along the top of the floor.
 - **Structure:** a wave ends when the floor is clear; colonists still safe score a bonus. Three
   lives, an extra life every 60,000 points, and its own top-10 table.
 - **Sound:** its own patches and music on the same synthesiser as Ridgeline. The stream of fire is
@@ -219,6 +225,8 @@ These exist in Debug builds only.
 | `-showStats` | Shows node count, draw count and frame rate. |
 | `-resetSettings` | Clears saved options, the remembered mode and every mode's high scores at launch. |
 | `-logFeedback` | Logs every routed sound and haptic. |
+| `-rescueAfterCut` | Redoubt, with `-autopilot shooter`: once the power fails, the competent bot takes over and delivers, so the lights come back. |
+| `-noClip` | Redoubt: draws its effects without clipping them to the floor (to measure what the clip costs). |
 | `-realPads` | Uses real controllers in the simulator, which otherwise reports a phantom one. |
 | `-dumpAudio <dir>` | Writes every sound and music mood of the mode loaded at launch to WAV files (pick it with `-mode`). |
 | `-seed <n>` | Starts the session from seed `n` instead of the clock, so the runs are the same every launch. |

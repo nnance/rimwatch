@@ -23,13 +23,15 @@ public enum RedoubtShape: Sendable, Hashable, CaseIterable {
     case airlockShut
     /// The marker for an enemy on its way in. White, so the renderer can tint it by role.
     case arrival
-    /// A life in the HUD (the orb, pointing up when drawn with +x up).
+    /// The quieter marker for a Skitter on its way in (they come by the dozen). White.
+    case swarmArrival
+    /// A life in the HUD: a round orb icon (no emitter, so it never reads as a droplet).
     case life
     /// A Shockwave charge in the HUD and on the touch button.
     case charge
 
     public static var allCases: [RedoubtShape] {
-        [.orb, .colonist, .orbShot, .enemyShot, .airlockOpen, .airlockShut, .arrival, .life, .charge]
+        [.orb, .colonist, .orbShot, .enemyShot, .airlockOpen, .airlockShut, .arrival, .swarmArrival, .life, .charge]
             + RedoubtRole.allCases.map { .enemy($0) }
     }
 }

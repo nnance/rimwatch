@@ -65,6 +65,10 @@ final class RedoubtMode: GameMode {
     let airlockSprite = SKSpriteNode()
     let beacon = SKSpriteNode()
     let darkness = SKSpriteNode()
+    /// Everything that may spill past the wall (effects, the orb's halo and shield) is drawn
+    /// inside this crop to the floor.
+    let clipLayer = SKCropNode()
+    let orbAura = SKNode()
     let effects = RedoubtEffects()
     let callouts: RedoubtCallouts
     let hud: RedoubtHUD
@@ -107,6 +111,32 @@ final class RedoubtMode: GameMode {
     var overflowedPools: Set<String> = []
     #endif
     var decor: [(sprite: SKSpriteNode, phase: Double, speed: Double, radius: Double)] = []
+    /// The lights failing or coming back: a stutter over about a second.
+    struct LightsFlicker {
+        let failing: Bool
+        let since: TimeInterval
+    }
+
+    var lightsFlicker: LightsFlicker?
+    /// In a power cut, how far the light reaches ahead of the orb from its recent shots (0...1).
+    var fireLight = 0.0
+    /// A Shockwave lighting the whole room for a moment (1 at the blast, fading).
+    var roomLight = 0.0
+
+    /// A colonist running in through the airlock after a delivery.
+    struct Ghost {
+        var from = Vec2.zero, to = Vec2.zero
+        var delay = 0.0, age = 0.0
+        var active = false
+    }
+
+    static let ghostPool = 12
+    static let ghostRun = 0.38
+    var ghosts = [Ghost](repeating: Ghost(), count: RedoubtMode.ghostPool)
+    var ghostSprites: [SKSpriteNode] = []
+    /// The followers' positions at the end of the last frame, first to last.
+    var linePositions: [Vec2] = []
+
     /// Which of a frame's events are voiced, and in which version.
     var soundDirector = RedoubtSoundDirector()
     var moodDirector = RedoubtMoodDirector()
@@ -251,6 +281,11 @@ final class RedoubtMode: GameMode {
         muzzleGlow = 0
         soundDirector.reset()
         moodDirector.reset()
+        lightsFlicker = nil
+        fireLight = 0
+        roomLight = 0
+        linePositions.removeAll(keepingCapacity: true)
+        for index in ghosts.indices { ghosts[index].active = false }
         hideAllPooled()
     }
 
@@ -281,7 +316,15 @@ final class RedoubtMode: GameMode {
 
     func input(pad: PadReader?, options: GameOptions) -> RedoubtInput {
         #if DEBUG
-        if Self.autopilot { return pilot.input(for: session.run) }
+        if Self.autopilot {
+            let run = session.run
+            // -rescueAfterCut: the shooter bot hands over to the competent one once the lights
+            // fail, so a delivery brings them back (to see the power return).
+            if Self.rescueAfterCut, run.isPowerCut, pilot.skill == .shooter {
+                pilot = RedoubtPilot(skill: .competent, seed: UInt64(runID))
+            }
+            return pilot.input(for: run)
+        }
         #endif
         if let pad { return RedoubtInput(pad: pad) }
         return controls.input
@@ -306,30 +349,7 @@ final class RedoubtMode: GameMode {
     func readout(_ run: RedoubtRun) -> RedoubtHUD.Readout {
         // Before the first wave, the wave about to start.
         RedoubtHUD.Readout(score: run.score, wave: max(run.wave, 1), lives: run.orb.lives, charges: run.orb.charges,
-                           colonists: run.colonistsLeft, colonistAlarm: Self.colonistAlarm(run))
-    }
-
-    /// The colonist count is shown as a warning only in danger: the power is out or due to fail
-    /// when the next wave starts (`powerCutPending`), every colonist still in play is in a
-    /// Gleaner's grip, or none are left and none got out this wave. None left after deliveries
-    /// is calm.
-    static func colonistAlarm(_ run: RedoubtRun) -> Bool {
-        // Out, or due out when the next wave starts (through the break, when the next wave's
-        // colonists are already on the floor).
-        if run.isPowerCut || run.powerCutPending { return true }
-        var inPlay = 0, seized = 0, delivered = 0
-        for colonist in run.colonists {
-            switch colonist.state {
-            case .sheltering, .following: inPlay += 1
-            case .seized:
-                inPlay += 1
-                seized += 1
-            case .delivered: delivered += 1
-            case .lost: break
-            }
-        }
-        if inPlay > 0 { return seized == inPlay }
-        return !run.colonists.isEmpty && delivered == 0
+                           colonists: run.colonistsLeft, colonistAlarm: run.colonistAlarm)
     }
 
     // MARK: Sound and haptics
@@ -378,6 +398,7 @@ final class RedoubtMode: GameMode {
     // MARK: Debug
 
     static let autopilot = ProcessInfo.processInfo.arguments.contains("-autopilot")
+    static let rescueAfterCut = ProcessInfo.processInfo.arguments.contains("-rescueAfterCut")
     /// `-autopilot idle|novice|competent|shooter` picks the test pilot; anything else flies the competent one.
     static let autopilotSkill: RedoubtPilot.Skill = {
         let arguments = ProcessInfo.processInfo.arguments

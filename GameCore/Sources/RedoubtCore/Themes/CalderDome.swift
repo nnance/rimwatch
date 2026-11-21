@@ -30,7 +30,8 @@ public struct CalderDome: RedoubtTheme {
 
     public func shape(for thing: RedoubtShape) -> ShapeDescription {
         switch thing {
-        case .orb, .life: Self.orb
+        case .orb: Self.orb
+        case .life: Self.lifeIcon
         case .colonist: Self.colonist
         case .enemy(let role):
             switch role {
@@ -46,6 +47,7 @@ public struct CalderDome: RedoubtTheme {
         case .airlockOpen: Self.airlockOpen
         case .airlockShut: Self.airlockShut
         case .arrival: Self.arrival
+        case .swarmArrival: Self.swarmArrival
         case .charge: Self.charge
         }
     }
@@ -159,13 +161,29 @@ public struct CalderDome: RedoubtTheme {
         ])
     }()
 
-    /// Ridgeline's waving figure seen from above: a head, the line of the shoulders, both arms up.
+    /// The HUD's life: the orb as a little craft, drawn with +x up in the HUD: its ring and seat,
+    /// a short stub of an emitter on top (a full spike makes a droplet at this size) and its two
+    /// hover struts splayed below like legs, so a row of them reads as craft, not a chain.
+    static let lifeIcon: ShapeDescription = {
+        let strut = cyan.scaled(0.8)
+        return ShapeDescription(scale: 10, strokes: [
+            ShapeStroke(ShapeKit.arc(radius: 1, segments: 28), color: cyan),
+            ShapeStroke(ShapeKit.polygon(sides: 8, radius: 0.42), closed: true, color: RGB(hex: 0xD8FFFF)),
+            ShapeStroke([v(1, 0), v(1.3, 0)], color: cyan),
+            ShapeStroke([v(cos(2.4), sin(2.4)), v(1.45 * cos(2.55), 1.45 * sin(2.55))], color: strut),
+            ShapeStroke([v(cos(2.4), -sin(2.4)), v(1.45 * cos(2.55), -1.45 * sin(2.55))], color: strut),
+        ])
+    }()
+
+    /// Ridgeline's waving figure, upright so it reads as a person at a few points tall: a head,
+    /// a body, both arms up and two legs. The colonists never turn, so it is drawn upright on the
+    /// floor (+y up the screen), centred on the colonist.
     static let colonist: ShapeDescription = {
         ShapeDescription(scale: 6.5, strokes: [
-            ShapeStroke(ShapeKit.polygon(sides: 8, radius: 0.36, center: v(0, 0.1)), closed: true, color: mint),
-            ShapeStroke(ShapeKit.arc(center: v(0, 0.1), radius: 0.78, from: 3.6, to: 5.82, segments: 8), color: mint),
-            ShapeStroke([v(-0.7, -0.24), v(-1.0, 0.72)], color: mint),
-            ShapeStroke([v(0.7, -0.24), v(1.0, 0.72)], color: mint),
+            ShapeStroke(ShapeKit.polygon(sides: 8, radius: 0.3, center: v(0, 0.78)), closed: true, color: mint),
+            ShapeStroke([v(0, 0.48), v(0, -0.2)], color: mint),
+            ShapeStroke([v(-0.42, -0.95), v(0, -0.2), v(0.42, -0.95)], color: mint),
+            ShapeStroke([v(-0.55, 0.85), v(0, 0.3), v(0.55, 0.85)], color: mint),
         ])
     }()
 
@@ -210,9 +228,10 @@ public struct CalderDome: RedoubtTheme {
 
     /// A hole torn in the floor: a ragged rim, two darker rings stepping down into it (offset, so
     /// the far wall of the pit shows) and cracks running out. The Skitters' dark orange: it is
-    /// where they come from. Drawn unrotated.
+    /// where they come from, but a dull earthy brown, so a Burrow shot nearly shut never passes for
+    /// a clump of Skitters. Drawn unrotated.
     static let burrow: ShapeDescription = {
-        let c = RGB(hex: 0xC8642E)
+        let c = RGB(hex: 0xA35A3C)
         let jitter = [0.0, 0.1, -0.08, 0.12, -0.05, 0.08, -0.12, 0.04, 0.11, -0.07, 0.06, -0.1, 0.09, -0.03]
         let rim = jitter.enumerated().map { i, j -> Vec2 in
             let a = 2 * Double.pi * Double(i) / Double(jitter.count)
@@ -225,9 +244,9 @@ public struct CalderDome: RedoubtTheme {
         return ShapeDescription(scale: 18, strokes: [
             ShapeStroke(rim, closed: true, color: c),
             ShapeStroke(ShapeKit.polygon(sides: 12, radius: 0.58, center: v(0, 0.1)), closed: true,
-                        color: RGB(hex: 0x9A4420)),
+                        color: RGB(hex: 0x8A3028)),
             ShapeStroke(ShapeKit.polygon(sides: 10, radius: 0.26, center: v(0, 0.2)), closed: true,
-                        color: RGB(hex: 0x6A2A14)),
+                        color: RGB(hex: 0x5A1C16)),
         ] + cracks)
     }()
 
@@ -263,25 +282,37 @@ public struct CalderDome: RedoubtTheme {
         ])
     }()
 
-    /// A bright streak along the line of fire, long enough that ten a second read as a stream.
+    /// A bright head along the line of fire with a dimmer tail behind it, so ten a second (90
+    /// units apart at the shot's speed) join up into a stream rather than a row of dashes.
     static let orbShot = ShapeDescription(scale: 11, strokes: [
-        ShapeStroke([v(-1, 0), v(1, 0)], color: RGB(hex: 0xC8FFFF)),
+        ShapeStroke([v(-4.6, 0), v(-0.4, 0)], color: RGB(hex: 0x4FA8B8)),
+        ShapeStroke([v(-0.6, 0), v(1, 0)], color: RGB(hex: 0xE0FFFF)),
     ])
 
-    /// The Spitter's slow shot: a hot pink diamond with a pale centre, like Ridgeline's spore.
-    static let enemyShot = ShapeDescription(scale: 6, strokes: [
-        ShapeStroke(ShapeKit.polygon(sides: 4, radius: 1), closed: true, color: RGB(hex: 0xFF5FA0)),
-        ShapeStroke(ShapeKit.polygon(sides: 4, radius: 0.38, rotation: Double.pi / 4), closed: true,
-                    color: RGB(hex: 0xFFD0E0)),
-    ])
+    /// The Spitter's slow shot: a hot pink four-pointed star round a diamond with a pale core,
+    /// bigger than anything else that small, so it is seen coming through a crowd.
+    static let enemyShot: ShapeDescription = {
+        let pink = RGB(hex: 0xFF4F96)
+        let star = (0..<8).map { i -> Vec2 in
+            let r = i % 2 == 0 ? 1.0 : 0.42
+            let a = Double(i) * Double.pi / 4
+            return v(r * cos(a), r * sin(a))
+        }
+        return ShapeDescription(scale: 8, strokes: [
+            ShapeStroke(ShapeKit.arc(radius: 1.2, segments: 16), color: pink.scaled(0.45)),
+            ShapeStroke(star, closed: true, color: pink),
+            ShapeStroke(ShapeKit.polygon(sides: 4, radius: 0.36, rotation: Double.pi / 4), closed: true,
+                        color: RGB(hex: 0xFFD0E0)),
+        ])
+    }()
 
     /// The open airlock in colonist mint: door posts, two chevrons pointing out through the
     /// opening, and a faint arc at the reach that delivers a line (36 of its 56-unit width).
     static let airlockOpen: ShapeDescription = {
         let reach = 36.0 / 56.0
         return ShapeDescription(scale: 56, strokes: [
-            ShapeStroke([v(-0.5, -0.12), v(-0.5, 0.3)], color: mint),
-            ShapeStroke([v(0.5, -0.12), v(0.5, 0.3)], color: mint),
+            ShapeStroke([v(-0.5, 0), v(-0.5, 0.3)], color: mint),
+            ShapeStroke([v(0.5, 0), v(0.5, 0.3)], color: mint),
             ShapeStroke([v(-0.22, 0.62), v(0, 0.44), v(0.22, 0.62)], color: mint),
             ShapeStroke([v(-0.22, 0.38), v(0, 0.2), v(0.22, 0.38)], color: mint),
             ShapeStroke(ShapeKit.arc(radius: reach, from: 0.15, to: Double.pi - 0.15, segments: 20),
@@ -293,8 +324,8 @@ public struct CalderDome: RedoubtTheme {
     static let airlockShut: ShapeDescription = {
         let c = RGB(hex: 0x6E9CC8)
         return ShapeDescription(scale: 56, strokes: [
-            ShapeStroke([v(-0.5, -0.12), v(-0.5, 0.22)], color: c),
-            ShapeStroke([v(0.5, -0.12), v(0.5, 0.22)], color: c),
+            ShapeStroke([v(-0.5, 0), v(-0.5, 0.22)], color: c),
+            ShapeStroke([v(0.5, 0), v(0.5, 0.22)], color: c),
             ShapeStroke([v(-0.5, 0.05), v(0.5, 0.05)], color: c),
             ShapeStroke([v(-0.12, 0.05), v(0, 0.16), v(0.12, 0.05)], color: c.scaled(0.7)),
         ])
@@ -310,6 +341,17 @@ public struct CalderDome: RedoubtTheme {
         return ShapeDescription(scale: 1, strokes: corners + [
             ShapeStroke([v(-0.2, 0), v(0.2, 0)], color: white),
             ShapeStroke([v(0, -0.2), v(0, 0.2)], color: white),
+        ])
+    }()
+
+    /// A Skitter on its way in: a small ring round a dot, white, tinted and drawn faint. Up to 90
+    /// arrive together from wave 9, so they read as a haze of seeds, leaving the brackets for
+    /// the roles that matter.
+    static let swarmArrival: ShapeDescription = {
+        let white = RGB(1, 1, 1)
+        return ShapeDescription(scale: 1, strokes: [
+            ShapeStroke(ShapeKit.arc(radius: 1, segments: 12), color: white),
+            ShapeStroke([v(-0.15, 0), v(0.15, 0)], color: white),
         ])
     }()
 

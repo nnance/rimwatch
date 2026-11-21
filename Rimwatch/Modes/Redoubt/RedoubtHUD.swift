@@ -18,7 +18,7 @@ final class RedoubtHUD: SKNode {
         var lives = 0
         var charges = 0
         var colonists = 0
-        /// Show the colonist count as a warning (see `RedoubtMode.colonistAlarm`).
+        /// Show the colonist count as a warning (see `RedoubtRun.colonistAlarm` in RedoubtCore).
         var colonistAlarm = false
     }
 
