@@ -2,7 +2,13 @@ import Foundation
 import GameCore
 import RidgelineCore
 
-// Usage: Harness [seeds] [maxMinutes] [skill...]
+// Usage: Harness [seeds] [maxMinutes] [skill...]           (Ridgeline)
+//        Harness redoubt [seeds] [maxMinutes] [skill...]   (Redoubt, see Redoubt.swift)
+if CommandLine.arguments.count > 1, CommandLine.arguments[1] == "redoubt" {
+    runRedoubt(Array(CommandLine.arguments.dropFirst(2)))
+    exit(0)
+}
+
 let args = CommandLine.arguments
 let seeds = args.count > 1 ? Int(args[1]) ?? 40 : 40
 let maxMinutes = args.count > 2 ? Double(args[2]) ?? 20 : 20

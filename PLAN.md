@@ -375,6 +375,14 @@ step is pushed so you can install it.
       independently verified together. 273 tests.
 - [x] 12. Redoubt design written here and approved (2026-11-20; see "Redoubt design")
 - [ ] 13. Redoubt build
+  - [x] 13a. Game logic (2026-11-21): the `RedoubtCore` target, with the whole approved design
+        as a deterministic 120 Hz simulation (`RedoubtRun`), scripted bots (`RedoubtPilot`: idle,
+        novice, competent) and a first tuning pass. The harness runs it with a leading
+        `redoubt` argument. The builder's choices beyond the written design are listed under
+        "Redoubt design". 351 tests in all (78 for Redoubt).
+  - [ ] 13b. On screen: the Redoubt mode in the app, listed on the title screen
+  - [ ] 13c. Feedback: sounds, music moods and haptics
+  - [ ] 13d and 13e. Final tuning pass and polish
 - [ ] Gate: Redoubt played and refined
 - [ ] 14. Riftwing design written here and approved
 - [ ] 15. Riftwing build
@@ -677,3 +685,72 @@ The same order as Ridgeline, each stage built, independently verified and commit
 - **13e. Polish:** particles, death effects, wave banners, the power-cut lighting.
 
 Then the gate: you play Redoubt and we refine it until you are happy to move on.
+
+### Decisions made while building the logic (13a)
+
+These were the builder's calls where the design above was silent. All are in
+`GameCore/Sources/RedoubtCore/Tuning.swift` or `WaveDirector.swift` and are yours to change when
+you play it.
+
+- **Arena:** 900 x 600 units, a rectangular floor walled on all four sides.
+- **Orb:** top speed 280. The glide eases toward the stick over about 0.07 s; letting go stops it
+  in about a quarter of a second.
+- **Fire:** exactly 10 shots a second while the aim stick is pushed past 30%. Shots stop at the
+  wall.
+- **Losing a life:** touching any enemy, a Burrow included, or a Spitter's shot. You come back
+  after 1.2 s at the centre with 2.5 s of invulnerability, and nearby enemies are shoved away.
+- **The line:** followers trail like beads on a cord, tracing the orb's path. Only the last
+  follower can be taken.
+- **Delivery:** coming within reach of the airlock delivers the whole line at once.
+- **Gleaner:** takes the nearest sheltering colonist or the line's tail, and drags them slowly to
+  the nearest Burrow or wall. Shooting it frees the colonist where they fall.
+- **Spitter:** circles at a distance, stops and winds up for 0.4 s before each slow shot. Its
+  shots cannot be shot down.
+- **Burrow:** 20 hits to destroy. It pours out a Skitter every 2.4 s while fewer than 10 of its
+  own are alive, and 2.5 times as fast when the floor is nearly empty.
+- **Hit size:** the orb is hit as if slightly smaller than it is drawn (7 units against 10), so
+  a graze in the crowd is forgiven.
+- **Thresher:** very slow; each shot pushes it back. If any are left when the wave clears, they
+  withdraw.
+- **Shockwave:** destroys everything within 150 units, Threshers and Burrows included, and pushes
+  back enemies out to 340. Charges you have earned carry over to your next life.
+- **Arrivals:** shown for 1 s, at least 190 units from the orb. If you sit on one, it moves.
+- **Waves keep the floor full.** Each wave opens with its crowd (20 in wave 1, 8 more each
+  wave, up to 90), telegraphed in the last second of the break so it lands as the wave starts.
+  On top of that each wave has a quota of further Skitters (90 in wave 1, 25 more each wave, up
+  to 400). Whenever the number on the floor drops below the opening crowd, another group of up
+  to 6 is sent in at once, until the quota is spent. The wave ends when the quota is spent and
+  the floor is clear. A first version sent reinforcements on a slow timer and left a skilled
+  player with nothing to shoot for half of the early waves; it was replaced after the
+  independent check measured that.
+- **Colonists:** 6 in wave 1, one more every two waves, up to 10. 2 s between waves.
+- **Debut waves:** Gleaner 2, Spitter 3, Burrow 5, Thresher 6, Husk 8. A debut wave holds only
+  Skitters and the newcomer.
+- **Airlock:** moves to a different wall position each wave, and is shut between waves.
+- **Wave bonus:** 250 for each colonist still safe when the wave clears; they count as saved.
+- **Lives:** three, at most five, an extra one every 60,000 points.
+- **Points:** Skitter 50, Gleaner 150, Spitter 200, Husk 250, Burrow 1,000, Thresher 1,500.
+
+Measured with the bots over 80 seeds: an idle orb is overrun in about 13 s. The novice bot
+usually reaches wave 3. The competent bot usually reaches wave 11, loses almost no lives before
+wave 7 and saves most colonists in the early waves, killing about 440 enemies a minute. In every
+wave the floor has fewer than five targets for only 2 to 7% of the fighting time, which is the
+mop-up at the end of a wave. Early waves last 26 to 30 s for the competent bot. The competent bot
+dodges crowds almost perfectly and dies mostly to Spitter shots, so the middle waves will feel
+harder to a person than these numbers say. The bots almost never trigger the power cut.
+
+Things to judge when you play:
+
+- Threshers soak up shots and shield what is behind them, so late waves get long if you stand
+  still.
+- A Burrow left alive can be farmed for Skitter points (up to about 10,000 a minute with three
+  Burrows, against about 36,000 a minute for playing on), so it is a way to rest, not to score.
+- Arrivals are telegraphed at least 190 units away but can appear as close as about 93 if you fly
+  at them.
+- Circling the wall while firing at the nearest enemy is a very strong tactic: a simple bot doing
+  only that survived 10 minutes in nearly half its games. Skitters are slow (speed 50 against
+  the orb's 280) and the forgiving hit size helps it. If it feels too safe, faster Skitters or
+  a full-size hit are the first numbers to try.
+
+Harness: `cd Tools/Harness && swift build -c release -Xswiftc -DDEBUG &&
+.build/release/Harness redoubt 80 20` (seeds, minutes cap).

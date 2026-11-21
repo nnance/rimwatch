@@ -114,16 +114,18 @@ The tests use Swift Testing. If `import Testing` fails, the Command Line Tools a
 of Xcode. Run `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test`, or switch
 `xcode-select` to Xcode.
 
-Difficulty was tuned against scripted bots, not people. After changing `Tuning.swift` or
+Difficulty was tuned against scripted bots, not people. After changing a mode's `Tuning.swift` or
 `WaveDirector.swift`, re-run the bot harness as well as the tests:
 
 ```sh
 cd Tools/Harness
 swift build -c release -Xswiftc -DDEBUG
-.build/release/Harness 80 20 idle novice competent shooter
+.build/release/Harness 80 20 idle novice competent shooter          # Ridgeline
+.build/release/Harness redoubt 80 20 idle novice competent          # Redoubt
 ```
 
-The arguments are the number of seeds, a cap in minutes per game, and the bots to run.
+The arguments are the number of seeds, a cap in minutes per game, and the bots to run. A leading
+`redoubt` runs Redoubt's bots instead of Ridgeline's.
 
 ## App icon
 
