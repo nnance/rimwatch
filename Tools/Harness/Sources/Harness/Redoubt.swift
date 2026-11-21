@@ -7,7 +7,9 @@ import RedoubtCore
 // reversingCircler (default idle, novice, competent and wallCircler).
 // Environment overrides for sweeps, e.g. SKSPEED=55 SKGROW=0.05 (see `redoubtTuning`), and for
 // the early-game ease: SIDES=4 EASE0=1 EASESTEP=0 SPITEASE=1 together restore the waves as they
-// were before it (see `redoubtWaves`).
+// were before it (see `redoubtWaves`). PUSH=0 turns off the main push and the scatter (the first
+// 13d entry exactly); SCATTER=0.2,0.25,... PUSHDEPTH FALLOFF ALONG SCATCLEAR WALLW GDRAWS tune it.
+// SEEDBASE moves the seed set (default 1000) to check a result is not luck of the seeds.
 
 private func redoubtTuning() -> RedoubtTuning {
     var t = RedoubtTuning()
@@ -31,6 +33,12 @@ private func redoubtTuning() -> RedoubtTuning {
     if let v = env["BAND"].flatMap(Double.init) { t.entryBandDepth = v }
     if let v = env["JITTER"].flatMap(Double.init) { t.entrySideJitter = v }
     if let v = env["LIVES"].flatMap(Int.init) { t.extraLifeEvery = v }
+    if let v = env["PUSHDEPTH"].flatMap(Double.init) { t.pushDepth = v }
+    if let v = env["FALLOFF"].flatMap(Double.init) { t.pushFalloff = v }
+    if let v = env["SCATCLEAR"].flatMap(Double.init) { t.scatterClearance = v }
+    if let v = env["WALLW"].flatMap(Double.init) { t.mainWallWeighting = v }
+    if let v = env["ALONG"].flatMap(Int.init) { t.pushAlongDraws = v }
+    if let v = env["GDRAWS"].flatMap(Int.init) { t.groupSpotDraws = v }
     return t
 }
 
@@ -42,10 +50,13 @@ private func redoubtWaves() -> RedoubtWaves {
     if let v = env["EASESTEP"].flatMap(Double.init) { w.crowdEaseGrowth = v }
     if let v = env["SPITEASE"].flatMap(Double.init) { w.spitterDebutSlowdown = v }
     if let v = env["SPITWAVES"].flatMap(Double.init) { w.spitterEaseWaves = v }
+    if let v = env["PUSH"].flatMap(Int.init) { w.pushAndScatter = v != 0 }
+    if let v = env["SCATTER"] { w.scatterShare = v.split(separator: ",").compactMap { Double($0) } }
     return w
 }
 
 private struct RedoubtStats {
+    var seed: UInt64 = 0
     var survival = 0.0
     var firstDeath: Double?
     var wave = 0
@@ -76,6 +87,9 @@ private struct RedoubtStats {
     var sparseSteps: [Int: Int] = [:]
     var emptySteps: [Int: Int] = [:]
     var shootableSum: [Int: Int] = [:]
+    /// Of the steps with none, those while the wave still had Skitters to send (mid-wave rather
+    /// than the last stragglers on their way in).
+    var emptyWithQuota = 0
     var waveSeconds: [Int: Double] = [:]
     /// Distance from the orb (alive) of every enemy as it lands from its telegraph.
     var landings: [Double] = []
@@ -137,6 +151,7 @@ private func playRedoubt(skill: RedoubtPilot.Skill, seed: UInt64, maxMinutes: Do
     var run = RedoubtRun(seed: seed, tuning: tuning, waves: redoubtWaves())
     var pilot = RedoubtPilot(skill: skill, seed: seed)
     var stats = RedoubtStats()
+    stats.seed = seed
     let maxSteps = Int(maxMinutes * 60 * 120)
     var stepTime: UInt64 = 0
     for _ in 0..<maxSteps {
@@ -155,7 +170,10 @@ private func playRedoubt(skill: RedoubtPilot.Skill, seed: UInt64, maxMinutes: Do
             stats.fightSteps[w, default: 0] += 1
             stats.shootableSum[w, default: 0] += shootable
             if shootable < 5 { stats.sparseSteps[w, default: 0] += 1 }
-            if shootable == 0 { stats.emptySteps[w, default: 0] += 1 }
+            if shootable == 0 {
+                stats.emptySteps[w, default: 0] += 1
+                if run.quota > 0 { stats.emptyWithQuota += 1 }
+            }
             stats.floorSum[w, default: 0] += run.enemies.count
             stats.floorPeak[w] = max(stats.floorPeak[w] ?? 0, run.enemies.count)
             if run.orb.isAlive {
@@ -221,17 +239,69 @@ private func q3(_ values: [Double]) -> String {
     return String(format: "%7.1f [%6.1f %6.1f]", q(0.5), q(0.25), q(0.75))
 }
 
+/// `MAP=<seed>[,<seed>...]` (optional `MAPWAVES=5`, `MAPBOT=novice`): instead of the statistics,
+/// plays each seed with the bot and prints, as each of the first waves is readied, where its
+/// opening crowd's arrivals sit: a 45 x 15 grid of the floor (one cell is 20 x 40 units, north at
+/// the top), the orb `O`, colonists `+`, and one letter per role (S Skitter, G Gleaner, P Spitter,
+/// B Burrow, T Thresher, H Husk; a cell holding several shows the rarest). Under each map: how
+/// many arrivals are nearest each wall.
+private func printRedoubtMaps(_ spec: String) {
+    let env = ProcessInfo.processInfo.environment
+    let waves = env["MAPWAVES"].flatMap(Int.init) ?? 5
+    let skill = RedoubtPilot.Skill(rawValue: env["MAPBOT"] ?? "novice") ?? .novice
+    let letters: [RedoubtRole: Character] = [.skitter: "S", .gleaner: "G", .spitter: "P", .burrow: "B", .thresher: "T", .husk: "H"]
+    let rank: [Character: Int] = [" ": 0, "+": 1, "S": 2, "G": 3, "P": 4, "H": 5, "T": 6, "B": 7, "O": 9]
+    for seed in spec.split(separator: ",").compactMap({ UInt64($0) }) {
+        var run = RedoubtRun(seed: seed, tuning: redoubtTuning(), waves: redoubtWaves())
+        var pilot = RedoubtPilot(skill: skill, seed: seed)
+        print("== map: seed \(seed), \(skill.rawValue) bot")
+        var shown = 0
+        while shown < waves, !run.isGameOver, run.tick < 20 * 60 * 120 {
+            let events = run.step(pilot.input(for: run))
+            guard events.contains(where: { if case .airlockOpened = $0 { true } else { false } }) else { continue }
+            shown += 1
+            let cols = 45, rows = 15
+            let w = run.arenaSize.x, h = run.arenaSize.y
+            var grid = [[Character]](repeating: [Character](repeating: " ", count: cols), count: rows)
+            func put(_ p: Vec2, _ c: Character) {
+                let x = min(max(Int(p.x / w * Double(cols)), 0), cols - 1)
+                let y = min(max(rows - 1 - Int(p.y / h * Double(rows)), 0), rows - 1)
+                if (rank[c] ?? 0) >= (rank[grid[y][x]] ?? 0) { grid[y][x] = c }
+            }
+            for c in run.colonists { put(c.pos, "+") }
+            var nearest: [String: Int] = ["N": 0, "S": 0, "E": 0, "W": 0]
+            for a in run.arrivals {
+                put(a.pos, letters[a.role] ?? "?")
+                let gaps = [("N", h - a.pos.y), ("S", a.pos.y), ("E", w - a.pos.x), ("W", a.pos.x)]
+                nearest[gaps.min { $0.1 < $1.1 }!.0, default: 0] += 1
+            }
+            put(run.orb.pos, "O")
+            print(String(format: "wave %d: %d arrivals, orb at (%.0f, %.0f)", run.wave + 1, run.arrivals.count, run.orb.pos.x, run.orb.pos.y)
+                  + "  main wall: \(run.entrySides.first.map { "\($0)" } ?? "-")")
+            print("+" + String(repeating: "-", count: cols) + "+")
+            for row in grid { print("|" + String(row) + "|") }
+            print("+" + String(repeating: "-", count: cols) + "+")
+            print("nearest wall:", ["N", "E", "S", "W"].map { "\($0) \(nearest[$0]!)" }.joined(separator: "  "))
+        }
+        print()
+    }
+}
+
 func runRedoubt(_ args: [String]) {
+    if let spec = ProcessInfo.processInfo.environment["MAP"] {
+        printRedoubtMaps(spec)
+        return
+    }
     let seeds = args.count > 0 ? Int(args[0]) ?? 40 : 40
     let maxMinutes = args.count > 1 ? Double(args[1]) ?? 20 : 20
-    let names = args.count > 2 ? Array(args[2...]) : ["idle", "novice", "competent", "wallCircler"]
+    let names = args.count > 2 ? Array(args[2...]) : ["idle", "novice", "competent", "wallCircler", "cornerCamper"]
     let tuning = redoubtTuning()
     let debut = Dictionary(uniqueKeysWithValues: RedoubtWaves.debut.map { ($0.wave, $0.role.rawValue) })
     for name in names {
         let skill = RedoubtPilot.Skill(rawValue: name) ?? .competent
         var all: [RedoubtStats] = []
         for i in 0..<seeds {
-            all.append(playRedoubt(skill: skill, seed: UInt64(1000 + i * 7919), maxMinutes: maxMinutes, tuning: tuning))
+            all.append(playRedoubt(skill: skill, seed: UInt64((ProcessInfo.processInfo.environment["SEEDBASE"].flatMap(Int.init) ?? 1000) + i * 7919), maxMinutes: maxMinutes, tuning: tuning))
         }
         func col(_ f: (RedoubtStats) -> Double) -> String { q3(all.map(f)) }
         print("== redoubt \(name): \(seeds) seeds, cap \(Int(maxMinutes)) min   median [q1 q3]")
@@ -241,7 +311,9 @@ func runRedoubt(_ args: [String]) {
         print("score             ", col { Double($0.score) }, " / min", col { Double($0.score) / max($0.survival / 60, 0.01) })
         print("survival min..max  ", String(format: "%.0f..%.0f s", all.map(\.survival).min() ?? 0, all.map(\.survival).max() ?? 0),
               " wave min..max \(all.map(\.wave).min() ?? 0)..\(all.map(\.wave).max() ?? 0)",
-              " reached the cap: \(all.filter { $0.survival >= maxMinutes * 60 - 0.01 }.count)")
+              " reached the cap: \(all.filter { $0.survival >= maxMinutes * 60 - 0.01 }.count)",
+              all.contains { $0.survival >= maxMinutes * 60 - 0.01 }
+                ? "(seeds \(all.filter { $0.survival >= maxMinutes * 60 - 0.01 }.map { "\($0.seed) w\($0.wave)" }.joined(separator: ", ")))" : "")
         print("colonists saved   ", col { Double($0.saved) }, " delivered", col { Double($0.delivered) })
         print("colonists lost    ", col { Double($0.lost) }, " crushed", col { Double($0.crushed) })
         var taken: [String: Int] = [:]
@@ -305,7 +377,8 @@ func runRedoubt(_ args: [String]) {
             if !lengths.isEmpty { length += String(format: " w%d:%.0f", w, lengths[lengths.count / 2]) }
         }
         print(sparse)
-        print(empty)
+        print(empty, " steps:", all.reduce(0) { total, g in total + g.emptySteps.values.reduce(0, +) },
+              " with quota left:", all.reduce(0) { $0 + $1.emptyWithQuota })
         print(mean)
         print(length)
         // Pressure on the orb, per wave: mean and 90th percentile.

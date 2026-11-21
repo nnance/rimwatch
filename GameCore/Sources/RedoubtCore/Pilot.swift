@@ -37,6 +37,11 @@ public struct RedoubtPilot: Sendable {
         case innerCircler
         /// The wall loop, but it turns round whenever something is within 50 units ahead.
         case reversingCircler
+        /// Corner camping, kept as a regression guard: flies to the corner nearest it (at the
+        /// start and after each respawn) and parks there, 14 units in from both walls, aiming with
+        /// lead at the nearest enemy shots can destroy. Never rescues; fires a Shockwave only when
+        /// something is about to touch it.
+        case cornerCamper
     }
 
     public let skill: Skill
@@ -63,6 +68,7 @@ public struct RedoubtPilot: Sendable {
         case .novice: return noviceInput(run)
         case .competent, .shooter: return competentInput(run)
         case .wallCircler, .innerCircler, .reversingCircler: return circlerInput(run)
+        case .cornerCamper: return camperInput(run)
         }
     }
 
@@ -156,6 +162,45 @@ public struct RedoubtPilot: Sendable {
 
         var aim = Vec2.zero
         // The nearest thing shots can destroy (a Thresher only when nothing else is left).
+        let shootable = run.enemies.filter { $0.role != .thresher }
+        if let target = (shootable.isEmpty ? run.enemies : shootable)
+            .min(by: { d($0.pos, orb.pos) < d($1.pos, orb.pos) }) {
+            let flight = d(target.pos, orb.pos) / tuning.shotSpeed
+            let lead = target.pos + (target.vel + target.push) * flight
+            aim = unit(lead - orb.pos)
+        }
+        var shockwave = false
+        if orb.charges > 0, !orb.isInvulnerable {
+            shockwave = run.enemies.contains {
+                $0.role != .burrow && d($0.pos, orb.pos) - $0.radius - tuning.orbRadius < 10
+            }
+        }
+        held = RedoubtInput(move: move, aim: aim, shockwave: shockwave)
+        return held
+    }
+
+    // MARK: Corner camper
+
+    private mutating func camperInput(_ run: RedoubtRun) -> RedoubtInput {
+        replanIn -= RedoubtRun.timeStep
+        guard replanIn <= 0 else {
+            held.shockwave = false
+            return held
+        }
+        replanIn = 0.05
+        let orb = run.orb
+        let tuning = run.tuning
+        let size = run.arenaSize
+        let inset = 14.0
+        let corners = [Vec2(inset, inset), Vec2(size.x - inset, inset),
+                       Vec2(size.x - inset, size.y - inset), Vec2(inset, size.y - inset)]
+        // Choose the nearest corner at the start and again after a respawn at the centre.
+        if corner == nil || d(orb.pos, run.centre) < 20 {
+            corner = corners.indices.min { d(corners[$0], orb.pos) < d(corners[$1], orb.pos) }
+        }
+        let goal = corners[corner!]
+        let move = unit(goal - orb.pos) * min(d(goal, orb.pos) / 20, 1)
+        var aim = Vec2.zero
         let shootable = run.enemies.filter { $0.role != .thresher }
         if let target = (shootable.isEmpty ? run.enemies : shootable)
             .min(by: { d($0.pos, orb.pos) < d($1.pos, orb.pos) }) {

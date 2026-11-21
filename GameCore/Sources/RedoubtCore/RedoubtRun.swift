@@ -46,9 +46,15 @@ public struct RedoubtRun: Sendable {
     /// The largest enemy radius, for grid queries.
     let maxEnemyRadius: Double
     let director: RedoubtWaves
-    /// The walls this wave's crowd comes in from (`RedoubtWaves.entrySides`); empty for anywhere
-    /// on the floor.
+    /// The walls this wave's crowd comes in from (`RedoubtWaves.entrySides`), the main wall
+    /// first; empty for anywhere on the floor. The main push of the opening crowd lands along
+    /// them and the rest is scattered (`RedoubtWaves.scatterShare`).
     public internal(set) var entrySides: [ArenaWall] = []
+    /// The main wall of the last wave that had entry walls: the next one avoids it.
+    var lastMainWall: ArenaWall?
+    /// Which end of an entry wall the push leans toward when the orb is level with its middle
+    /// (the high end: north or east). Drawn each wave.
+    var pushLeansHigh = false
 
     /// The wave's opening spawns not yet telegraphed, and how far into the wave it is.
     var pending: [RedoubtSpawn] = []
@@ -187,8 +193,9 @@ public struct RedoubtRun: Sendable {
         pending = []
         pendingIndex = 0
         chooseEntrySides(count: director.entrySides(forWave: next))
-        for spawn in director.spawns(forWave: next) {
-            telegraph(spawn.role, showingFor: lead + spawn.delay)
+        for (index, spawn) in director.spawns(forWave: next).enumerated() {
+            let scattered = !entrySides.isEmpty && director.isScattered(index, forWave: next)
+            telegraph(spawn.role, showingFor: lead + spawn.delay, scattered: scattered)
         }
     }
 
@@ -278,10 +285,13 @@ public struct RedoubtRun: Sendable {
 
     /// Telegraphs `count` Skitters clustered near one wall, clear of the orb: on its path ahead
     /// if it is running the wall, else at one of the wave's entry walls (any wall when it has
-    /// none).
+    /// none). With `RedoubtWaves.pushAndScatter` on and entry walls, the group lands at the
+    /// farthest from the orb of `groupSpotDraws` clear spots along them.
     private mutating func telegraphGroup(_ count: Int) {
         let margin = tuning.spawnWallMargin
         var centre = wallRunAhead()
+        var spots: [Vec2] = []
+        let wanted = director.pushAndScatter && !entrySides.isEmpty ? max(tuning.groupSpotDraws, 1) : 1
         for _ in 0..<12 where centre == nil {
             let inset = rng.range(40...100)
             let along = rng.range(0.1...0.9)
@@ -294,9 +304,12 @@ public struct RedoubtRun: Sendable {
             case .west: Vec2(inset, along * tuning.arenaHeight)
             }
             if isClearOfOrb(p, by: tuning.safeDistance + 60) {
-                centre = p
-                break
+                spots.append(p)
+                if spots.count >= wanted { break }
             }
+        }
+        if centre == nil {
+            centre = spots.max { gapToOrb($0) < gapToOrb($1) }
         }
         for _ in 0..<count {
             var pos: Vec2?
@@ -333,14 +346,43 @@ public struct RedoubtRun: Sendable {
         return isClearOfOrb(ahead, by: tuning.safeDistance + 60) ? ahead : nil
     }
 
-    /// Picks the `count` walls this wave's crowd comes in from, favouring those far from the orb
-    /// (where it will respawn if it is down). Four means anywhere on the floor.
+    /// Picks the `count` walls this wave's crowd comes in from (four means anywhere on the
+    /// floor). With `RedoubtWaves.pushAndScatter` on, the main wall (first) is drawn at random
+    /// from the walls the orb (or, while it is down, its respawn point) is not nearest, never the
+    /// last wave's main wall, each weighted by its distance from the orb raised to
+    /// `mainWallWeighting`; any others are drawn evenly from the rest the orb is not nearest.
+    /// Off, each wall scores its distance from the orb plus up to `entrySideJitter` and the
+    /// highest win.
     mutating func chooseEntrySides(count: Int) {
         guard count < 4 else {
             entrySides = []
             return
         }
         let p = orb.isAlive ? orb.pos : centre
+        if director.pushAndScatter {
+            let near = nearestWall(p)
+            let open = ArenaWall.allCases.filter { $0 != near }
+            let choices = open.filter { $0 != lastMainWall }
+            let weights = choices.map { power(wallGap($0, from: p), tuning.mainWallWeighting) }
+            var pick = rng.range(0...weights.reduce(0, +))
+            var main = choices[choices.count - 1]
+            for (wall, weight) in zip(choices, weights) {
+                if pick < weight {
+                    main = wall
+                    break
+                }
+                pick -= weight
+            }
+            var rest = open.filter { $0 != main }
+            var walls = [main]
+            while walls.count < count, !rest.isEmpty {
+                walls.append(rest.remove(at: Int(rng.next() % UInt64(rest.count))))
+            }
+            entrySides = walls
+            lastMainWall = main
+            pushLeansHigh = rng.next() % 2 == 0
+            return
+        }
         let scored = ArenaWall.allCases.map { wall -> (ArenaWall, Double) in
             let gap: Double = switch wall {
             case .north: tuning.arenaHeight - p.y
@@ -353,9 +395,30 @@ public struct RedoubtRun: Sendable {
         entrySides = scored.sorted { $0.1 > $1.1 }.prefix(max(count, 1)).map(\.0)
     }
 
-    /// Starts an arrival's telegraph at a free spot away from the orb.
-    mutating func telegraph(_ role: RedoubtRole, showingFor seconds: Double? = nil) {
-        let pos = spawnPoint(for: role)
+    /// How far `p` is from the orb (and, while it is down, from where it will respawn).
+    func gapToOrb(_ p: Vec2) -> Double {
+        orb.isAlive ? distance(p, orb.pos) : min(distance(p, orb.pos), distance(p, centre))
+    }
+
+    /// How far `p` is from a wall.
+    func wallGap(_ wall: ArenaWall, from p: Vec2) -> Double {
+        switch wall {
+        case .north: tuning.arenaHeight - p.y
+        case .south: p.y
+        case .east: tuning.arenaWidth - p.x
+        case .west: p.x
+        }
+    }
+
+    /// The wall nearest `p` (north, then south, east, west on a tie).
+    func nearestWall(_ p: Vec2) -> ArenaWall {
+        ArenaWall.allCases.min { wallGap($0, from: p) < wallGap($1, from: p) }!
+    }
+
+    /// Starts an arrival's telegraph at a free spot away from the orb: with the main push along
+    /// the entry walls, or scattered over the floor (`scattered`).
+    mutating func telegraph(_ role: RedoubtRole, showingFor seconds: Double? = nil, scattered: Bool = false) {
+        let pos = spawnPoint(for: role, scattered: scattered)
         let id = takeID()
         arrivals.append(RedoubtArrival(id: id, role: role, pos: pos,
                                        remaining: max(seconds ?? tuning.telegraphTime, tuning.telegraphTime)))
@@ -405,31 +468,57 @@ public struct RedoubtRun: Sendable {
     }
 
     /// A free spot away from the orb: anywhere on the floor, or in a band along one of the
-    /// wave's entry walls when it has them (unless `anywhere`).
-    private mutating func spawnPoint(for role: RedoubtRole, anywhere: Bool = false) -> Vec2 {
+    /// wave's entry walls when it has them (unless `anywhere`). A `scattered` spot is anywhere
+    /// on the floor, at least `scatterClearance` from the orb.
+    private mutating func spawnPoint(for role: RedoubtRole, anywhere: Bool = false, scattered: Bool = false) -> Vec2 {
+        let clearance = scattered ? max(tuning.scatterClearance, tuning.safeDistance) : tuning.safeDistance
+        let orbRef = orb.isAlive ? orb.pos : centre
         let margin = role == .burrow ? 60 : tuning.spawnWallMargin
         var best = centre
         var bestScore = -Double.infinity
         for attempt in 0..<24 {
             let p: Vec2
-            if entrySides.isEmpty || anywhere {
+            if entrySides.isEmpty || anywhere || scattered {
                 p = Vec2(rng.range(margin...(tuning.arenaWidth - margin)),
                          rng.range(margin...(tuning.arenaHeight - margin)))
             } else {
                 // In a band along one of the wave's entry walls.
                 let wall = entrySides[Int(rng.next() % UInt64(entrySides.count))]
-                let inset = rng.range(margin...max(tuning.entryBandDepth, margin))
+                let inset = director.pushAndScatter
+                    ? margin + max(tuning.pushDepth - margin, 0) * power(rng.range(0...1), tuning.pushFalloff)
+                    : rng.range(margin...max(tuning.entryBandDepth, margin))
                 let w = tuning.arenaWidth, h = tuning.arenaHeight
-                p = switch wall {
-                case .north: Vec2(rng.range(margin...(w - margin)), h - inset)
-                case .south: Vec2(rng.range(margin...(w - margin)), inset)
-                case .east: Vec2(w - inset, rng.range(margin...(h - margin)))
-                case .west: Vec2(inset, rng.range(margin...(h - margin)))
+                if director.pushAndScatter {
+                    // Along the wall: the nearest to one end of `pushAlongDraws` draws, so the push
+                    // leans toward the end away from the orb (with the orb level with the middle,
+                    // the end drawn for the wave).
+                    let horizontal = wall == .north || wall == .south
+                    let length = horizontal ? w : h
+                    let orbAlong = horizontal ? orbRef.x : orbRef.y
+                    let high = abs(orbAlong - length / 2) < 0.1 * length ? pushLeansHigh : orbAlong < length / 2
+                    var along = rng.range(margin...(length - margin))
+                    for _ in 1..<max(tuning.pushAlongDraws, 1) {
+                        let other = rng.range(margin...(length - margin))
+                        along = high ? max(along, other) : min(along, other)
+                    }
+                    p = switch wall {
+                    case .north: Vec2(along, h - inset)
+                    case .south: Vec2(along, inset)
+                    case .east: Vec2(w - inset, along)
+                    case .west: Vec2(inset, along)
+                    }
+                } else {
+                    p = switch wall {
+                    case .north: Vec2(rng.range(margin...(w - margin)), h - inset)
+                    case .south: Vec2(rng.range(margin...(w - margin)), inset)
+                    case .east: Vec2(w - inset, rng.range(margin...(h - margin)))
+                    case .west: Vec2(inset, rng.range(margin...(h - margin)))
+                    }
                 }
             }
             // How well it keeps the rules; the first that keeps them all wins.
-            var ok = isClearOfOrb(p, by: tuning.safeDistance)
-            var score = orb.isAlive ? distance(p, orb.pos) : min(distance(p, orb.pos), distance(p, centre))
+            var ok = isClearOfOrb(p, by: clearance)
+            var score = gapToOrb(p)
             if role == .burrow {
                 ok = ok && distance(p, centre) >= tuning.burrowCentreClearance
                     && !enemies.contains { $0.role == .burrow && !$0.isDead && distance($0.pos, p) < 120 }
@@ -791,6 +880,9 @@ func unitVector(_ angle: Double) -> Vec2 {
 
 @inline(never) func cosine(_ x: Double) -> Double { cos(x) }
 @inline(never) func sine(_ x: Double) -> Double { sin(x) }
+/// `pow`, never inlined for the same reason: an optimised build may rewrite a power it can see
+/// into other operations that round differently.
+@inline(never) func power(_ x: Double, _ y: Double) -> Double { pow(x, y) }
 
 @inline(__always)
 func distance(_ a: Vec2, _ b: Vec2) -> Double {

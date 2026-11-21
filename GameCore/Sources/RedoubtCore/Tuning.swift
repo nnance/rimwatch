@@ -101,11 +101,27 @@ public struct RedoubtTuning: Sendable {
     public var wallRunSpeed = 100.0
     public var wallRunAlong = 0.9
     public var wallRunReach = 400.0...520.0
-    /// While a wave has entry walls (`RedoubtWaves.entrySides`), its opening crowd lands within
-    /// this distance of one of them. Added in 13d.
+    /// The main push and the scatter (`RedoubtWaves.pushAndScatter`), added after the owner's
+    /// second play. While a wave has entry walls (`RedoubtWaves.entrySides`), the main push of
+    /// its opening crowd lands within `pushDepth` of one of them, thinning out away from the wall
+    /// (its distance in from the wall's margin is the depth times a random fraction raised to
+    /// `pushFalloff`), so it reads as a front rather than a line. Along the wall each spot is the
+    /// nearest one end of `pushAlongDraws` draws, so the push leans toward the end away from the
+    /// orb (a random end while the orb is level with the middle). The scatter
+    /// (`RedoubtWaves.scatterShare`) lands anywhere at least `scatterClearance` from the orb. The main wall is drawn with each allowed wall weighted
+    /// by its distance from the orb raised to `mainWallWeighting` (0: all equally likely), and
+    /// each top-up group lands at the farthest from the orb of `groupSpotDraws` clear spots along
+    /// the entry walls.
+    public var pushDepth = 260.0
+    public var pushFalloff = 1.5
+    public var pushAlongDraws = 4
+    public var scatterClearance = 300.0
+    public var mainWallWeighting = 2.0
+    public var groupSpotDraws = 6
+    /// With `RedoubtWaves.pushAndScatter` off (the first 13d ease): the whole opening crowd lands
+    /// within this distance of an entry wall, and the walls are chosen by scoring each its
+    /// distance from the orb plus a random amount up to `entrySideJitter`, highest first.
     public var entryBandDepth = 180.0
-    /// Choosing the entry walls: each wall scores its distance from the orb plus a random amount
-    /// up to this, and the highest win, so the far walls are favoured but not always chosen.
     public var entrySideJitter = 300.0
 
     // Skitter: the flood.

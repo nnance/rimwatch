@@ -119,46 +119,63 @@ import GameCore
         #expect(elsewhere.allSatisfy { distance($0, r.orb.pos) >= r.tuning.safeDistance })
     }
 
-    @Test func earlyWavesComeInFromOneWallAndLaterOnesFromAnywhere() throws {
+    /// How far a spot is from a wall.
+    private func gap(_ spot: Vec2, to wall: ArenaWall, _ tuning: RedoubtTuning) -> Double {
+        switch wall {
+        case .north: tuning.arenaHeight - spot.y
+        case .south: spot.y
+        case .east: tuning.arenaWidth - spot.x
+        case .west: spot.x
+        }
+    }
+
+    @Test func earlyWavesPushInFromOneWallWithAScatterAndLaterOnesFromAnywhere() throws {
         let waves = RedoubtWaves()
         #expect((1...4).allSatisfy { waves.entrySides(forWave: $0) == 1 })
         #expect(waves.entrySides(forWave: 5) == 2)
         #expect(waves.entrySides(forWave: 7) == 3)
         #expect((8...30).allSatisfy { waves.entrySides(forWave: $0) == 4 })
+        // The scattered share grows wave by wave, and from wave 8 the whole crowd is anywhere.
+        let shares = (1...8).map { waves.scatterShare(forWave: $0) }
+        #expect(shares[0] > 0 && shares[0] < 0.5)
+        #expect(zip(shares, shares.dropFirst()).allSatisfy { $0 < $1 })
+        #expect((8...30).allSatisfy { waves.scatterShare(forWave: $0) == 1 })
+        // Which spawns are scattered: the share of the list, spread through it.
+        for wave in 1...7 {
+            let count = waves.spawns(forWave: wave).count
+            let scattered = (0..<count).count { waves.isScattered($0, forWave: wave) }
+            #expect(scattered == Int((Double(count) * waves.scatterShare(forWave: wave)).rounded(.down)))
+        }
 
-        // Wave 1: the whole opening crowd lands in a band along one wall, the one the run chose,
-        // clear of the orb, leaving the rest of the floor to back into.
-        for seed: UInt64 in [3, 8, 21] {
+        // Wave 1: the main wall is not the one the orb is nearest; most of the crowd lands in a
+        // deep band along it, the scattered share anywhere well clear of the orb.
+        for seed: UInt64 in [3, 8, 21, 40] {
             var r = RedoubtRun(seed: seed)
             let events = run(&r, steps: seconds(3)) { $0.isWaveStarted }
             let wall = try #require(r.entrySides.first)
             #expect(r.entrySides.count == 1)
+            #expect(wall != r.nearestWall(r.centre))
             let spots = events.compactMap { if case .arrivalTelegraphed(_, _, let at) = $0 { at } else { nil } }
             #expect(spots.count == waves.floorCrowd(forWave: 1))
-            for spot in spots {
-                let gap = switch wall {
-                case .north: r.tuning.arenaHeight - spot.y
-                case .south: spot.y
-                case .east: r.tuning.arenaWidth - spot.x
-                case .west: spot.x
-                }
-                #expect(gap <= r.tuning.entryBandDepth + 1e-9, "\(spot) not along \(wall)")
+            var scattered = 0
+            for (index, spot) in spots.enumerated() {
                 #expect(distance(spot, r.orb.pos) >= r.tuning.safeDistance)
+                if waves.isScattered(index, forWave: 1) {
+                    scattered += 1
+                    #expect(distance(spot, r.centre) >= r.tuning.scatterClearance, "\(spot) scattered too close")
+                } else {
+                    #expect(gap(spot, to: wall, r.tuning) <= r.tuning.pushDepth + 1e-9, "\(spot) not along \(wall)")
+                }
             }
-            // Top-up groups come from the same wall.
+            #expect(scattered >= 3)
+            // Top-up groups come from the main wall.
             run(&r, steps: seconds(1))
             r.enemies.removeAll()
             r.orb.invulnerableTimer = 1e9
             let group = run(&r, steps: 1).compactMap { if case .arrivalTelegraphed(_, _, let at) = $0 { at } else { nil } }
             #expect(!group.isEmpty)
             for spot in group {
-                let gap = switch wall {
-                case .north: r.tuning.arenaHeight - spot.y
-                case .south: spot.y
-                case .east: r.tuning.arenaWidth - spot.x
-                case .west: spot.x
-                }
-                #expect(gap <= 160, "\(spot) not along \(wall)")
+                #expect(gap(spot, to: wall, r.tuning) <= 160, "\(spot) not along \(wall)")
             }
         }
 
@@ -167,6 +184,67 @@ import GameCore
         late.wave = 7
         late.prepareWave(startingIn: 1)
         #expect(late.entrySides.isEmpty)
+    }
+
+    @Test func theMainWallChangesEveryWaveAndAvoidsTheOrb() throws {
+        var r = RedoubtRun(seed: 5)
+        var picker = SeededRNG(seed: 99)
+        var chosen: [ArenaWall: Int] = [:]
+        var previous: ArenaWall?
+        for _ in 0..<400 {
+            r.orb.pos = Vec2(picker.range(20...880), picker.range(20...580))
+            r.chooseEntrySides(count: 1)
+            let main = try #require(r.entrySides.first)
+            #expect(main != r.nearestWall(r.orb.pos), "\(main) is nearest \(r.orb.pos)")
+            #expect(main != previous)
+            chosen[main, default: 0] += 1
+            previous = main
+        }
+        // Every wall takes its turn.
+        #expect(ArenaWall.allCases.allSatisfy { (chosen[$0] ?? 0) > 40 }, "\(chosen)")
+
+        // Not just the farthest: from the same spot, more than one wall is chosen.
+        var walls = Set<ArenaWall>()
+        for _ in 0..<40 {
+            r.orb.pos = Vec2(450, 300)
+            r.lastMainWall = nil
+            r.chooseEntrySides(count: 1)
+            walls.insert(r.entrySides[0])
+        }
+        #expect(walls.count == 3)
+        #expect(!walls.contains(r.nearestWall(Vec2(450, 300))))
+
+        // Two or three walls: the main one first, none of them the orb's nearest.
+        for count in 2...3 {
+            r.orb.pos = Vec2(800, 300)
+            r.chooseEntrySides(count: count)
+            #expect(r.entrySides.count == count)
+            #expect(Set(r.entrySides).count == count)
+            #expect(!r.entrySides.contains(.east))
+        }
+
+        // The same seed gives the same walls and the same crowd.
+        func opening(_ seed: UInt64) -> ([ArenaWall], [RedoubtEvent]) {
+            var fresh = RedoubtRun(seed: seed)
+            let events = run(&fresh, steps: seconds(3)) { $0.isWaveStarted }
+            return (fresh.entrySides, events)
+        }
+        #expect(opening(12) == opening(12))
+    }
+
+    /// `RedoubtWaves.pushAndScatter` off gives back the first 13d entry exactly: the whole crowd
+    /// in a 180-unit band along one wall, nothing scattered.
+    @Test func theMainPushAndScatterCanBeTurnedOff() throws {
+        var waves = RedoubtWaves()
+        waves.pushAndScatter = false
+        #expect((1...7).allSatisfy { waves.scatterShare(forWave: $0) == 0 })
+        for seed: UInt64 in [3, 8, 21] {
+            var r = RedoubtRun(seed: seed, waves: waves)
+            let events = run(&r, steps: seconds(3)) { $0.isWaveStarted }
+            let wall = try #require(r.entrySides.first)
+            let spots = events.compactMap { if case .arrivalTelegraphed(_, _, let at) = $0 { at } else { nil } }
+            #expect(spots.allSatisfy { gap($0, to: wall, r.tuning) <= r.tuning.entryBandDepth + 1e-9 })
+        }
     }
 
     @Test func spittersFireSlowlyInTheirFirstWaves() throws {

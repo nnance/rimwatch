@@ -404,6 +404,10 @@ step is pushed so you can install it.
         novice bot now reaches wave 6. 13c, 13e and the wall rule were independently verified
         together and passed with notes (listed under "Redoubt design"). 406 tests.
 - [ ] Gate: Redoubt played and refined
+  - [x] Refinement 1 (2026-11-21, after your second play): the opening crowd arrives as a main
+        push from a different side each wave plus a thin scatter, in place of a strip along one
+        wall that stayed on the same side. 415 tests. Pushed before its independent check, by
+        agreement; see "A natural crowd entry" in the Redoubt design.
 - [ ] 14. Riftwing design written here and approved
 - [ ] 15. Riftwing build
 - [ ] Gate: Riftwing played and refined
@@ -876,6 +880,61 @@ you chose: a first game usually reaches wave 5 to 6.
   easing with no crowd reduction gives a novice median of wave 5, with little margin.
 - The harness now also prints the pressure on the orb per wave (enemies within 120 and 200
   units, directions blocked) and what each loss looked like.
+
+### A natural crowd entry (after your second play, 2026-11-21)
+
+You said the difficulty was right and builds well (you reached wave 5), but that at the start
+of a round all the enemies appeared on the right-hand side and it looked odd.
+
+- **Why it happened.** In waves 1 to 4 the whole crowd arrived in a strip along one wall, the
+  wall farthest from the orb. A player backs away from the crowd and ends the wave near the
+  opposite wall, so the same wall was the farthest again next wave: the crowd stayed on one
+  side for four waves.
+- **The main push.** Most of the opening crowd still comes from one side, but within 260 of
+  the wall (it was a 180 strip), thinning out away from it and leaning toward the end of the
+  wall away from the orb. It reads as a front coming from, say, the north-west.
+- **The side changes every wave.** It is never the wall the orb is nearest and never the
+  previous wave's wall. Among the rest, farther walls are likelier but not certain.
+- **The scatter.** A share of the crowd lands anywhere on the floor at least 300 from the
+  orb: 20% in wave 1, rising to 60% in wave 7, and everything from wave 8 as before. Every
+  role takes part.
+- **Reinforcement groups** keep to the wave's entry walls, each landing at the farthest from
+  the orb of six clear spots. The wall-run rule is unchanged.
+- **The numbers:** `RedoubtWaves.scatterShare` `[0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 1]`; in
+  `Tuning.swift` `pushDepth` 260, `pushFalloff` 1.5, `pushAlongDraws` 4, `scatterClearance`
+  300, `mainWallWeighting` 2, `groupSpotDraws` 6. `RedoubtWaves.pushAndScatter = false` gives
+  exactly the previous game (a test checks it against the old golden values).
+- **Result over 80 seeds:**
+
+  | | Before | After |
+  |---|---|---|
+  | Novice: wave reached (median, mean) | 6 (5.59) | 5 (5.46) |
+  | Novice: survival | 183 s | 159 s |
+  | Novice: lives lost in waves 1 and 2 together | 0.21 | 0.28 |
+  | Novice: directions blocked round the orb in wave 1 (of 8) | 0.8 | 0.6 |
+  | Competent: wave reached | 11 | 11 |
+  | Wall circler: wave reached (mean) | 4 (4.25) | 4 (3.75) |
+  | Corner camper: wave reached (mean) | 7 (6.92) | 7 (6.74) |
+
+  The novice's median sits on the line between waves 5 and 6, so 80 seeds flip it. Over 800
+  games on a second seed set the mean is 5.38 before and after; over 400 on the first it is
+  5.49 before and 5.26 after. Read it as level or very slightly harder. Waves 3 and 4 are a
+  little harder and wave 6 easier.
+- **What it cost and what paid for it.** Choosing the wall at random instead of the farthest
+  costs about a quarter of a wave, and each 10% of scatter about 0.15. Landing reinforcement
+  groups at the farthest of several spots and leaning the push toward one end of the wall
+  bought that back. There is no margin left: a heavier scatter would make a first game shorter.
+- **Tried and left out:** reinforcements from any wall the orb is not near (clearly harder);
+  the scatter arriving a second or two late; a larger scatter clearance; scattering Skitters
+  only; a push along the whole wall (about a tenth of a wave harder than the lean; set
+  `pushAlongDraws` to 1 for that look).
+- **To look for when you play:** whether the heavier side is still too one-sided or now right;
+  whether the few scattered enemies behind you feel unfair; whether waves 3 and 4 are a step.
+- **Not yet checked independently or seen on a screen** when it was pushed: the look was
+  judged from text maps (`MAP=<seed>[,<seed>] .build/release/Harness redoubt` prints where
+  the opening crowd lands in waves 1 to 5).
+- The harness also gained a corner-camping bot (`cornerCamper`). It still reaches wave 7; the
+  camping note below stands.
 
 ### What the independent check of sound, polish and balance found
 

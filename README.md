@@ -88,12 +88,15 @@ colonists still to save.
 
 - **The pace:** the floor is crowded from the first second of a wave, and more pour in while you
   fight. Pushing the aim stick fires a constant stream of shots, about ten a second, with no fire
-  button, heat or reload. Early waves come in from a few walls (one wall in waves 1 to 4, two in
-  wave 5, three in waves 6 and 7, anywhere on the floor from wave 8), so the opening waves can be
-  read and met; the crowd starts a little smaller and grows to its full size by wave 8, and
-  Spitters fire half as often in the wave they first appear, back to full rate by wave 7. Laps
-  hugging the wall are no refuge: while the orb runs along a wall, new groups land on the path
-  ahead of it.
+  button, heat or reload. In the early waves most of the crowd pushes in from one side (one wall
+  in waves 1 to 4, two in wave 5, three in waves 6 and 7), never the side you are nearest and
+  never the same main wall two waves running, and reinforcements keep coming from that side,
+  while the rest is scattered thinly over the floor away from you; the scattered share grows
+  each wave until, from wave 8, the crowd lands anywhere. So the opening waves can be read and
+  met, and there is room to back away. The crowd starts a little smaller and grows to its full
+  size by wave 8, and Spitters fire half as often in the wave they first appear, back to full
+  rate by wave 7. Laps hugging the wall are no refuge: while the orb runs along a wall, new
+  groups land on the path ahead of it.
 - **The loop:** colonists shelter around the floor. Touch one and they follow you in a line; lead
   the line to the airlock to deliver them all at once. Each colonist in the line is worth more than
   the one before, so long lines pay, but enemies can take followers off the end. Every fourth
@@ -187,11 +190,15 @@ swift build -c release -Xswiftc -DDEBUG
 The arguments are the number of seeds, a cap in minutes per game, and the bots to run. A leading
 `redoubt` runs Redoubt's bots instead of Ridgeline's: `idle`, `novice`, `competent` and
 `shooter`, plus three that only circle the floor firing (`wallCircler`, `innerCircler`,
-`reversingCircler`), kept to check that wall-running does not out-survive real play. Without bot
-names it runs `idle novice competent wallCircler`. For each bot it prints survival, wave reached,
+`reversingCircler`), kept to check that wall-running does not out-survive real play, and
+`cornerCamper`, which parks in a corner and fires. Without bot names it runs
+`idle novice competent wallCircler cornerCamper`. For each bot it prints survival, wave reached,
 score (and score a minute), games that reached the cap, colonists saved and lost, kills, power
 cuts, how close arrivals land to the orb, deaths by cause, and by wave the deaths, colonists saved,
 pressure on the orb (enemies within 120 and 200, blocked directions) and how each death happened.
+`MAP=1000,8919 .build/release/Harness redoubt` instead prints, for each seed, a text map of where
+each of the first five waves' opening crowd lands (the novice bot plays in between, so the orb is
+where a player might leave it); `MAPWAVES` and `MAPBOT` change the waves shown and the bot.
 
 ## App icon
 

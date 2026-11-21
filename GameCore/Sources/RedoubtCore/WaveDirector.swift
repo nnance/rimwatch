@@ -10,11 +10,13 @@ public struct RedoubtSpawn: Sendable, Equatable {
 ///
 /// The floor is never allowed to go quiet while a wave lasts:
 /// - A wave opens with `floorCrowd` enemies (18 in wave 1, rising to the full 20 + 8 a wave by
-///   wave 8, capped at 90), all telegraphed in its first second, along the wave's entry walls
-///   (`entrySides`: one wall in waves 1 to 4, more later, anywhere from wave 8).
+///   wave 8, capped at 90), all telegraphed in its first second: most in a main push along the
+///   wave's entry walls (`entrySides`: one wall in waves 1 to 4, more later), a share growing by
+///   wave scattered over the rest of the floor (`scatterShare`), anywhere from wave 8.
 /// - It also has a quota of Skitters (`quota`). Whenever the shootable enemies on the floor (and
 ///   on their way in) fall below `floorTarget`, the run telegraphs another group of them at once,
-///   from one of the wave's entry walls (any side from wave 8), until the quota is spent. Burrows pour out more on top.
+///   from one of the wave's entry walls, at its end far from the orb (any side from wave 8), until
+///   the quota is spent. Burrows pour out more on top.
 /// - The wave ends when the quota is spent and the floor is clear, so only the last few need
 ///   hunting down.
 /// Each new role debuts in a wave of its own, alongside Skitters only; mixed waves come between
@@ -30,9 +32,10 @@ public struct RedoubtWaves: Sendable {
     // waves 2 and 3). Each is a plain number to change or undo.
 
     /// How many walls each wave's crowd comes in from, by wave (wave 1 first; the last entry
-    /// holds for every later wave). The opening crowd lands in a band along those walls and the
-    /// top-up groups come from them, so early on the orb has open floor to back into. The walls
-    /// far from the orb are favoured. 4 is anywhere on the floor (as before 13d, every wave).
+    /// holds for every later wave). The main push of the opening crowd lands in a band along
+    /// those walls (the rest is scattered: `scatterShare`) and the top-up groups come from them,
+    /// so early on the orb has open floor to back into. See `pushAndScatter` for how the walls
+    /// are chosen. 4 is anywhere on the floor (as before 13d, every wave).
     public var entrySides: [Int] = [1, 1, 1, 1, 2, 3, 3, 4]
     /// The opening crowd and the Skitter quota are scaled by this in wave 1, rising by
     /// `crowdEaseGrowth` a wave to the full numbers (wave 8 on). Before 13d: 1 and 0.
@@ -43,10 +46,38 @@ public struct RedoubtWaves: Sendable {
     public var spitterDebutSlowdown = 2.0
     public var spitterEaseWaves = 4.0
 
+    /// The main push and the scatter (after the owner's second play: the whole crowd along one
+    /// wall, the same wall wave after wave, looked artificial). While a wave has entry walls, its
+    /// main wall is never the one the orb is nearest nor the last wave's main wall, and is drawn
+    /// at random from the rest (the farther ones likelier: `RedoubtTuning.mainWallWeighting`); most of the opening crowd lands in a deep, loose band along the
+    /// entry walls, and the share `scatterShare` of it is scattered over the whole floor, kept
+    /// `RedoubtTuning.scatterClearance` from the orb. False gives the one-wall entry of the first
+    /// 13d ease exactly: the far walls favoured, the whole crowd in a 180-unit band.
+    public var pushAndScatter = true
+    /// The share of the opening crowd scattered over the floor, by wave (wave 1 first; the last
+    /// entry holds for every later wave). Only used while the wave has entry walls: from wave 8,
+    /// the whole crowd is anywhere on the floor anyway.
+    public var scatterShare: [Double] = [0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 1]
+
     /// Walls the crowd comes in from in a wave (4: anywhere).
     public func entrySides(forWave wave: Int) -> Int {
         guard !entrySides.isEmpty else { return 4 }
         return entrySides[min(max(wave - 1, 0), entrySides.count - 1)]
+    }
+
+    /// The share of a wave's opening crowd scattered over the floor rather than coming in with
+    /// the main push (0 when `pushAndScatter` is off, 1 when the wave has no entry walls).
+    public func scatterShare(forWave wave: Int) -> Double {
+        guard entrySides(forWave: wave) < 4 else { return 1 }
+        guard pushAndScatter, !scatterShare.isEmpty else { return 0 }
+        return min(max(scatterShare[min(max(wave - 1, 0), scatterShare.count - 1)], 0), 1)
+    }
+
+    /// Which of a wave's opening spawns (by index into `spawns(forWave:)`) are scattered: spread
+    /// evenly through the list so every role has its share.
+    public func isScattered(_ index: Int, forWave wave: Int) -> Bool {
+        let share = scatterShare(forWave: wave)
+        return (Double(index + 1) * share).rounded(.down) > (Double(index) * share).rounded(.down)
     }
 
     /// The early-game scale on the opening crowd and the quota (1 from the full-crowd wave on).

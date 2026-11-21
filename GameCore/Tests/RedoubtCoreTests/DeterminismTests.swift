@@ -10,8 +10,9 @@ import GameCore
 @Suite struct RedoubtDeterminismTests {
     /// FNV-1a over every event's full description and the step it came in, plus the final
     /// counters, for `seconds` of play by `skill`.
-    static func fingerprint(seed: UInt64, skill: RedoubtPilot.Skill, seconds: Double) -> (hash: UInt64, run: RedoubtRun, events: Int) {
-        var r = RedoubtRun(seed: seed)
+    static func fingerprint(seed: UInt64, skill: RedoubtPilot.Skill, seconds: Double,
+                            waves: RedoubtWaves = RedoubtWaves()) -> (hash: UInt64, run: RedoubtRun, events: Int) {
+        var r = RedoubtRun(seed: seed, waves: waves)
         var pilot = RedoubtPilot(skill: skill, seed: seed)
         var hash: UInt64 = 0xCBF2_9CE4_8422_2325
         var total = 0
@@ -43,12 +44,29 @@ import GameCore
     /// top-up groups, deliveries, Shockwaves, an extra life and the airlock moving. Debug and
     /// Release builds give the same values. If a deliberate change to the rules, the
     /// tuning, the wave makeup or the pilot breaks it, capture the new values from the printed
-    /// line and say so in the commit. Last captured in 13d for the early-game ease (crowds from
-    /// entry walls, a gentler early crowd, slower debut Spitters), after an earlier 13d capture
-    /// for the wall-run rule.
+    /// line and say so in the commit. Last captured after the owner's second play, for the main
+    /// push and the scatter (`RedoubtWaves.pushAndScatter`); before that in 13d for the early-game
+    /// ease (crowds from entry walls, a gentler early crowd, slower debut Spitters) and the
+    /// wall-run rule.
     @Test func aScriptedRunReplaysExactly() throws {
         let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180)
         print("REDOUBT GOLDEN hash \(hash) events \(events) score \(r.score) wave \(r.wave) saved \(r.colonistsSaved) delivered \(r.colonistsDelivered) lives \(r.orb.lives) tick \(r.tick)")
+        #expect(hash == 1_857_457_665_820_620_754)
+        #expect(events == 6847)
+        #expect(r.score == 103_650)
+        #expect(r.wave == 6)
+        #expect(r.colonistsSaved == 40)
+        #expect(r.colonistsDelivered == 40)
+        #expect(r.orb.lives == 3)
+        #expect(r.tick == 21_600)
+    }
+
+    /// With `RedoubtWaves.pushAndScatter` off the run is exactly the 13d game: the golden values
+    /// captured before the main push and the scatter came in.
+    @Test func turningOffThePushAndScatterReplaysThe13dGame() throws {
+        var waves = RedoubtWaves()
+        waves.pushAndScatter = false
+        let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180, waves: waves)
         #expect(hash == 16_656_838_565_572_388_220)
         #expect(events == 7053)
         #expect(r.score == 107_250)
@@ -56,7 +74,6 @@ import GameCore
         #expect(r.colonistsSaved == 42)
         #expect(r.colonistsDelivered == 39)
         #expect(r.orb.lives == 3)
-        #expect(r.tick == 21_600)
     }
 }
 #endif
