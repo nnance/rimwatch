@@ -948,9 +948,10 @@ of a round all the enemies appeared on the right-hand side and it looked odd.
     Left as it is: you played it and called it natural.
   - With the orb at the exact centre (the start of a run, or a respawn) the "nearest wall" is
     always taken as north, so wave 1 never pushes from the north and rarely from the south.
-  - The tests pin the wall rules, the distances, the shares rising and the switch back, but
+  - The tests pinned the wall rules, the distances, the shares rising and the switch back, but
     not that farther walls are likelier, the lean, the six-spot rule for reinforcement groups
-    or the exact shares.
+    or the exact shares. Five tests added afterwards pin those, and cover waves 2 to 4 with
+    the orb off-centre and moving (421 tests).
   - The wall circler and corner camper both do slightly worse than before.
 
 ### Everything 50% bigger (2026-11-21)

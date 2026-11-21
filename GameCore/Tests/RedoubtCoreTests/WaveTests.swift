@@ -247,6 +247,159 @@ import GameCore
         }
     }
 
+    @Test func theScatteredShareIsPinnedWaveByWave() throws {
+        let waves = RedoubtWaves()
+        let shares = (1...9).map { waves.scatterShare(forWave: $0) }
+        #expect(shares == [0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 1, 1])
+    }
+
+    @Test func fartherWallsAreLikelierToBeTheMainWall() throws {
+        /// How often each wall is the main wall over many draws with the orb at (700, 450):
+        /// north is nearest (150), then east (200), south (450) and west (700).
+        func shares(weighting: Double) -> [ArenaWall: Double] {
+            var tuning = RedoubtTuning()
+            tuning.mainWallWeighting = weighting
+            var r = RedoubtRun(seed: 5, tuning: tuning)
+            r.orb.pos = Vec2(700, 450)
+            var chosen: [ArenaWall: Int] = [:]
+            let trials = 1000
+            for _ in 0..<trials {
+                r.lastMainWall = nil
+                r.chooseEntrySides(count: 1)
+                chosen[r.entrySides[0], default: 0] += 1
+            }
+            return chosen.mapValues { Double($0) / Double(trials) }
+        }
+        // Weighted by distance squared: west about 0.67, east about 0.05.
+        let weighted = shares(weighting: RedoubtTuning().mainWallWeighting)
+        #expect(weighted[.north] == nil)
+        #expect((weighted[.west] ?? 0) > 0.55, "\(weighted)")
+        #expect((weighted[.east] ?? 0) < 0.12, "\(weighted)")
+        // Unweighted, each open wall about a third.
+        let even = shares(weighting: 0)
+        #expect((even[.west] ?? 0) < 0.45, "\(even)")
+        #expect((even[.east] ?? 0) > 0.22, "\(even)")
+    }
+
+    @Test func theMainPushThinsAwayFromTheWallAndLeansAwayFromTheOrb() throws {
+        /// The mean inset (0 at the margin, 1 at `pushDepth`) and the mean place along the wall
+        /// (0 at the south end, 1 at the north) of many main-push spots along the west wall.
+        func spread(falloff: Double, alongDraws: Int, orbAt: Vec2) -> (inset: Double, along: Double) {
+            var tuning = RedoubtTuning()
+            tuning.pushFalloff = falloff
+            tuning.pushAlongDraws = alongDraws
+            var r = RedoubtRun(seed: 7, tuning: tuning)
+            r.wavesEnabled = false
+            r.phase = .fighting
+            r.orb.pos = orbAt
+            r.entrySides = [.west]
+            let margin = tuning.spawnWallMargin
+            let trials = 1000
+            for _ in 0..<trials { r.telegraph(.skitter) }
+            #expect(r.arrivals.count == trials)
+            let insets = r.arrivals.map { ($0.pos.x - margin) / (tuning.pushDepth - margin) }
+            let alongs = r.arrivals.map { ($0.pos.y - margin) / (tuning.arenaHeight - 2 * margin) }
+            return (insets.reduce(0, +) / Double(trials), alongs.reduce(0, +) / Double(trials))
+        }
+        let defaults = RedoubtTuning()
+        let low = Vec2(650, 150), high = Vec2(650, 450)
+        // Thinning out: the inset is u^1.5 (mean 0.4) rather than uniform (mean 0.5).
+        let thinned = spread(falloff: defaults.pushFalloff, alongDraws: defaults.pushAlongDraws, orbAt: low)
+        let flat = spread(falloff: 1, alongDraws: defaults.pushAlongDraws, orbAt: low)
+        #expect(thinned.inset < 0.45, "\(thinned)")
+        #expect(flat.inset > 0.45, "\(flat)")
+        // Leaning away from the orb: the farthest of four draws (mean 0.8 toward the far end)
+        // rather than one (mean 0.5), whichever end the orb is level with.
+        #expect(thinned.along > 0.72, "\(thinned)")
+        let leanLow = spread(falloff: defaults.pushFalloff, alongDraws: defaults.pushAlongDraws, orbAt: high)
+        #expect(leanLow.along < 0.28, "\(leanLow)")
+        let unleaned = spread(falloff: defaults.pushFalloff, alongDraws: 1, orbAt: low)
+        #expect(abs(unleaned.along - 0.5) < 0.06, "\(unleaned)")
+    }
+
+    @Test func topUpGroupsLandAtTheFarthestOfSeveralSpots() throws {
+        /// The mean distance from the orb of top-up groups' centres along the south wall, with the
+        /// orb still at (250, 300), over many draws from the same moment in wave 1.
+        func meanGap(spotDraws: Int) -> Double {
+            var tuning = RedoubtTuning()
+            tuning.groupSpotDraws = spotDraws
+            var base = RedoubtRun(seed: 8, tuning: tuning)
+            run(&base, steps: seconds(3)) { $0.isWaveStarted }
+            run(&base, steps: seconds(1))
+            base.orb.invulnerableTimer = 1e9
+            base.orb.pos = Vec2(250, 300)
+            base.orb.vel = .zero
+            base.entrySides = [.south]
+            base.enemies.removeAll()
+            base.arrivals.removeAll()
+            base.groupCooldown = 0
+            var total = 0.0
+            let trials = 200
+            for trial in 0..<trials {
+                var r = base
+                r.rng = SeededRNG(seed: UInt64(1000 + trial))
+                let spots = r.step(still).compactMap {
+                    if case .arrivalTelegraphed(_, _, let at) = $0 { at } else { nil }
+                }
+                #expect(spots.count == RedoubtWaves.groupSize)
+                let centre = spots.reduce(Vec2(0, 0)) { $0 + $1 } * (1 / Double(spots.count))
+                total += distance(centre, r.orb.pos)
+            }
+            return total / Double(trials)
+        }
+        let farthest = meanGap(spotDraws: RedoubtTuning().groupSpotDraws)
+        let any = meanGap(spotDraws: 1)
+        #expect(farthest > any + 80, "farthest of six \(farthest), one spot \(any)")
+    }
+
+    /// Waves 2 to 4 with the orb off-centre and flying about through the intermission: the main
+    /// wall is never the one it was nearest when the wave was laid out, the push lands along that
+    /// wall, and the scattered share keeps its clearance.
+    @Test func laterEarlyWavesKeepTheEntryRulesWithTheOrbOffCentreAndMoving() throws {
+        let waves = RedoubtWaves()
+        let moves = [Vec2(1, 0.4), Vec2(-0.7, -1), Vec2(0.3, -1), Vec2(-1, 0.8)]
+        for (n, seed) in ([4, 9, 17, 33] as [UInt64]).enumerated() {
+            var (r, _) = waveOne(seed: seed)
+            r.orb.invulnerableTimer = 1e9
+            let input = RedoubtInput(move: moves[n])
+            for wave in 2...4 {
+                emptyTheFloor(&r)
+                var telegraphed: [Vec2] = []
+                var orbAt = r.orb.pos
+                var nearest = r.nearestWall(r.orb.pos)
+                var steps = 0
+                while r.wave < wave, steps < seconds(5) {
+                    let before = r.orb.pos
+                    let events = r.step(input)
+                    let spots = events.compactMap {
+                        if case .arrivalTelegraphed(_, _, let at) = $0 { at } else { nil }
+                    }
+                    if !spots.isEmpty, telegraphed.isEmpty {
+                        orbAt = before
+                        nearest = r.nearestWall(before)
+                        telegraphed = spots
+                    }
+                    steps += 1
+                }
+                try #require(r.wave == wave)
+                #expect(distance(orbAt, r.centre) > 60, "seed \(seed) wave \(wave): orb still central")
+                let wall = try #require(r.entrySides.first)
+                #expect(r.entrySides.count == 1)
+                #expect(wall != nearest, "seed \(seed) wave \(wave): \(wall) is nearest \(orbAt)")
+                #expect(telegraphed.count == waves.floorCrowd(forWave: wave))
+                let slack = r.tuning.orbMaxSpeed / 120 + 1e-6
+                for (index, spot) in telegraphed.enumerated() {
+                    #expect(distance(spot, orbAt) >= r.tuning.safeDistance - slack)
+                    if waves.isScattered(index, forWave: wave) {
+                        #expect(distance(spot, orbAt) >= r.tuning.scatterClearance - slack, "\(spot) scattered too close")
+                    } else {
+                        #expect(gap(spot, to: wall, r.tuning) <= r.tuning.pushDepth + 1e-9, "\(spot) not along \(wall)")
+                    }
+                }
+            }
+        }
+    }
+
     @Test func spittersFireSlowlyInTheirFirstWaves() throws {
         let waves = RedoubtWaves()
         let tuning = RedoubtTuning()
