@@ -13,8 +13,9 @@ import UIKit
 final class TerrainNode: SKNode {
 
     private let world: World
-    private let factory: GlowShapeFactory
-    private var theme: any Theme { factory.theme }
+    private let glyphs: RidgelineGlyphs
+    private var factory: GlowShapeFactory { glyphs.factory }
+    private var theme: any Theme { glyphs.theme }
 
     private var tiles: [SKSpriteNode] = []
     /// The same ground drawn as a single dim ridge in the theme's Blackout colour, at half
@@ -32,9 +33,9 @@ final class TerrainNode: SKNode {
         let integrityFrame = SKSpriteNode(color: .white, size: CGSize(width: 1, height: 1))
     }
 
-    init(world: World, factory: GlowShapeFactory) {
+    init(world: World, glyphs: RidgelineGlyphs) {
         self.world = world
-        self.factory = factory
+        self.glyphs = glyphs
         super.init()
         addChild(groundLayer)
         addChild(blackoutLayer)
@@ -90,8 +91,8 @@ final class TerrainNode: SKNode {
 
         let integrityWidth = 40.0
         for node in outposts {
-            factory.apply(factory.glyph(for: .outpost, pointsPerUnit: pointsPerUnit), to: node.dome)
-            factory.apply(factory.glyph(for: .ruin, pointsPerUnit: pointsPerUnit), to: node.ruin)
+            factory.apply(glyphs.glyph(for: .outpost, pointsPerUnit: pointsPerUnit), to: node.dome)
+            factory.apply(glyphs.glyph(for: .ruin, pointsPerUnit: pointsPerUnit), to: node.ruin)
             let barHeight = 3 / pointsPerUnit
             node.integrityFrame.size = CGSize(width: integrityWidth, height: barHeight)
             node.integrityFrame.position = CGPoint(x: -integrityWidth / 2, y: 22)

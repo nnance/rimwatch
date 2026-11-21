@@ -1,28 +1,24 @@
 import Foundation
 import GameCore
-import RidgelineCore
 
 /// Options and one high-score table per mode, persisted in UserDefaults as JSON (see
 /// `SavedSettings`). Audio, haptics and the gamepad read their options from here once they exist.
 @MainActor
 final class Settings {
-    static let shared = Settings()
-
-    /// Every mode with a table, and the mode that owns the table saved before there were modes.
-    private static let modes: [ModeID] = [ModeDescriptor.ridgeline.id]
-    private static let legacyHighScoreOwner = ModeDescriptor.ridgeline.id
-
     private let saved: SavedSettings
 
-    init(defaults: UserDefaults = .standard) {
+    /// `modes` is every mode with a table; `legacyHighScoreOwner` is the mode that owns the table
+    /// saved before there were modes. The shared instance (`Settings.shared`) is made where the
+    /// modes are known.
+    init(modes: [ModeID], legacyHighScoreOwner: ModeID, defaults: UserDefaults = .standard) {
         saved = SavedSettings(store: defaults)
         #if DEBUG
         // Launch with -resetSettings to start from defaults and empty tables.
         if ProcessInfo.processInfo.arguments.contains("-resetSettings") {
-            saved.reset(modes: Self.modes)
+            saved.reset(modes: modes)
         }
         #endif
-        saved.migrateLegacyHighScores(to: Self.legacyHighScoreOwner)
+        saved.migrateLegacyHighScores(to: legacyHighScoreOwner)
     }
 
     var options: GameOptions {

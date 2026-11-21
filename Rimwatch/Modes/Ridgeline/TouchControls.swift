@@ -38,7 +38,8 @@ final class TouchControls: SKNode {
     private(set) var stickZone: CGRect = .zero
 
     private let factory: GlowShapeFactory
-    private var color: RGB { factory.theme.palette.controls }
+    private let palette: Palette
+    private var color: RGB { palette.controls }
 
     private var stickTouch: UITouch?
     private var stickCenter: CGPoint = .zero
@@ -75,8 +76,9 @@ final class TouchControls: SKNode {
     /// Scene x range of the crease, kept free of controls.
     private var keepClear: ClosedRange<CGFloat>?
 
-    init(factory: GlowShapeFactory) {
+    init(factory: GlowShapeFactory, palette: Palette) {
         self.factory = factory
+        self.palette = palette
         super.init()
         addChild(stickBase)
         addChild(stickKnob)
@@ -169,7 +171,7 @@ final class TouchControls: SKNode {
     }
 
     private func layoutGauges() {
-        let warning = factory.theme.palette.warning
+        let warning = palette.warning
         if let center = buttonCenters[.fire], let radius = buttonRadii[.fire] {
             factory.apply(factory.glyph(key: "button-fire-hot-\(radius)",
                                         shape: Self.buttonShape(.fire, radius: radius, color: warning),
@@ -215,7 +217,6 @@ final class TouchControls: SKNode {
     }
 
     private func refreshGauges(time: TimeInterval) {
-        let palette = factory.theme.palette
         let flashOn = sin(time * 14) > 0
         if let dots = gauges[.fire] {
             let lit = Int((status.heat * Double(dots.count)).rounded(.up))

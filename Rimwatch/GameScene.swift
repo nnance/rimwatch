@@ -23,6 +23,8 @@ final class GameScene: SKScene {
     }
 
     private let theme: any Theme = AlienFrontier()
+    /// The shared screens' look, taken once from the theme.
+    private let shellStyle: ShellStyle
     private let settings = Settings.shared
     private var frontEnd: FrontEnd
     /// False until the fold gate has said how the phone is held; nothing is shown before that.
@@ -33,6 +35,7 @@ final class GameScene: SKScene {
     private var runID = 0
 
     private let factory: GlowShapeFactory
+    private let glyphs: RidgelineGlyphs
     private let starLayer = SKNode()
     private let worldLayer = SKNode()
     private var terrain: TerrainNode
@@ -157,21 +160,23 @@ final class GameScene: SKScene {
         frontEnd = FrontEnd(session: GameSession(seed: seed),
                             pose: .closed, options: options,
                             highScores: Settings.shared.highScores(for: ModeDescriptor.ridgeline.id))
-        factory = GlowShapeFactory(theme: theme, screenScale: 2)
-        terrain = TerrainNode(world: frontEnd.session.simulation.world, factory: factory)
+        shellStyle = theme.shellStyle
+        factory = GlowShapeFactory(screenScale: 2)
+        glyphs = RidgelineGlyphs(factory: factory, theme: theme)
+        terrain = TerrainNode(world: frontEnd.session.simulation.world, glyphs: glyphs)
         effects = EffectsLayer(world: frontEnd.session.simulation.world, factory: factory)
         callouts = CalloutLayer(world: frontEnd.session.simulation.world, theme: theme)
         scanner = ScannerNode(theme: theme, factory: factory)
         hud = HUDNode(theme: theme, factory: factory)
-        controls = TouchControls(factory: factory)
+        controls = TouchControls(factory: factory, palette: theme.palette)
         controls.handedness = options.handedness
-        menuNode = MenuNode(theme: theme)
-        pauseButton = PauseButton(theme: theme)
-        countdown = CountdownNode(theme: theme)
-        madeForDuo = MadeForDuoNode(theme: theme)
+        menuNode = MenuNode(style: shellStyle)
+        pauseButton = PauseButton(style: shellStyle)
+        countdown = CountdownNode(style: shellStyle)
+        madeForDuo = MadeForDuoNode(style: shellStyle)
         hapticRouter = HapticRouter()
-        synth = Synth(theme: theme, options: options)
-        feedback = FeedbackRouter(theme: theme, options: options, sound: synth, haptics: hapticRouter)
+        synth = Synth(sounds: theme.allSounds, music: theme.music, options: options)
+        feedback = FeedbackRouter(style: shellStyle, options: options, sound: synth, haptics: hapticRouter)
         super.init(size: size)
         backgroundColor = theme.palette.background.uiColor()
         anchorPoint = .zero
@@ -565,7 +570,7 @@ final class GameScene: SKScene {
     /// Swaps in terrain for the current run's world.
     private func replaceTerrain() {
         terrain.removeFromParent()
-        terrain = TerrainNode(world: world, factory: factory)
+        terrain = TerrainNode(world: world, glyphs: glyphs)
         worldLayer.addChild(terrain)
         effects.world = world
         if pointsPerUnit > 0 {
@@ -583,10 +588,10 @@ final class GameScene: SKScene {
     private func prewarmGlyphs() {
         let palette = theme.palette
         for role in EntityRole.allCases {
-            _ = factory.glyph(for: role, pointsPerUnit: pointsPerUnit)
-            _ = factory.glyph(for: role, tint: palette.warning, pointsPerUnit: pointsPerUnit)
+            _ = glyphs.glyph(for: role, pointsPerUnit: pointsPerUnit)
+            _ = glyphs.glyph(for: role, tint: palette.warning, pointsPerUnit: pointsPerUnit)
         }
-        _ = factory.glyph(for: .colonist, tint: palette.falling, pointsPerUnit: pointsPerUnit)
+        _ = glyphs.glyph(for: .colonist, tint: palette.falling, pointsPerUnit: pointsPerUnit)
         // The first banner and popup also pay for loading the font.
         _ = GlowText.texture("WAVE 1", style: .heading(24), color: palette.hud)
         callouts.prewarm(colors: [palette.falling, palette.warning, palette.hud]
@@ -607,7 +612,7 @@ final class GameScene: SKScene {
         callouts.prewarmBanner("WAVE 1 CLEAR", subtitle: "Survivor bonus +1,000", color: palette.hud,
                                subtitleColor: palette.falling)
         callouts.prewarmBanner("WAVE 1", subtitle: "10 colonists to protect", color: theme.terrain.ridge)
-        let menus = MenuNode(theme: theme)
+        let menus = MenuNode(style: shellStyle)
         for live in [false, true] {
             if let menu = FrontEnd.menu(for: .gameOver(score: 0), session: session, pose: .open,
                                         options: frontEnd.options, highScores: frontEnd.highScores,
@@ -637,12 +642,12 @@ final class GameScene: SKScene {
         var sprites: [SKNode] = []
         for (role, blend) in [(EntityRole.player, SKBlendMode.add), (.colonist, .alpha), (.enemy(.harvester), .add)] {
             let sprite = SKSpriteNode()
-            factory.apply(factory.glyph(for: role, pointsPerUnit: pointsPerUnit), to: sprite)
+            factory.apply(glyphs.glyph(for: role, pointsPerUnit: pointsPerUnit), to: sprite)
             sprite.blendMode = blend
             sprites.append(sprite)
         }
         let tinted = SKSpriteNode()
-        factory.apply(factory.glyph(for: .player, pointsPerUnit: pointsPerUnit), to: tinted)
+        factory.apply(glyphs.glyph(for: .player, pointsPerUnit: pointsPerUnit), to: tinted)
         tinted.blendMode = .add
         tinted.color = palette.shield.uiColor()
         tinted.colorBlendFactor = 1
@@ -801,7 +806,7 @@ final class GameScene: SKScene {
         ]
         for (role, phase, speed) in cast {
             let sprite = SKSpriteNode()
-            factory.apply(factory.glyph(for: role, pointsPerUnit: pointsPerUnit), to: sprite)
+            factory.apply(glyphs.glyph(for: role, pointsPerUnit: pointsPerUnit), to: sprite)
             sprite.alpha = 0.55
             decorLayer.addChild(sprite)
             decorNodes.append((sprite, role, phase, speed))
@@ -884,7 +889,8 @@ final class GameScene: SKScene {
         if frontEnd.screen != .playing { gamepad.reader.consumePlayPresses() }
         apply(frame.effects)
         updateAudio(elapsed: elapsed)
-        feedback.route(frame.events) { [unowned self] event in placement(for: event) }
+        feedback.route(frame.events, sound: { [theme] in theme.sound(for: $0) }, cue: HapticCue.cue(for:),
+                       placement: { [unowned self] event in placement(for: event) })
         if showsBackdrop {
             updateBackdrop(min(elapsed, 0.1))
         } else if !worldLayer.isHidden {
@@ -1175,7 +1181,7 @@ final class GameScene: SKScene {
             case .playerBlinked(let from, let to):
                 // A streak, fading afterimages along it, and a pop of sparks at each end.
                 effects.trail(from: from, to: to, color: palette.shield, width: 3.5)
-                effects.afterimages(of: factory.glyph(for: .player, pointsPerUnit: pointsPerUnit), from: from, to: to,
+                effects.afterimages(of: glyphs.glyph(for: .player, pointsPerUnit: pointsPerUnit), from: from, to: to,
                                     facing: sim.player.facing, color: palette.shield)
                 effects.ring(at: to, color: palette.shield, radius: 38, duration: 0.25)
                 effects.emit(at: from, EffectsLayer.Emission(count: 10, color: palette.shield, speed: 40...120, life: 0.2...0.35))
@@ -1460,7 +1466,7 @@ final class GameScene: SKScene {
         guard sprite.texture == nil || sprite.role != role || sprite.tint != tint else { return }
         sprite.role = role
         sprite.tint = tint
-        factory.apply(factory.glyph(for: role, tint: tint, pointsPerUnit: pointsPerUnit), to: sprite)
+        factory.apply(glyphs.glyph(for: role, tint: tint, pointsPerUnit: pointsPerUnit), to: sprite)
     }
 
     private func makeSprite(_ role: EntityRole, z: CGFloat) -> EntitySprite {
@@ -1878,4 +1884,11 @@ final class GameScene: SKScene {
         }
         presentScreen()
     }
+}
+
+extension Settings {
+    /// The app's settings. Ridgeline is the only mode and owns the table saved before there were
+    /// modes.
+    static let shared = Settings(modes: [ModeDescriptor.ridgeline.id],
+                                 legacyHighScoreOwner: ModeDescriptor.ridgeline.id)
 }

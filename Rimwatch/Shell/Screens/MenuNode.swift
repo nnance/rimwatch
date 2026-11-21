@@ -1,5 +1,4 @@
 import GameCore
-import RidgelineCore
 import SpriteKit
 import UIKit
 
@@ -20,7 +19,7 @@ final class MenuNode: SKNode {
         let step: Int
     }
 
-    private let theme: any Theme
+    private let shellStyle: ShellStyle
     private var menu: Menu?
     private var geometryKey = ""
     private var sceneSize: CGSize = .zero
@@ -33,11 +32,11 @@ final class MenuNode: SKNode {
     private var incrementFrames: [Int: CGRect] = [:]
     private var pressed: (touch: ObjectIdentifier, index: Int)?
 
-    private var accent: RGB { theme.palette.hud }
-    private var headingColor: RGB { theme.terrain.ridge }
+    private var accent: RGB { shellStyle.text }
+    private var headingColor: RGB { shellStyle.heading }
 
-    init(theme: any Theme) {
-        self.theme = theme
+    init(style: ShellStyle) {
+        self.shellStyle = style
         super.init()
     }
 
@@ -200,7 +199,7 @@ final class MenuNode: SKNode {
             let tag = "Hold the rim. Bring them home."
             let natural = GlowText.width(of: tag, style: .body(tagSize))
             if natural > maxWidth { tagSize = max(tagSize * maxWidth / natural, 10) }
-            let line = GlowText.sprite(tag, style: .body(tagSize), color: theme.palette.hud.scaled(0.8))
+            let line = GlowText.sprite(tag, style: .body(tagSize), color: shellStyle.text.scaled(0.8))
             line.position = CGPoint(x: centerX, y: y - m.lineHeight * 0.4)
             addChild(line)
             y -= m.lineHeight * 1.1
@@ -211,7 +210,7 @@ final class MenuNode: SKNode {
             // A new high score stands out; the final score on game over is larger.
             let isPlacement = line.hasPrefix("New high score")
             let isBest = menu.kind == .title && line.hasPrefix("Best")
-            let color = isPlacement || isBest ? theme.palette.falling : accent.lightened(0.3)
+            let color = isPlacement || isBest ? shellStyle.highlight : accent.lightened(0.3)
             var style: GlowText.Style = index == 0 ? .item(m.body * 1.1) : .body(m.body)
             var height = m.lineHeight
             if menu.kind == .gameOver, index == 0 {
@@ -443,18 +442,18 @@ final class MenuNode: SKNode {
             let isLatest = index == table.highlighted
             if isLatest {
                 // The most recent run: a soft bar behind the row and a marker beside it.
-                let bar = SKSpriteNode(color: theme.palette.falling.uiColor(),
+                let bar = SKSpriteNode(color: shellStyle.highlight.uiColor(),
                                        size: CGSize(width: table.total + table.gap, height: lineHeight * 0.92))
                 bar.alpha = 0.13
                 bar.blendMode = .add
                 bar.position = CGPoint(x: centerX, y: y - lineHeight / 2)
                 addChild(bar)
-                let mark = GlowText.sprite("›", style: .item(table.size), color: theme.palette.falling)
+                let mark = GlowText.sprite("›", style: .item(table.size), color: shellStyle.highlight)
                 mark.position = CGPoint(x: left - table.gap * 0.9, y: y - lineHeight / 2)
                 addChild(mark)
             }
             place(row, style: isLatest ? .item(table.size) : .body(table.size),
-                  color: isLatest ? theme.palette.falling : accent.lightened(0.3))
+                  color: isLatest ? shellStyle.highlight : accent.lightened(0.3))
         }
         return top - y
     }
@@ -515,7 +514,7 @@ final class MenuNode: SKNode {
         let up = GlowText.sprite("›", style: style, color: accent)
         up.position = CGPoint(x: upX, y: valueY)
         node.addChild(up)
-        let valueSprite = GlowText.sprite(value, style: style, color: theme.palette.falling)
+        let valueSprite = GlowText.sprite(value, style: style, color: shellStyle.highlight)
         valueSprite.position = CGPoint(x: valueCenter, y: valueY)
         node.addChild(valueSprite)
         let down = GlowText.sprite("‹", style: style, color: accent)

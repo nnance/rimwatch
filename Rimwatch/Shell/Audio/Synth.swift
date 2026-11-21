@@ -1,10 +1,9 @@
 import AVFoundation
 import Foundation
 import GameCore
-import RidgelineCore
 import UIKit
 
-/// The game's sound: theme patches rendered once to PCM, played through a small pool of voices,
+/// The game's sound: sound patches rendered once to PCM, played through a small pool of voices,
 /// plus the generative music bed. Decisions (which voice, what to drop) are made on the main
 /// thread and are cheap; everything that touches AVAudioEngine runs on one serial queue, so a
 /// sound starting never waits on the audio system.
@@ -32,7 +31,6 @@ final class Synth: SoundOutput {
     }
 
     private let graph: AudioGraph
-    private let theme: any Theme
     private var patches: [String: SoundPatch] = [:]
     private var isReady = false
     private var voices = [Voice](repeating: Voice(), count: Synth.gameplayVoiceCount)
@@ -53,14 +51,13 @@ final class Synth: SoundOutput {
     private static let logs = ProcessInfo.processInfo.arguments.contains("-logFeedback")
     #endif
 
-    init(theme: any Theme, options: GameOptions) {
-        self.theme = theme
+    init(sounds: [SoundPatch], music: MusicStyle?, options: GameOptions) {
         graph = AudioGraph(gameplayVoices: Self.gameplayVoiceCount, menuVoices: Self.menuVoiceCount,
-                           sampleRate: Self.sampleRate, music: theme.music)
-        for patch in theme.allSounds { patches[patch.name] = patch }
+                           sampleRate: Self.sampleRate, music: music)
+        for patch in sounds { patches[patch.name] = patch }
         setLevels(sound: options.soundLevel, music: options.musicLevel)
 
-        let all = theme.allSounds
+        let all = sounds
         graph.queue.async { [graph, weak self] in
             let started = Date()
             graph.prepare(all)
@@ -76,7 +73,7 @@ final class Synth: SoundOutput {
         graph.queue.async { [graph] in graph.start(reason: "launch") }
         observeSystem()
         #if DEBUG
-        AudioDump.runIfAsked(theme: theme)
+        AudioDump.runIfAsked(sounds: sounds, music: music)
         #endif
     }
 

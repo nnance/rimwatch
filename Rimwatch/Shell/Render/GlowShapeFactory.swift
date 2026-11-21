@@ -1,9 +1,8 @@
 import GameCore
-import RidgelineCore
 import SpriteKit
 import UIKit
 
-/// Turns theme shapes into textures once, with a neon look: a wide soft halo, a coloured line and
+/// Turns shapes into textures once, with a neon look: a wide soft halo, a coloured line and
 /// a thin near-white core, meant to be drawn additively on black.
 ///
 /// Textures are rendered for a given number of screen points per world unit, so lines stay the
@@ -28,12 +27,10 @@ final class GlowShapeFactory {
         static let padding: CGFloat = 12
     }
 
-    let theme: any Theme
     private var cache: [String: Glyph] = [:]
     private let screenScale: CGFloat
 
-    init(theme: any Theme, screenScale: CGFloat) {
-        self.theme = theme
+    init(screenScale: CGFloat) {
         // Glow is soft anyway; 2x keeps memory down on 3x screens without visible loss.
         self.screenScale = min(screenScale, 2)
     }
@@ -43,13 +40,6 @@ final class GlowShapeFactory {
 
     func clear() {
         cache.removeAll()
-    }
-
-    /// The glyph for an entity role, optionally recoloured in one colour.
-    func glyph(for role: EntityRole, tint: RGB? = nil, pointsPerUnit: CGFloat) -> Glyph {
-        var shape = theme.shape(for: role)
-        if let tint { shape = shape.recoloured(tint) }
-        return glyph(key: "\(role)|\(tint.map { "\($0)" } ?? "-")", shape: shape, pointsPerUnit: pointsPerUnit)
     }
 
     /// The glyph for any shape, cached under `key`.

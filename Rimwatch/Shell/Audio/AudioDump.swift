@@ -1,7 +1,6 @@
 #if DEBUG
 import Foundation
 import GameCore
-import RidgelineCore
 
 /// DEBUG only. Launch with `-dumpAudio <folder>` to render every sound patch and 20 seconds of
 /// each music mood to 16-bit mono WAV files in `Documents/<folder>`, for analysis off the device:
@@ -13,15 +12,13 @@ nonisolated enum AudioDump {
     static let sampleRate = 44_100.0
     static let musicSeconds = 20.0
 
-    static func runIfAsked(theme: any Theme) {
+    static func runIfAsked(sounds: [SoundPatch], music: MusicStyle?) {
         let arguments = ProcessInfo.processInfo.arguments
         guard let flag = arguments.firstIndex(of: "-dumpAudio") else { return }
         let folder = arguments.indices.contains(flag + 1) && !arguments[flag + 1].hasPrefix("-")
             ? arguments[flag + 1] : "AudioDump"
-        let sounds = theme.allSounds
-        let style = theme.music
         DispatchQueue.global(qos: .utility).async {
-            write(sounds: sounds, music: style, folder: folder)
+            write(sounds: sounds, music: music, folder: folder)
         }
     }
 

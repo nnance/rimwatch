@@ -70,6 +70,33 @@ changed for this yet.
   not knowing which game is behind a portal. It should follow the world's theme so it does not
   feel like a rigid set of separate scenes. This is input for step 16. It does not change the
   build order, and nothing is built for it before then.
+- **A second idea for the campaign, also not a decision (yours, 2026-11-20):** the player is an
+  aspiring spacecraft pilot, and every game in the campaign develops their flying skill while
+  they protect civilians. All the games are about flying, and the reward that drives the player
+  is earning pilot wings or pilot levels. Input for step 16. The one part acted on now is that
+  Redoubt's player is a hover orb, so the three big modes are all flight.
+- **Pilot skills, game by game (2026-11-20).** The first three rows are the big modes, which
+  are in the build order. The six after them are the portal games you picked as first
+  candidates: each would be a small original game on one classic mechanic. Those six are input
+  for step 16, not part of the build order, and none is designed yet. Together the table shows
+  how every game trains a different part of flying:
+
+  | Game | Pilot skill | Classic mechanic it builds on |
+  |---|---|---|
+  | Ridgeline (built) | Patrol and recovery: fast momentum flight, and catching someone in mid-air | Side-scrolling rescue shooter over a wraparound world (Defender) |
+  | Redoubt (planned) | Close-quarters flying: steering and aiming independently in a crowded room | Twin-stick arena shooter (Robotron) |
+  | Riftwing (planned) | Altitude and energy: holding height over an opponent in tight spaces | Flap-to-fly combat where the higher fighter wins (Joust) |
+  | Lander | Landing | Thrust-and-gravity landing on small pads with limited fuel, to pick up colonists (Lunar Lander) |
+  | Tether tow | Towing under gravity | Fly into a cave, hook a stranded pod and haul it out without touching the walls (Gravitar, Thrust) |
+  | The rim | Perimeter defence | Fly around the lip of a shaft, firing down at what climbs it (Tempest) |
+  | Rescue lift | Search and rescue | Land near stranded colonists under fire, load them and fly them home (Choplifter) |
+  | Dogfight | Dogfighting | A free-roaming fight in every direction against circling attackers (Time Pilot, Bosconian) |
+  | Meteor field | Inertial flying | Clear a meteor storm drifting over the outpost with rotate-and-thrust controls (Asteroids) |
+
+  Other candidates discussed: a canyon supply run (Scramble), a rift speed run (River Raid), a
+  debris-belt descent (Lunar Rescue), mining under threat (Sinistar), holding the dome gate
+  (Galaga), a convoy escort (Xevious), meteor interception (Missile Command), a tunnel maze
+  (Pac-Man, Rally-X), a hover skimmer (Moon Patrol) and a cave defence (Centipede).
 
 ### What is shared and what belongs to a mode
 
@@ -530,8 +557,12 @@ the list below. Every number here is a starting value, to be tuned with bots and
   scrolling. A wall runs round the edge. An airlock sits in the wall; its position changes from
   wave to wave. A thin strip at the top holds the HUD (score, wave, lives, Shockwave charges,
   colonists left). There is no scanner, because the whole floor is visible.
-- **You** are a Watch trooper on foot. Touching an enemy or a shot costs a life. You come back
-  at the centre with a moment of invulnerability, and any colonists following you scatter.
+- **You** pilot a hover orb, a small one-seat craft that floats just above the floor and flies
+  around the room (changed from a trooper on foot on 2026-11-20, so that every mode is about
+  flying). Nothing else about the mode changes. Movement stays direct enough for a twin-stick
+  game, with a little glide so it feels like a craft and not a walker; how much is tuned in
+  play. Touching an enemy or a shot costs a life. You come back at the centre with a moment of
+  invulnerability, and any colonists following you scatter.
 
 ### Controls
 
@@ -547,7 +578,7 @@ The handedness option swaps the two sticks. Aim is analogue, not eight-way.
 ### Rescue
 
 - Each wave starts with 6 to 10 colonists sheltering around the floor.
-- Touch a colonist and they follow you in a line. Walk the line to the airlock to deliver them.
+- Touch a colonist and they follow you in a line. Lead the line to the airlock to deliver them.
 - A delivery scores more for each colonist in the line (500 for the first, 1,000 for the
   second, and so on), so a long line is worth far more than several short trips. It is also a
   long tail to protect: enemies can take followers off the end.
@@ -586,7 +617,7 @@ Nothing appears within a safe distance of you, and arrivals are telegraphed for 
 
 ### Look and sound
 
-- The same neon vector lines on black. Top-down shapes for the trooper, colonists and each
+- The same neon vector lines on black. Top-down shapes for the orb, colonists and each
   enemy, all drawn in code from a Redoubt theme.
 - Its own sound patches and music moods on the shared synthesiser, and its own haptic cues.
 - The crowd and the stream of shots must hold 120 Hz: the simulation targets 120 enemies and
@@ -596,7 +627,7 @@ Nothing appears within a safe distance of you, and arrivals are telegraphed for 
 
 The same order as Ridgeline, each stage built, independently verified and committed:
 
-- **13a. Game logic:** a `RedoubtCore` target in the package (arena, trooper, shots, the six
+- **13a. Game logic:** a `RedoubtCore` target in the package (arena, orb, shots, the six
   enemies, colonist lines, airlock, Shockwave, waves, scoring, power cut), conforming to the
   shared run contract, with tests and scripted bots.
 - **13b. On screen:** the Redoubt mode in the app (arena, sprites, HUD, twin-stick controls),
