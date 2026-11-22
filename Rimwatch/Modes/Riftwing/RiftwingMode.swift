@@ -23,7 +23,7 @@ final class RiftwingMode: GameMode {
 
     static let descriptor = ModeDescriptor.riftwing
     static var shellStyle: ShellStyle { RiftCaves().shellStyle }
-    /// No sounds or music yet (stage 15c): the theme's lists are empty.
+    /// The Rift Caves' sound patches (`Themes/RiftCavesSounds.swift` in RiftwingCore) and music.
     static var audio: ModeAudio {
         let theme = RiftCaves()
         return ModeAudio(sounds: theme.allSounds, music: theme.music)
@@ -59,6 +59,8 @@ final class RiftwingMode: GameMode {
     let glyphs: RiftwingGlyphs
     var session: RiftwingSession { currentSession() }
     var runID = 0
+    var soundDirector = RiftwingSoundDirector()
+    var moodDirector = RiftwingMoodDirector()
 
     // Layers. The gallery layer is in gallery units; the rest are in screen points.
     let galleryLayer = SKNode()
@@ -254,6 +256,8 @@ final class RiftwingMode: GameMode {
         effects.removeAll()
         callouts.removeAll()
         hitAt.removeAll()
+        soundDirector.reset()
+        moodDirector.reset()
         darkMix = 0
         shake = 0
         isShifting = false
@@ -308,32 +312,42 @@ final class RiftwingMode: GameMode {
                             saved: run.colonistsSaved, lampsOut: run.isLampsOut)
     }
 
-    // MARK: Sound and haptics (stage 15c)
+    // MARK: Sound and haptics
 
-    /// Silent until stage 15c gives Riftwing its sounds.
+    /// The director thins a frame's events (one sound per kind per frame, flaps and the other
+    /// small sounds of flight spaced and hushed after an urgent cue) and picks a flap's pitch;
+    /// the theme names the patch. The synth then applies each patch's cooldown, copy limit and
+    /// priority.
     func sound(for event: RiftwingEvent) -> SoundPatch? {
-        theme.sound(for: event)
+        guard let variant = soundDirector.variant(for: event, in: session.run) else { return nil }
+        return theme.sound(for: event, variant: variant)
     }
 
-    /// No haptics until stage 15c.
-    func hapticCue(for event: RiftwingEvent) -> HapticCue? { nil }
+    /// Nothing for a flap or the rest of flight; see `HapticCue.cue(for:)` in RiftwingCore.
+    func hapticCue(for event: RiftwingEvent) -> HapticCue? {
+        HapticCue.cue(for: event)
+    }
 
-    /// Stereo position across the gallery at full loudness.
+    /// Stereo position across the gallery; everything is in view, so full loudness, except
+    /// flaps, which vary a little in level (by the run's tick, so the same every run) and with
+    /// their three pitches never sound like a machine.
     func placement(for event: RiftwingEvent) -> (pan: Double, gain: Double) {
         guard let x = position(of: event)?.x else { return (0, 1) }
-        return (min(max(x / tuning.width * 2 - 1, -1), 1), 1)
+        let pan = min(max(x / tuning.width * 2 - 1, -1), 1)
+        if case .flapped(_, false) = event {
+            let tick = session.run.tick
+            return (pan, 0.84 + 0.16 * Double((tick &* 2_654_435_761) >> 7 & 0xFF) / 255)
+        }
+        return (pan, 1)
     }
 
-    /// Tension while a wave is fought, calm in the break, the dark mood with the lamps out.
+    /// Tension while a wave is fought, calm in the break, the dark mood with the lamps out
+    /// (`RiftwingMoodDirector`).
     func musicMood(elapsed: Double) -> MusicMood {
-        currentMusicMood
+        moodDirector.update(run: session.run)
     }
 
-    var currentMusicMood: MusicMood {
-        let run = session.run
-        if run.isLampsOut { return .blackout }
-        return run.phase == .fighting ? .tension : .calm
-    }
+    var currentMusicMood: MusicMood { moodDirector.mood }
 
     #if DEBUG
     // MARK: Debug

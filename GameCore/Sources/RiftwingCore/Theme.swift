@@ -1,9 +1,10 @@
 import Foundation
 import GameCore
 
-/// How Riftwing looks, kept apart from how it plays. The run knows roles; a `RiftwingTheme` says
-/// what each looks like. Everything here is device-neutral data (colours are plain RGB numbers
-/// and shapes are polylines, from GameCore's `Shapes.swift`), so the app decides how to draw it.
+/// How Riftwing looks and sounds, kept apart from how it plays. The run knows roles; a
+/// `RiftwingTheme` says what each looks and sounds like. Everything here is device-neutral data
+/// (colours are plain RGB numbers, shapes are polylines from GameCore's `Shapes.swift`, sounds
+/// are `SoundPatch` data), so the app decides how to draw and play it.
 ///
 /// Shapes are seen from the side. In unit coordinates +x is the way the thing faces (the app
 /// mirrors a figure facing left) and +y is up; the origin is its position. A figure's `scale` is
@@ -129,8 +130,12 @@ public protocol RiftwingTheme: Sendable {
     /// The shape at figure scale 1.
     func shape(for thing: RiftwingShape) -> ShapeDescription
     func displayName(for role: RiftwingRole) -> String
-    /// The sound for an event, if any (stage 15c).
+    /// The sound for an event, if any (see `SoundPatch` in GameCore's `Audio/`).
     func sound(for event: RiftwingEvent) -> SoundPatch?
+    /// The sound for an event in one of its versions. `variant` is, for a flap in the air, which
+    /// of the theme's pitches (any integer; the theme wraps it). Other events ignore it.
+    /// `RiftwingSoundDirector` chooses it.
+    func sound(for event: RiftwingEvent, variant: Int) -> SoundPatch?
     func menuSound(_ sound: MenuSound) -> SoundPatch?
     /// Every patch the theme can play, so an app can prepare them all up front.
     var allSounds: [SoundPatch] { get }
@@ -139,6 +144,7 @@ public protocol RiftwingTheme: Sendable {
 
 extension RiftwingTheme {
     public func sound(for event: RiftwingEvent) -> SoundPatch? { nil }
+    public func sound(for event: RiftwingEvent, variant: Int) -> SoundPatch? { sound(for: event) }
     public func menuSound(_ sound: MenuSound) -> SoundPatch? { nil }
     public var allSounds: [SoundPatch] { [] }
     public var music: MusicStyle? { nil }
@@ -178,7 +184,7 @@ extension RiftwingTheme {
 /// swept wings and a spike at the nose, the Warden an armour plate and a crest, the Sower a seed
 /// sac slung under its frame, and the Gleaner, not on a rig at all, a round drone with buzzing
 /// wings and a hanging claw. The rock is a cool grey-blue so the figures stand out against it,
-/// and the Rift glows a hot orange.
+/// and the Rift glows a hot orange. Its sounds and music are in `Themes/RiftCavesSounds.swift`.
 public struct RiftCaves: RiftwingTheme {
     public init() {}
 
