@@ -35,25 +35,47 @@ public struct RiftwingWaves: Sendable {
     /// figures (`RiftwingRun.clashLeniency(ease:)`), since they are measured against a rig.
     public var clashLeniency = 0.0
     public var clashLeniencyBase = 16.1
-    /// In its first appearances an opponent that would win a clash misjudges it, and the meeting
-    /// bounces instead (`mercy(ease:)`): `clashMercy` of the time at its debut, so a kind wins a
-    /// little there, fading with its ease as a ramp (`clashMercyCurve` shapes it so the share it
-    /// wins at most doubles from one appearance to the next, with no step at its second), and
-    /// never once its ease is down to `clashMercyFloor` (its eighth appearance). Drawn from the
-    /// run's seeded random source, so a run still replays exactly.
-    public var clashMercy = 0.85
+    /// In its first appearances an opponent that would win a clash may misjudge it, and the
+    /// meeting bounces instead (`mercy(ease:)`): `clashMercy` of the time at its debut, fading
+    /// with its ease as a ramp (`clashMercyCurve` shapes it so the share it wins at most doubles
+    /// from one appearance to the next, with no step at its second), and never once its ease is
+    /// down to `clashMercyFloor` (its eighth appearance). Drawn from the run's seeded random
+    /// source, so a run still replays exactly.
+    ///
+    /// Off (0) since 2026-11-22: the owner played and never lost a life, and asked how hard it
+    /// should be chose "No forgiveness at all: every lost clash costs a life in every wave." It
+    /// was 0.85 (an opponent won only 15% of the clashes it should have won at its debut);
+    /// `withBeginnerForgiveness` puts it back. The height leniency (`clashLeniencyBase`) is not
+    /// forgiveness of a lost clash and stays: it decides which meetings are lost at all.
+    public var clashMercy = 0.0
     public var clashMercyCurve = 0.45
     public var clashMercyFloor = 0.2
     /// In waves up to this one, an opponent always misjudges a clash it would win against a rider
     /// standing on a ledge, and any meeting with a standing rider leaves it on its ledge (the
     /// opponent alone is thrown away): a beginner standing still to work out the controls is
     /// neither beaten nor knocked into the Rift for it.
-    public var standingGraceWaves = 1
+    ///
+    /// Off (0) since 2026-11-22, for the same reason as `clashMercy` ("No forgiveness at all:
+    /// every lost clash costs a life in every wave."): a rider standing in wave 1 is beaten and
+    /// bounced like any other. It was 1; `withBeginnerForgiveness` puts it back.
+    public var standingGraceWaves = 0
+
+    /// The waves with the beginner's forgiveness of lost clashes that was taken out on
+    /// 2026-11-22: an opponent in its first appearances misjudging most clashes it would win
+    /// (`clashMercy` 0.85), and a rider standing on a ledge in wave 1 never beaten and keeping
+    /// its footing (`standingGraceWaves` 1). With this the game is exactly the one before.
+    public static var withBeginnerForgiveness: RiftwingWaves {
+        var waves = RiftwingWaves()
+        waves.clashMercy = 0.85
+        waves.standingGraceWaves = 1
+        return waves
+    }
 
     /// The chance that an opponent with `ease` left misjudges a clash it would have won:
     /// `clashMercy` times ((ease - floor) / (1 - floor)) raised to `clashMercyCurve`, 0 at or
-    /// under the floor. With the defaults it wins 15%, 28%, 36%, 45%, 54%, 64%, 76% and then all
-    /// of the clashes it would win in its first, second, third ... appearances.
+    /// under the floor. With `withBeginnerForgiveness` (`clashMercy` 0.85) it wins 15%, 28%, 36%,
+    /// 45%, 54%, 64%, 76% and then all of the clashes it would win in its first, second, third ...
+    /// appearances; with the default (0) it wins all of them from its debut.
     public func mercy(ease: Double) -> Double {
         let floor = min(max(clashMercyFloor, 0), 0.99)
         let e = (min(max(ease, 0), 1) - floor) / (1 - floor)

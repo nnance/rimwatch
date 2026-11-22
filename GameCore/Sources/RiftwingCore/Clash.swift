@@ -75,8 +75,9 @@ extension RiftwingRun {
         let leniency = clashLeniency(ease: clinging ? 0 : o.ease)
         var outcome = clashOutcome(rider: rider.body, opponent: o.body, leniency: leniency)
         if outcome == .lose, rider.isInvulnerable { outcome = .bounce }
-        // Wave 1 is for learning the controls: a rider standing on a ledge in it is never beaten,
-        // nor thrown off its ledge by the meeting (`bounce(_:at:)`).
+        // In the waves of `RiftwingWaves.standingGraceWaves` (none by default since 2026-11-22;
+        // wave 1 with `withBeginnerForgiveness`) a rider standing on a ledge is never beaten, nor
+        // thrown off its ledge by the meeting (`bounce(_:at:)`).
         let standingGrace = rider.body.isGrounded && wave <= director.standingGraceWaves
         if outcome == .lose, standingGrace { outcome = .bounce }
         if outcome == .lose, !clinging, rng.chance(director.mercy(ease: o.ease)) {

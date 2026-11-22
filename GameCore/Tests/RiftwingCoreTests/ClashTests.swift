@@ -74,12 +74,13 @@ import GameCore
         #expect(has(near.events, "clashBounced"))
     }
 
-    /// In its first appearances an opponent that would win a clash usually misjudges it and
-    /// bounces: in its debut it wins only a few, and its chance to win grows with its appearances
-    /// as a ramp, never more than doubling from one appearance to the next
+    /// With the beginner's forgiveness (`RiftwingWaves.withBeginnerForgiveness`, off by default
+    /// since 2026-11-22), an opponent in its first appearances that would win a clash usually
+    /// misjudges it and bounces: in its debut it wins only a few, and its chance to win grows with
+    /// its appearances as a ramp, never more than doubling from one appearance to the next
     /// (`RiftwingWaves.mercy(ease:)`); at full strength it always wins.
-    @Test func anOpponentInItsFirstAppearancesMisjudgesClashesItWouldWin() throws {
-        let w = RiftwingWaves()
+    @Test func withForgivenessAnOpponentInItsFirstAppearancesMisjudgesClashesItWouldWin() throws {
+        let w = RiftwingWaves.withBeginnerForgiveness
         var wins: [Double] = []
         for k in 0...w.rampEase.count {
             let ease = k < w.rampEase.count ? w.rampEase[k] : 0
@@ -93,7 +94,7 @@ import GameCore
         #expect(wins.last == 1)
         func losses(ease: Double) -> Int {
             (0..<200).count { i in
-                var r = quietRun(seed: UInt64(100 + i))
+                var r = quietRun(seed: UInt64(100 + i), waves: w)
                 r.placeRider(at: Vec2(450, 300))
                 let id = r.place(.striker, at: Vec2(450, 300 + fig(28)), ease: ease)
                 r.freeze(id)
@@ -107,13 +108,47 @@ import GameCore
         #expect((60...140).contains(half), "\(half) of 200")
     }
 
-    /// Wave 1 is for learning the controls: a rider standing on a ledge in it is never beaten
-    /// in a clash (the opponent always misjudges). In the air, or standing in a later wave, the
-    /// ordinary chances apply.
-    @Test func aRiderStandingOnALedgeInTheFirstWaveIsNeverBeaten() throws {
+    /// No forgiveness (the default since 2026-11-22: "every lost clash costs a life in every
+    /// wave"): an opponent never misjudges a clash it would win, even in its first appearance,
+    /// so every lost clash costs a life.
+    @Test func everyLostClashCostsALifeEvenInAnOpponentsFirstAppearance() throws {
+        let w = RiftwingWaves()
+        for k in 0...w.rampEase.count {
+            let ease = k < w.rampEase.count ? w.rampEase[k] : 0
+            #expect(w.mercy(ease: ease) == 0, "appearance \(k + 1)")
+        }
+        func losses(ease: Double) -> Int {
+            (0..<200).count { i in
+                var r = quietRun(seed: UInt64(100 + i))
+                r.placeRider(at: Vec2(450, 300))
+                let id = r.place(.striker, at: Vec2(450, 300 + fig(28)), ease: ease)
+                r.freeze(id)
+                return has(r.step(still), "riderLost")
+            }
+        }
+        #expect(losses(ease: 1) == 200)
+        #expect(losses(ease: 0.5) == 200)
+        #expect(losses(ease: 0) == 200)
+        // A debut glider of wave 1 squarely on top of a rider in the air wins every time.
+        var lost = 0
+        for i in 0..<60 {
+            var r = quietRun(seed: UInt64(700 + i))
+            r.placeRider(at: Vec2(450, 300))
+            let id = r.place(.glider, at: Vec2(452, 300 + fig(28.5)), ease: r.director.ease(of: .glider, inWave: 1))
+            r.freeze(id)
+            if has(r.step(still), "riderLost") { lost += 1 }
+        }
+        #expect(lost == 60, "\(lost) of 60")
+    }
+
+    /// With the beginner's forgiveness (`RiftwingWaves.withBeginnerForgiveness`), wave 1 is for
+    /// learning the controls: a rider standing on a ledge in it is never beaten in a clash (the
+    /// opponent always misjudges). In the air, or standing in a later wave, the ordinary chances
+    /// apply.
+    @Test func withForgivenessARiderStandingOnALedgeInTheFirstWaveIsNeverBeaten() throws {
         func losses(wave: Int, standing: Bool) -> Int {
             (0..<60).count { i in
-                var r = quietRun(seed: UInt64(500 + i))
+                var r = quietRun(seed: UInt64(500 + i), waves: .withBeginnerForgiveness)
                 r.wave = wave
                 let ledge = r.ledges[1]
                 let stand = RiftwingRun.standingPoint(on: ledge, radius: r.rider.body.radius, tuning: r.tuning)
@@ -128,6 +163,30 @@ import GameCore
         #expect(losses(wave: 1, standing: true) == 0)
         #expect(losses(wave: 1, standing: false) > 0)
         #expect(losses(wave: 2, standing: true) > 0)
+    }
+
+    /// No forgiveness (the default since 2026-11-22): a rider standing on a ledge in wave 1 is
+    /// beaten by an opponent squarely on top of it like any other, and a level meeting throws it
+    /// off its ledge.
+    @Test func aRiderStandingOnALedgeInTheFirstWaveCanBeBeaten() throws {
+        var lost = 0
+        for i in 0..<60 {
+            var r = quietRun(seed: UInt64(500 + i))
+            #expect(r.wave == 1)
+            #expect(r.rider.body.ledge == r.layout.startLedge)
+            let p = r.rider.body.pos
+            let id = r.place(.glider, at: Vec2(p.x + 2, p.y + fig(28.5)), ease: r.director.ease(of: .glider, inWave: 1))
+            r.freeze(id)
+            if has(r.step(still), "riderLost") { lost += 1 }
+        }
+        #expect(lost == 60, "\(lost) of 60")
+        var r = quietRun()
+        let p = r.rider.body.pos
+        let id = r.place(.striker, at: Vec2(p.x + 2, p.y + 3), ease: 0)
+        r.freeze(id)
+        #expect(has(r.step(still), "clashBounced"))
+        #expect(r.rider.body.ledge == nil)
+        #expect(abs(r.rider.vel.x) >= r.tuning.bounceSpeed - 1)
     }
 
     /// A rider pressed against rock for long (clinging to a ceiling) loses the early mercy meant
@@ -206,12 +265,13 @@ import GameCore
         #expect(r.rider.isAlive)
     }
 
-    /// In wave 1 a rider standing on a ledge is never beaten, and a meeting with it does not throw
-    /// it off its ledge either: it keeps its footing and the opponent alone is thrown away (it was
-    /// once thrown off, often into the Rift). From wave 2 a bounce throws both apart as usual.
-    @Test func aStandingRiderSparedInWaveOneKeepsItsFooting() throws {
+    /// With the beginner's forgiveness (`RiftwingWaves.withBeginnerForgiveness`), in wave 1 a
+    /// rider standing on a ledge is never beaten, and a meeting with it does not throw it off its
+    /// ledge either: it keeps its footing and the opponent alone is thrown away (it was once
+    /// thrown off, often into the Rift). From wave 2 a bounce throws both apart as usual.
+    @Test func withForgivenessAStandingRiderSparedInWaveOneKeepsItsFooting() throws {
         func standing(wave: Int, above: Double) -> (RiftwingRun, Int, [RiftwingEvent]) {
-            var r = quietRun()
+            var r = quietRun(waves: .withBeginnerForgiveness)
             r.wave = wave
             let start = r.layout.startLedge
             #expect(r.rider.body.ledge == start)
@@ -236,11 +296,12 @@ import GameCore
         #expect(abs(r.rider.vel.x) >= r.tuning.bounceSpeed - 1)
     }
 
-    /// The opponent that bounces off a standing rider in wave 1 is thrown up and away, off the
-    /// ledge, and does not meet the rider again at once. (It once landed straight back on the
-    /// same ledge, walked into the rider and bounced off it every 0.35 s: 8 bounces in 4 s.)
-    @Test func theOpponentThatBouncesOffAStandingRiderInWaveOneIsThrownClear() throws {
-        var r = quietRun()
+    /// With the beginner's forgiveness, the opponent that bounces off a standing rider in wave 1
+    /// is thrown up and away, off the ledge, and does not meet the rider again at once. (It once
+    /// landed straight back on the same ledge, walked into the rider and bounced off it every
+    /// 0.35 s: 8 bounces in 4 s.)
+    @Test func withForgivenessTheOpponentThatBouncesOffAStandingRiderInWaveOneIsThrownClear() throws {
+        var r = quietRun(waves: .withBeginnerForgiveness)
         r.wave = 1
         let p = r.rider.body.pos
         let id = r.place(.glider, at: Vec2(p.x + 10, p.y), ease: 1)
