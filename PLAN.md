@@ -1076,6 +1076,27 @@ slowly in the early stages. Until now the bots measured only how the orb fared.
 - The harness now prints, per wave, the time to the first seizure, the share seized and lost
   in the first 10 and 20 seconds and by the end, the time from seizure to loss, and how many
   were freed.
+- **The independent check afterwards passed with notes.** No defect in the code; the numbers
+  reproduce; waves without the ease are identical to before; the wave cannot end while
+  Gleaners are still to come. Its notes:
+  - **Wave 7 is a cliff.** The ease is counted in waves, but Gleaners only come in waves 2, 4
+    and 7, so a player meets three steps: late and slow, less so, then nothing. From wave 4 to
+    wave 7 the first seizure goes from 6.2 s to 1.1 s, colonists lost from 13% to 39%, and
+    games losing three or more in the first 20 seconds from 9% to 70%. About a quarter of
+    novice games reach wave 7. Counting the ease in Gleaner waves (first, second, third and
+    so on) would make it a ramp. Not fixed yet.
+  - **Delayed Gleaners always land with the main push**, never in the scatter, because the
+    late arrivals skip the scatter rule. They keep the clear distance from the orb as it is
+    when their marker appears.
+  - **The balance is level within noise.** On a second seed set of 200 games the novice's mean
+    went from 5.49 to 5.38 and its median from 6 to 5, the opposite way to the first set.
+  - **On screen a wave-2 drag reads as "held", not "dragged".** The colonist turns red with
+    HELP! and the Gleaner sits on it, which is clear, but the pair barely moves for about 5
+    seconds. Along the east wall it can sit under the Shockwave button.
+  - **The "New: Gleaner" banner shows at the start of wave 2**, about 6 seconds before any
+    Gleaner's marker appears.
+  - No test covers where delayed Gleaners land, or the orb being lost while they are still to
+    come (seen four times in its runs with nothing going wrong).
 
 ### What the independent check of sound, polish and balance found
 
