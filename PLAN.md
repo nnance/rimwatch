@@ -403,7 +403,9 @@ step is pushed so you can install it.
         early waves eased after the owner's first play (too hard: swarmed by wave 2). The
         novice bot now reaches wave 6. 13c, 13e and the wall rule were independently verified
         together and passed with notes (listed under "Redoubt design"). 406 tests.
-- [ ] Gate: Redoubt played and refined
+- [x] Gate: Redoubt played and refined (closed 2026-11-21 on your instruction to fix the
+      later-wave Gleaners and then move on; what is left for you to judge is listed at the end
+      of "Gleaners through the wave" in the Redoubt design)
   - [x] Refinement 1 (2026-11-21, after your second play): the opening crowd arrives as a main
         push from a different side each wave plus a thin scatter, in place of a strip along one
         wall that stayed on the same side. 415 tests. Pushed before its independent check, by
@@ -427,7 +429,9 @@ step is pushed so you can install it.
         a time through the wave, and a seized colonist cannot be lost in less than a least
         time. The Spitters' and Burrows' eases now count each kind's own appearances. 535 tests
         (with Riftwing's). Pushed before its independent check; see "Gleaners through the wave"
-        in the Redoubt design, which also lists what it did not reach.
+        in the Redoubt design, which also lists what it did not reach. Its independent check
+        passed with notes, and the three shortfalls it found were corrected the same day
+        (548 tests).
 - [x] 14. Riftwing design written here (2026-11-21). You chose the one-screen cavern and
       flap plus a dive with no weapon, and told me to build while you were away; I took that
       as approval. My other choices are marked "mine" in "Riftwing design" for you to overrule.
@@ -1300,13 +1304,11 @@ against 5.21 before, median 5; competent 10.22 against 9.96; none of the four ex
 better off).
 
 - Gleaners still landed together in waves 2 and 4: the first waits for its clock, and by then
-  a quick player has already let in the others. Being corrected with a least gap between
-  Gleaners.
+  a quick player has already let in the others. Corrected (below).
 - The 8 s fallback was counted from the wave's first Gleaner, not the one before, so a gap of
-  10 s was possible. Being corrected.
+  10 s was possible. Corrected (below).
 - One to three in a hundred seizures happen so close to the wall that the drag creeps at
-  about 1 unit a second and looks held. Being corrected with a least drag speed and a longer
-  path.
+  about 1 unit a second and looks held. Corrected (below).
 - For the novice, colonists are lost later in a wave but not fewer by its end (wave 7: 39%
   before and after). For the competent bot they are fewer (wave 9: 36% to 30%).
 - Lives lost in wave 2 rose slightly (0.13 to 0.17), probably because Gleaners still to come
@@ -1316,6 +1318,37 @@ better off).
   after the wave 2 to 3 step in lives lost (0.54).
 - The Spitter smoothness test's bound is a little looser than before (1.45 an appearance, and
   1.81 allowed for wave 4 to 7).
+
+**The corrections** (commit `c891738` on its branch, pushed the same day; not separately
+checked, since each has a test that failed before it and passes after):
+
+- **A least gap of 4 s between Gleaners** in a wave (`RedoubtWaves.gleanerLeastGap`). It is
+  waived only when the Gleaners still to come are all that keeps the wave open, so a cleared
+  floor never waits on them. Gleaners sharing a moment with another: 436 of 800 in wave 2
+  before for the competent bot, none after, in any wave, for either bot.
+- **The 8 s fallback counts from the Gleaner before.** The longest gap measured is now 8.0 s.
+- **No drag slower than 8 units a second** (`RedoubtWaves.leastDragSpeed`). When the straight
+  path to the wall is too short to fill the least time, the Gleaner drags its colonist along
+  the wall toward its middle instead, so it keeps moving for the whole time. The least time
+  is unchanged. Before, 12 to 21% of drags were slower than this and the slowest hardly moved.
+- Novice mean wave, same seeds before and after: 5.21, 5.27, 5.22 before; 5.38, 5.36, 5.49
+  after (about +0.18, beyond the noise), so the novice is now at about 5.4. Competent: 10.22
+  to 10.12, within about 1.6 standard errors.
+- Both numbers are off under `beforeGleanersThroughWave`, which still restores the earlier
+  game exactly.
+
+**Left for you to judge when you play Redoubt again** (the gate is closed on your instruction
+to fix this and move on; none of these blocks Riftwing):
+
+- How the slow drag reads on screen: a Gleaner beside a wall now slides along it with its
+  colonist for several seconds.
+- Whether colonists still feel taken too fast in waves 9 and later; for the novice bot they
+  are lost later in the wave but not fewer by its end.
+- The two steepest steps left: wave 3 (the Spitters' debut, 0.54 more lives lost than wave 2)
+  and wave 7 (Spitters return in numbers: shots rise more than five times from wave 4).
+- From earlier checks, still open: the main push gathers toward a corner; wave 1 never pushes
+  from the north; the corner-camping bot reaches about wave 7.4; the "New: Gleaner" banner
+  shows some seconds before any Gleaner.
 
 ### What the independent check of sound, polish and balance found
 
