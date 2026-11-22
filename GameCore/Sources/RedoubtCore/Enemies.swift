@@ -140,14 +140,17 @@ extension RedoubtRun {
     private mutating func fireSpitterShot(from enemy: RedoubtEnemy) {
         guard orb.isAlive else { return }
         let to = orb.pos - enemy.pos
-        let flight = to.length / tuning.spitterShotSpeed * tuning.spitterShotLead
+        // Slower and less well led in the Spitters' first appearances (`spitterDebutShotSpeed`,
+        // `spitterDebutLead`); both scales are exactly 1 once the ease is over.
+        let shotSpeed = tuning.spitterShotSpeed * director.spitterShotSpeedScale(forWave: wave)
+        let flight = to.length / shotSpeed * (tuning.spitterShotLead * director.spitterLeadScale(forWave: wave))
         let aim = to + orb.vel * flight
         let len = aim.length
         guard len > 1 else { return }
         let dir = aim * (1 / len)
         let heading = atan2(dir.y, dir.x)
         let muzzle = enemy.pos + dir * (enemy.radius + tuning.figure(2))
-        shots.append(RedoubtShot(id: takeID(), owner: .enemy, pos: muzzle, vel: dir * tuning.spitterShotSpeed,
+        shots.append(RedoubtShot(id: takeID(), owner: .enemy, pos: muzzle, vel: dir * shotSpeed,
                                  radius: tuning.spitterShotRadius, timeLeft: tuning.spitterShotLifetime))
         events.append(.enemyFired(id: enemy.id, at: muzzle, heading: heading))
     }
@@ -190,15 +193,22 @@ extension RedoubtRun {
                 enemies[index] = enemy
                 return
             }
+            enemy.held += dt
+            // The least time from seizure to loss (`RedoubtWaves.seizeTime`): closer to the wall
+            // than that allows, it drags more slowly to fit, and waits there if pushed in early.
+            let least = director.seizeTime(forWave: wave)
             let (dir, dist) = direction(from: enemy.pos, to: destination)
-            if dist <= 4 {
+            if dist <= 4, enemy.held >= least - 1e-9 {
                 enemy.vel = .zero
                 enemies[index] = enemy
                 loseColonist(at: c, takenBy: .gleaner, enemy: enemy.id)
                 becomeHusk(at: index)
                 return
             }
-            enemy.vel = dir * min(tuning.gleanerDragSpeed * director.gleanerDragScale(forWave: wave), dist / dt)
+            var speed = tuning.gleanerDragSpeed * director.gleanerDragScale(forWave: wave)
+            let left = least - enemy.held
+            if left > dt { speed = min(speed, dist / left) }
+            enemy.vel = dir * min(speed, dist / dt)
             // The colonist trails behind.
             colonists[c].pos = clampToFloor(enemy.pos - dir * (enemy.radius + tuning.colonistRadius - tuning.figure(2)),
                                             radius: tuning.colonistRadius)
@@ -264,6 +274,7 @@ extension RedoubtRun {
         colonists[c].vel = .zero
         let destination = dragDestination(from: gleaner.pos, radius: gleaner.radius)
         gleaner.state = .dragging(colonist: colonists[c].id, destination: destination)
+        gleaner.held = 0
         gleaner.vel = .zero
         events.append(.colonistSeized(id: colonists[c].id, by: gleaner.id, at: colonists[c].pos))
     }

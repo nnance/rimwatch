@@ -84,6 +84,8 @@ public struct RedoubtEnemy: Sendable, Identifiable, Equatable {
     var trait = 1.0
     /// General clock: fire timer, spawn timer, wobble phase.
     var timer = 0.0
+    /// Seconds since a Gleaner seized the colonist it is dragging.
+    var held = 0.0
     /// Id of the Burrow that poured it out, if any.
     var parent: Int?
     var isDead = false

@@ -5,8 +5,8 @@ import GameCore
 /// Waves, arrivals and the airlock.
 @Suite struct WaveTests {
     /// A real run stepped to the start of wave 1.
-    private func waveOne(seed: UInt64 = 3) -> (RedoubtRun, [RedoubtEvent]) {
-        var r = RedoubtRun(seed: seed)
+    private func waveOne(seed: UInt64 = 3, waves: RedoubtWaves = RedoubtWaves()) -> (RedoubtRun, [RedoubtEvent]) {
+        var r = RedoubtRun(seed: seed, waves: waves)
         let events = run(&r, steps: seconds(3)) { $0.isWaveStarted }
         return (r, events)
     }
@@ -410,37 +410,54 @@ import GameCore
         let waves = RedoubtWaves()
         let tuning = RedoubtTuning()
         // Twice the interval in their debut wave (3; 3.8 times before the Burrows' ease, twice
-        // before the figures grew), easing back to normal by wave 7.
+        // before the figures grew), easing back over their own appearances (waves 3, 4, 7, 9).
         #expect(abs(waves.spitterFireScale(forWave: 3, tuning: tuning) - 2.0) < 1e-9)
         #expect(abs(RedoubtWaves.beforeBurrowEase.spitterFireScale(forWave: 3, tuning: tuning) - 3.8) < 1e-9)
         #expect(abs(RedoubtWaves.beforeFiguresGrew.spitterFireScale(forWave: 3, tuning: tuning) - 2.0) < 1e-9)
-        let scales = (3...7).map { waves.spitterFireScale(forWave: $0, tuning: tuning) }
-        #expect(zip(scales, scales.dropFirst()).allSatisfy { $0 > $1 })
+        let appearances = (3...20).filter { waves.appearance(of: .spitter, inWave: $0) != nil }
+        let scales = appearances.map { waves.spitterFireScale(forWave: $0, tuning: tuning) }
+        #expect(zip(scales, scales.dropFirst()).allSatisfy { $0 >= $1 })
         var flat = RedoubtWaves()
         flat.spitterDebutSlowdown = 1
-        #expect(abs(waves.spitterFireScale(forWave: 7, tuning: tuning) - flat.spitterFireScale(forWave: 7, tuning: tuning)) < 1e-9)
+        #expect(abs(waves.spitterFireScale(forWave: 9, tuning: tuning) - flat.spitterFireScale(forWave: 9, tuning: tuning)) < 1e-9)
         #expect(abs(flat.spitterFireScale(forWave: 3, tuning: tuning) - 1) < 1e-9)
+        // Fewer in their second appearance, then counted in appearances: 3, 2, 6, 7, then 8.
+        let counts = [3, 4, 7, 9, 10, 11, 20].map { waves.crowdCount(of: .spitter, inWave: $0) }
+        #expect(counts == [3, 2, 6, 7, 8, 8, 8])
+        let before = RedoubtWaves.beforeGleanersThroughWave
+        #expect([3, 4, 7, 9, 10].map { before.crowdCount(of: .spitter, inWave: $0) } == [3, 3, 6, 8, 8])
+        // The crowd keeps its size: Skitters fill the difference.
+        for wave in 1...20 {
+            #expect(waves.composition(forWave: wave).reduce(0) { $0 + $1.count } == before.composition(forWave: wave).reduce(0) { $0 + $1.count })
+        }
     }
 
-    /// The Spitters' fire never jumps from one wave to the next: their interval shortens by at
-    /// most 1.4 times a wave (it jumped 1.8 times from wave 6 to 7 before the Burrows' ease).
-    @Test func spitterFireRisesSmoothlyByWave() throws {
+    /// The Spitters' fire from one of their appearances to the next (waves 3, 4, 7, 9, 10 and
+    /// on; counted in wave numbers before Refinement 6, this test passed only because waves 5
+    /// and 6, which have no Spitters, sat between 4 and 7). The interval shortens by at most 1.45
+    /// times an appearance, except from wave 4 to 7, two waves without Spitters apart, where it
+    /// is 1.8 times (it was 2.16): easing wave 7 more lets the corner camper, which dies only to
+    /// Spitter shots and mostly in wave 7, live longer.
+    @Test func spitterFireRisesSmoothlyByAppearance() throws {
         let waves = RedoubtWaves()
         let tuning = RedoubtTuning()
-        let expected: [Int: Double] = [3: 2.0, 4: 0.94 * 1.75, 5: 0.88 * 1.5, 6: 0.82 * 1.25, 7: 0.76]
+        let expected: [Int: Double] = [3: 2.0, 4: 0.94 * 1.75, 7: 0.76 * 1.2, 9: 0.64, 10: 0.58]
         for (wave, scale) in expected {
             #expect(abs(waves.spitterFireScale(forWave: wave, tuning: tuning) - scale) < 1e-9, "wave \(wave)")
         }
-        for wave in 3..<20 {
-            let ratio = waves.spitterFireScale(forWave: wave, tuning: tuning) / waves.spitterFireScale(forWave: wave + 1, tuning: tuning)
-            #expect(ratio >= 1 && ratio <= 1.4, "wave \(wave) to \(wave + 1): \(ratio)")
+        let appearances = (3...24).filter { waves.appearance(of: .spitter, inWave: $0) != nil }
+        #expect(Array(appearances.prefix(5)) == [3, 4, 7, 9, 10])
+        for (a, b) in zip(appearances, appearances.dropFirst()) {
+            let ratio = waves.spitterFireScale(forWave: a, tuning: tuning) / waves.spitterFireScale(forWave: b, tuning: tuning)
+            #expect(ratio >= 1 && ratio <= (a == 4 ? 1.81 : 1.45), "wave \(a) to \(b): \(ratio)")
         }
-        let before = RedoubtWaves.beforeBurrowEase
-        #expect(before.spitterFireScale(forWave: 6, tuning: tuning) / before.spitterFireScale(forWave: 7, tuning: tuning) > 1.8)
+        let before = RedoubtWaves.beforeGleanersThroughWave
+        #expect(before.spitterFireScale(forWave: 4, tuning: tuning) / before.spitterFireScale(forWave: 7, tuning: tuning) > 2.1)
     }
 
     /// The Burrows' ease: their debut wave (5) sends one Burrow, not two, and it pours twice as
-    /// slowly, easing back to the normal rate by wave 8. `beforeBurrowEase` turns it off.
+    /// slowly, easing back to the normal rate over their next two appearances (half the slowdown
+    /// left in wave 7, a fifth in 9; by wave 8 before Refinement 6). `beforeBurrowEase` turns it off.
     @Test func burrowsDebutAloneAndPourSlowlyAtFirst() throws {
         let waves = RedoubtWaves()
         let tuning = RedoubtTuning()
@@ -453,12 +470,20 @@ import GameCore
         // The crowd keeps its size: the missing Burrow is a Skitter.
         let crowd = { (w: RedoubtWaves) in w.composition(forWave: 5).reduce(0) { $0 + $1.count } }
         #expect(crowd(waves) == crowd(RedoubtWaves.beforeBurrowEase))
-        let expected: [Int: Double] = [5: 2.0, 6: 0.95 * (1 + 2.0 / 3), 7: 0.9 * (1 + 1.0 / 3), 8: 0.85, 9: 0.8]
+        // Counted in their own appearances (waves 5, 7, 9, 10): all the slowdown, half, a fifth,
+        // none. Before Refinement 6, in wave numbers (back to full by wave 8).
+        let expected: [Int: Double] = [5: 2.0, 7: 0.9 * 1.5, 9: 0.8 * 1.2, 10: 0.75]
         for (wave, scale) in expected {
             #expect(abs(waves.burrowSpawnScale(forWave: wave, tuning: tuning) - scale) < 1e-9, "wave \(wave)")
         }
-        for wave in 5..<20 {
-            #expect(waves.burrowSpawnScale(forWave: wave + 1, tuning: tuning) <= waves.burrowSpawnScale(forWave: wave, tuning: tuning))
+        let appearances = (5...20).filter { waves.appearance(of: .burrow, inWave: $0) != nil }
+        for (a, b) in zip(appearances, appearances.dropFirst()) {
+            #expect(waves.burrowSpawnScale(forWave: b, tuning: tuning) <= waves.burrowSpawnScale(forWave: a, tuning: tuning))
+        }
+        let byWave = RedoubtWaves.beforeGleanersThroughWave
+        let old: [Int: Double] = [5: 2.0, 6: 0.95 * (1 + 2.0 / 3), 7: 0.9 * (1 + 1.0 / 3), 8: 0.85, 9: 0.8]
+        for (wave, scale) in old {
+            #expect(abs(byWave.burrowSpawnScale(forWave: wave, tuning: tuning) - scale) < 1e-9, "wave \(wave)")
         }
         let before = RedoubtWaves.beforeBurrowEase
         for wave in 5...20 {
@@ -469,13 +494,16 @@ import GameCore
         #expect(RedoubtWaves.beforeFiguresGrew.burrowDebutSlowdown == 1)
     }
 
-    /// The Gleaners' ease (after the owner's third play) and its ramp: in their first wave the
-    /// opening crowd's Gleaners land 7 s after the rest of it and drag six times more slowly,
-    /// easing over their next waves (counted in waves that send Gleaners: 2, 4, 7, 9, 10, 11)
-    /// to nothing in their sixth. `beforeGleanerRamp` counts it in waves (gone by wave 7);
-    /// `beforeGleanerEase` turns it off.
+    /// The Gleaners' ease (after the owner's third play) and its ramp, as they were before
+    /// Refinement 6 (`beforeGleanersThroughWave`): in their first wave the opening crowd's
+    /// Gleaners land 7 s after the rest of it and drag six times more slowly, easing over their
+    /// next waves (counted in waves that send Gleaners: 2, 4, 7, 9, 10) to nothing in their
+    /// sixth (11); each step shortens the delay by at most 2.1 s and at most doubles the drag
+    /// speed. `beforeGleanerRamp` counts it in waves (gone by wave 7); `beforeGleanerEase`
+    /// turns it off. Since Refinement 6 the delay is `gleanerFirstArrival` and the drag speed is
+    /// whole (`ThroughWaveTests`).
     @Test func gleanersArriveLateAndDragSlowlyInTheirFirstWaves() throws {
-        let waves = RedoubtWaves()
+        let waves = RedoubtWaves.beforeGleanersThroughWave
         // The waves that send Gleaners, and which of theirs each is.
         #expect((0...12).filter { waves.sendsGleaners($0) } == [2, 4, 7, 9, 10, 11, 12])
         for wave in 0...12 {
@@ -495,7 +523,7 @@ import GameCore
             #expect(waves.gleanerDragScale(forWave: wave) == 1)
         }
         // Each Gleaner wave a little harder than the last, never easier, and no step a cliff: the
-        // drag speeds up by at most 1.6 times and the delay shrinks by at most 1.5 s.
+        // drag speeds up by at most twice and the delay shrinks by at most 2.1 s.
         let gleanerWaves = (2...20).filter { waves.sendsGleaners($0) }
         for (a, b) in zip(gleanerWaves, gleanerWaves.dropFirst()) {
             let (delayA, delayB) = (waves.gleanerDelay(forWave: a), waves.gleanerDelay(forWave: b))
@@ -526,8 +554,9 @@ import GameCore
         #expect(RedoubtWaves.beforeFiguresGrew.gleanerDelay(forWave: 2) == 0)
     }
 
-    /// Gleaners landing late always land with the main push, in the band along the wave's entry
-    /// wall, even when the opening-crowd spawn they came from is scattered
+    /// In the game before Refinement 6 (`beforeGleanersThroughWave`; the schedule since then is
+    /// in `ThroughWaveTests`): Gleaners landing late always land with the main push, in the band
+    /// along the wave's entry wall, even when the opening-crowd spawn they came from is scattered
     /// (`RedoubtWaves.lateArrivalsScatter` off: scattering them put Gleaners beside colonists).
     /// Every one keeps the clear distance from the orb as it is when its marker appears, the orb
     /// flying about meanwhile.
@@ -535,7 +564,7 @@ import GameCore
         let moves = [Vec2(1, 0.4), Vec2(-0.7, -1), Vec2(0.3, -1), Vec2(-1, 0.8)]
         var fromScattered = 0
         for (n, seed) in ([4, 9, 17, 33] as [UInt64]).enumerated() {
-            var (r, _) = waveOne(seed: seed)
+            var (r, _) = waveOne(seed: seed, waves: .beforeGleanersThroughWave)
             r.orb.invulnerableTimer = 1e9
             for wave in [2, 3, 4] {
                 emptyTheFloor(&r)
@@ -573,12 +602,14 @@ import GameCore
         // Some of them came from scattered spawns, so the rule was put to the test.
         #expect(fromScattered > 0)
         #expect(!RedoubtWaves().lateArrivalsScatter)
+        #expect(!RedoubtWaves.beforeGleanersThroughWave.lateArrivalsScatter)
     }
 
-    /// The orb lost while wave 2's Gleaners are still to come: they are telegraphed and land as
+    /// Before Refinement 6 (`beforeGleanersThroughWave`): the orb lost while wave 2's Gleaners
+    /// are still to come: they are telegraphed and land as
     /// usual (clear of where it will respawn), and the wave still ends once they are shot.
     @Test func losingTheOrbWhileGleanersAreToComeStallsNothing() throws {
-        var (r, _) = waveOne(seed: 6)
+        var (r, _) = waveOne(seed: 6, waves: .beforeGleanersThroughWave)
         emptyTheFloor(&r)
         run(&r, steps: seconds(3)) { $0.isWaveStarted }
         try #require(r.wave == 2)
@@ -617,10 +648,11 @@ import GameCore
         #expect(r.wave == 3)
     }
 
-    /// The game ending while wave 2's Gleaners are still to come: the run stops where it is,
+    /// Before Refinement 6 (`beforeGleanersThroughWave`): the game ending while wave 2's Gleaners
+    /// are still to come: the run stops where it is,
     /// nothing more is telegraphed, and stepping on is harmless.
     @Test func theGameEndingWhileGleanersAreToComeStopsCleanly() throws {
-        var (r, _) = waveOne(seed: 6)
+        var (r, _) = waveOne(seed: 6, waves: .beforeGleanersThroughWave)
         emptyTheFloor(&r)
         run(&r, steps: seconds(3)) { $0.isWaveStarted }
         try #require(r.wave == 2)
@@ -639,10 +671,11 @@ import GameCore
         #expect(!r.arrivals.contains { $0.role == .gleaner })
     }
 
-    /// Wave 2's Gleaners are telegraphed 6 s into the wave and land at 7 s. While they wait the
+    /// Before Refinement 6 (`beforeGleanersThroughWave`): wave 2's Gleaners are telegraphed 6 s
+    /// into the wave and land at 7 s. While they wait the
     /// floor is topped up around them (they count toward the target), and the wave cannot end.
     @Test func wave2sGleanersLandLateAndHoldTheWave() throws {
-        var (r, _) = waveOne(seed: 6)
+        var (r, _) = waveOne(seed: 6, waves: .beforeGleanersThroughWave)
         r.orb.invulnerableTimer = 1e9
         emptyTheFloor(&r)
         run(&r, steps: seconds(3)) { $0.isWaveStarted }

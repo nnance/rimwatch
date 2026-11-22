@@ -15,7 +15,19 @@ import RedoubtCore
 // wave; GLRAMP=0 restores the game before the Gleaners' ramp (the ease counted in waves over
 // GLEASE, not Gleaner waves). LATESCATTER=1 lets late Gleaners scatter. LIVES0=99 starts with that many lives, so
 // a weak bot plays on into later waves (for their colonist numbers). BURSLOW BUREASE tune the Burrows' ease and BURKIDS their
-// Skitter limit; SPITEASE=3.8 BURSLOW=1 restore the game before the Burrows' ease. SEEDBASE moves the seed set (default 1000) to check a result is not luck of the seeds.
+// Skitter limit; BEFORE6=1 GLRAMP=0 SPITEASE=3.8 BURSLOW=1 BURN=2 restore the game before the Burrows' ease. SEEDBASE moves the seed set (default 1000) to check a result is not luck of the seeds.
+// Refinement 6: BEFORE6=1 starts from `RedoubtWaves.beforeGleanersThroughWave` (exactly the game
+// before it; the other overrides apply on top, and every note above that restores an older game
+// assumes it). GLTHRU=0 lands all of a wave's Gleaners together;
+// GLFIRST (how many land first), GLARRIVE=10,9,... (seconds after the crowd they land, by Gleaner
+// appearance), GLSTART GLSPREAD (the quota shares over which the rest are due) and GLGAP (the
+// clock fallback between them) tune the schedule. SEIZE=8,7,... (least seizure time by appearance)
+// and SEIZEMIN (its floor) tune the least time from seizure to loss. APPEASE=0 counts the
+// Spitters' and Burrows' eases in wave numbers again; SPITSTEPS BURSTEPS set the share of ease
+// left in each appearance; SPITN=2,6,7,8 sets the Spitters after their debut by appearance (empty
+// for the old one more a wave); SPITSHOTE SPITLEAD set a debut Spitter's shot speed and lead
+// (as multiples); SPITRANGE=lo,hi and SPITWIND set the Spitters' holding range and wind-up.
+// Each wave's colonist line also prints the share of its seizures in its first 10 s.
 
 private func redoubtTuning() -> RedoubtTuning {
     var t = RedoubtTuning()
@@ -50,6 +62,8 @@ private func redoubtTuning() -> RedoubtTuning {
     if let v = env["ALONG"].flatMap(Int.init) { t.pushAlongDraws = v }
     if let v = env["GDRAWS"].flatMap(Int.init) { t.groupSpotDraws = v }
     if let v = env["BURKIDS"].flatMap(Int.init) { t.burrowMaxChildren = v }
+    if let v = env["SPITRANGE"] { let p = v.split(separator: ",").compactMap { Double($0) }; t.spitterRange = p[0]...p[1] }
+    if let v = env["SPITWIND"].flatMap(Double.init) { t.spitterWindUp = v }
     // Lives to start with (and the most the orb can hold): a large number lets a weak bot play
     // on into waves it would not reach, to measure them.
     if let v = env["LIVES0"].flatMap(Int.init) { t.startingLives = v; t.maxLives = max(t.maxLives, v) }
@@ -57,8 +71,8 @@ private func redoubtTuning() -> RedoubtTuning {
 }
 
 private func redoubtWaves() -> RedoubtWaves {
-    var w = RedoubtWaves()
     let env = ProcessInfo.processInfo.environment
+    var w = env["BEFORE6"] == "1" ? RedoubtWaves.beforeGleanersThroughWave : RedoubtWaves()
     if let v = env["CROWD"].flatMap(Double.init) { w.crowdScale = v }
     if let v = env["QUOTA0"].flatMap(Double.init) { w.quotaFirst = v }
     if let v = env["QUOTASTEP"].flatMap(Double.init) { w.quotaGrowth = v }
@@ -78,6 +92,20 @@ private func redoubtWaves() -> RedoubtWaves {
     if let v = env["BURSLOW"].flatMap(Double.init) { w.burrowDebutSlowdown = v }
     if let v = env["BUREASE"].flatMap(Double.init) { w.burrowEaseWaves = v }
     if let v = env["BURN"].flatMap(Int.init) { w.burrowsAtDebut = v }
+    if let v = env["GLTHRU"].flatMap(Int.init) { w.gleanersThroughWave = v != 0 }
+    if let v = env["GLFIRST"].flatMap(Int.init) { w.gleanerFirstGroup = v }
+    if let v = env["GLSPREAD"].flatMap(Double.init) { w.gleanerSpreadEnd = v }
+    if let v = env["GLGAP"].flatMap(Double.init) { w.gleanerFallbackGap = v }
+    if let v = env["SEIZE"] { w.seizeTimes = v.split(separator: ",").compactMap { Double($0) } }
+    if let v = env["GLSTART"].flatMap(Double.init) { w.gleanerSpreadStart = v }
+    if let v = env["SPITN"] { w.spitterCounts = v.split(separator: ",").compactMap { Int($0) } }
+    if let v = env["GLARRIVE"] { w.gleanerFirstArrival = v.split(separator: ",").compactMap { Double($0) } }
+    if let v = env["SEIZEMIN"].flatMap(Double.init) { w.seizeTimeFloor = v }
+    if let v = env["APPEASE"].flatMap(Int.init) { w.easeByAppearance = v != 0 }
+    if let v = env["SPITSTEPS"] { w.spitterRampEase = v.split(separator: ",").compactMap { Double($0) } }
+    if let v = env["BURSTEPS"] { w.burrowRampEase = v.split(separator: ",").compactMap { Double($0) } }
+    if let v = env["SPITSHOTE"].flatMap(Double.init) { w.spitterDebutShotSpeed = v }
+    if let v = env["SPITLEAD"].flatMap(Double.init) { w.spitterDebutLead = v }
     return w
 }
 
@@ -529,7 +557,7 @@ func runRedoubt(_ args: [String]) {
         // its colonists seized and lost within 10 s, 20 s and by its end, the games losing 3 or
         // more in its first 20 s, seize-to-lost seconds for unbroken drags (median, min), freed
         // per game.
-        print("colonists by wave: first seize med/p10 | seized 10s/20s/end | lost 10s/20s/end (gleaner) | games lost>=3 in 20s | drag med/min s | freed/game | crushed/game")
+        print("colonists by wave: first seize med/p10 | seized 10s/20s/end | lost 10s/20s/end (gleaner) | games lost>=3 in 20s | drag med/min s | freed/game | crushed/game | seizures in first 10s")
         for w in 1...min(lastWave, 12) {
             let reached = all.filter { $0.wave >= w && $0.colonistsByWave[w] != nil }
             guard !reached.isEmpty else { continue }
@@ -540,20 +568,25 @@ func runRedoubt(_ args: [String]) {
             func share(_ f: (RedoubtSeizures) -> Int) -> Double { Double(s.reduce(0) { $0 + f($1) }) / total }
             let drags = s.flatMap(\.drags).sorted()
             let n = Double(reached.count)
-            print(String(format: "  w%-2d n%-3d %5.1f/%5.1f | %.2f/%.2f/%.2f | %.2f/%.2f/%.2f (%.2f) | %4.1f%% | %4.1f/%4.1f | %.2f | %.2f",
+            print(String(format: "  w%-2d n%-3d %5.1f/%5.1f | %.2f/%.2f/%.2f | %.2f/%.2f/%.2f (%.2f) | %4.1f%% | %4.1f/%4.1f | %.2f | %.2f | %3.0f%%",
                          w, reached.count, pct(firsts, 0.5), pct(firsts, 0.1),
                          share(\.seized10), share(\.seized20), share(\.seizedAll),
                          share(\.lost10), share(\.lost20), share(\.lostAll), share(\.byGleaner),
                          100 * Double(s.count { $0.lost20 >= 3 }) / n,
                          pct(drags, 0.5), drags.first ?? .nan,
-                         Double(s.reduce(0) { $0 + $1.freed }) / n, Double(s.reduce(0) { $0 + $1.crushed }) / n))
+                         Double(s.reduce(0) { $0 + $1.freed }) / n, Double(s.reduce(0) { $0 + $1.crushed }) / n,
+                         100 * Double(s.reduce(0) { $0 + $1.seized10 }) / Double(max(s.reduce(0) { $0 + $1.seizedAll }, 1))))
         }
         print(String(format: "delivered/game %.1f mean, charges earned %.2f mean, score %.0f mean",
                      Double(all.reduce(0) { $0 + $1.delivered }) / Double(all.count),
                      Double(all.reduce(0) { $0 + $1.delivered / tuning.colonistsPerCharge }) / Double(all.count),
                      Double(all.reduce(0) { $0 + $1.score }) / Double(all.count)))
+        let meanWave = Double(all.reduce(0) { $0 + $1.wave }) / Double(all.count)
+        let spread = all.reduce(0.0) { $0 + (Double($1.wave) - meanWave) * (Double($1.wave) - meanWave) }
+        print(String(format: "mean wave %.2f (standard error %.3f)", meanWave,
+                     (spread / Double(max(all.count - 1, 1))).squareRoot() / Double(all.count).squareRoot()))
         print(String(format: "mean wave %.2f, lives lost in w1+w2 %.2f mean",
-                     Double(all.reduce(0) { $0 + $1.wave }) / Double(all.count),
+                     meanWave,
                      Double(all.reduce(0) { $0 + ($1.deathsByWave[1] ?? 0) + ($1.deathsByWave[2] ?? 0) }) / Double(all.count)))
         let totalSteps = all.reduce(0) { $0 + $1.steps }
         let totalTime = all.reduce(0.0) { $0 + $1.stepSeconds }

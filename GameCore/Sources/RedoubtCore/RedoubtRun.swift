@@ -45,7 +45,7 @@ public struct RedoubtRun: Sendable {
     var grid: SpatialGrid
     /// The largest enemy radius, for grid queries.
     let maxEnemyRadius: Double
-    let director: RedoubtWaves
+    var director: RedoubtWaves
     /// The walls this wave's crowd comes in from (`RedoubtWaves.entrySides`), the main wall
     /// first; empty for anywhere on the floor. The main push of the opening crowd lands along
     /// them and the rest is scattered (`RedoubtWaves.scatterShare`).
@@ -62,6 +62,8 @@ public struct RedoubtRun: Sendable {
     var waveClock = 0.0
     /// Skitters this wave still has to send in to keep the floor full.
     public internal(set) var quota = 0
+    /// The wave's whole Skitter quota as it began, for how much of it is spent.
+    var waveQuota = 0
     var groupCooldown = 0.0
     /// The next wave's colonists and opening crowd are already out.
     var waveReady = false
@@ -110,10 +112,12 @@ public struct RedoubtRun: Sendable {
     }
 
     /// Shootable enemies on the floor, telegraphed or still to be telegraphed: what the floor
-    /// target counts.
+    /// target counts. Gleaners still to come through the wave (`RedoubtSpawn.afterQuotaSpent`)
+    /// are left out, so the floor stays full of Skitters while they wait; each one adds to it
+    /// when its marker shows, and the top-up waits for the next kill.
     public var shootableOnFloor: Int {
         enemies.count { !$0.isDead && $0.role.holdsWave } + arrivals.count { $0.role.holdsWave }
-            + pending[pendingIndex...].count { $0.role.holdsWave }
+            + pending[pendingIndex...].count { $0.role.holdsWave && $0.afterQuotaSpent == nil }
     }
 
     public func enemy(_ id: Int) -> RedoubtEnemy? { enemies.first { $0.id == id } }
@@ -167,12 +171,26 @@ public struct RedoubtRun: Sendable {
             // `telegraphTime` from the step its telegraph starts.
             updateArrivals(dt)
             waveClock += dt
-            while pendingIndex < pending.count, pending[pendingIndex].delay <= waveClock {
+            while pendingIndex < pending.count, isDue(pending[pendingIndex]) {
                 telegraph(pending[pendingIndex].role, scattered: pending[pendingIndex].scattered)
                 pendingIndex += 1
             }
             topUpFloor(dt)
         }
+    }
+
+    /// The share of the wave's Skitter quota already sent in (1 when it had none).
+    var quotaSpent: Double {
+        waveQuota > 0 ? 1 - Double(max(quota, 0)) / Double(waveQuota) : 1
+    }
+
+    /// A held-back spawn's telegraph is due: its time has come, or (a Gleaner coming in through
+    /// the wave) enough of the quota has been sent in. They are taken in order, so each waits for
+    /// the one before it.
+    private func isDue(_ spawn: RedoubtSpawn) -> Bool {
+        if spawn.delay <= waveClock { return true }
+        guard let share = spawn.afterQuotaSpent else { return false }
+        return quotaSpent >= share
     }
 
     /// Readies the next wave `startingIn` seconds before it begins: its colonists, the airlock at
@@ -195,18 +213,19 @@ public struct RedoubtRun: Sendable {
         pending = []
         pendingIndex = 0
         chooseEntrySides(count: director.entrySides(forWave: next))
-        for (index, spawn) in director.spawns(forWave: next).enumerated() {
-            // A spawn landing more than a telegraph's length into the wave (the early waves'
-            // Gleaners: `RedoubtWaves.gleanerDebutDelay`) is telegraphed from `pending` when the
-            // wave clock reaches it, so its marker shows for the usual time. It holds the wave
-            // and counts toward the floor target while it waits.
-            // It lands with the main push, even if the spawn it came from is scattered
+        for (index, spawn) in director.arrivals(forWave: next).enumerated() {
+            // A spawn landing more than a telegraph's length into the wave (Gleaners: the first
+            // after `RedoubtWaves.gleanerDebutDelay` in their early waves, the rest through the
+            // wave) is telegraphed from `pending` when it is due (`isDue`), so its marker shows
+            // for the usual time. It holds the wave and counts toward the floor target while it
+            // waits. It lands with the main push, even if the spawn it came from is scattered
             // (`RedoubtWaves.lateArrivalsScatter`).
-            let lands = director.landing(of: spawn, inWave: next)
+            let lands = spawn.delay
             let scattered = !entrySides.isEmpty && director.isScattered(index, forWave: next)
             if lands > tuning.telegraphTime {
                 pending.append(RedoubtSpawn(delay: lands - tuning.telegraphTime, role: spawn.role,
-                                            scattered: director.lateArrivalsScatter && scattered))
+                                            scattered: director.lateArrivalsScatter && scattered,
+                                            afterQuotaSpent: spawn.afterQuotaSpent))
                 continue
             }
             telegraph(spawn.role, showingFor: lead + lands, scattered: scattered)
@@ -220,6 +239,7 @@ public struct RedoubtRun: Sendable {
         phase = .fighting
         waveClock = 0
         quota = director.quota(forWave: wave)
+        waveQuota = quota
         groupCooldown = 0
         #if DEBUG
         if forcedPowerCutWave == wave { powerCutPending = true }

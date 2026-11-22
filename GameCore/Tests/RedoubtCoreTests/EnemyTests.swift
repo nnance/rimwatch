@@ -69,15 +69,18 @@ import GameCore
         #expect(try distance(r.req(enemy: gleaner).pos, r.orb.pos) < distance(held, r.orb.pos) - 40)
     }
 
-    /// The Gleaners' ramp: a seized colonist is dragged six times more slowly in wave 2 (their
-    /// first wave), 4.5 times in wave 4, 3.75 in wave 7, 3 in wave 9, twice in wave 10, and at the
-    /// full `gleanerDragSpeed` from wave 11; and at the full speed in a wave without Gleaners
-    /// (a quiet run's wave 0, wave 5). Before the ramp, wave 0 crawled like wave 2.
+    /// The Gleaners' ramp as it was before Refinement 6 (`beforeGleanersThroughWave`; since then
+    /// the least seizure time does this work, see `ThroughWaveTests`): a seized colonist is
+    /// dragged six times more slowly in wave 2 (their first wave), 4.5 times in wave 4, 3.75 in
+    /// wave 7, 3 in wave 9, twice in wave 10, and at the full `gleanerDragSpeed` from wave 11; and
+    /// at the full speed in a wave without Gleaners (a quiet run's wave 0, wave 5). Before the
+    /// ramp, wave 0 crawled like wave 2.
     @Test func gleanersDragSlowlyInTheirFirstWaves() throws {
+        let ramp = RedoubtWaves.beforeGleanersThroughWave
         let cases: [(RedoubtWaves, Int, Double)] = [
-            (RedoubtWaves(), 0, 1), (RedoubtWaves(), 2, 1.0 / 6), (RedoubtWaves(), 4, 1 / 4.5),
-            (RedoubtWaves(), 5, 1), (RedoubtWaves(), 7, 1 / 3.75), (RedoubtWaves(), 9, 1.0 / 3),
-            (RedoubtWaves(), 10, 0.5), (RedoubtWaves(), 11, 1), (RedoubtWaves(), 14, 1),
+            (ramp, 0, 1), (ramp, 2, 1.0 / 6), (ramp, 4, 1 / 4.5),
+            (ramp, 5, 1), (ramp, 7, 1 / 3.75), (ramp, 9, 1.0 / 3),
+            (ramp, 10, 0.5), (ramp, 11, 1), (ramp, 14, 1),
             (RedoubtWaves.beforeGleanerRamp, 0, 1.0 / 6), (RedoubtWaves.beforeGleanerRamp, 7, 1),
         ]
         for (waves, wave, scale) in cases {

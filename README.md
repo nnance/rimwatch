@@ -95,13 +95,19 @@ colonists still to save.
   while the rest is scattered thinly over the floor away from you; the scattered share grows
   each wave until, from wave 8, the crowd lands anywhere. So the opening waves can be read and
   met, and there is room to back away. The crowd starts a little smaller and grows to its full
-  size by wave 7, and Spitters fire at half their rate in the wave they first appear, back to
-  full rate by wave 7; a single Burrow opens in their first wave, pouring Skitters at half
-  their rate, back to full rate by wave 8. In the Gleaners' first waves they land several seconds
-  after the rest of the crowd (7 in wave 2) and drag a seized colonist slowly, so there is time
-  to see the alarm and shoot them; each wave that sends them, they come a little sooner and
-  drag a little faster, until from their sixth (wave 11) they come with the crowd at full pace. Laps hugging the wall are no refuge: while the orb runs along a wall, new
-  groups land on the path ahead of it.
+  size by wave 7. Each newcomer is eased over its own appearances, not over wave numbers:
+  Spitters (waves 3, 4, 7, 9 and on) fire at half their rate in their first wave, with slower
+  shots that lead you only half as much, and only two come in their second wave; the ease is
+  mostly gone by wave 7 and wholly by wave 9. A single Burrow opens in their first wave
+  (wave 5), pouring Skitters at half their rate, back to full rate by their fourth (wave 10).
+  Gleaners come in through the wave in ones and twos rather than all at once: the first lands
+  some seconds after the crowd in their early waves (10 in wave 2, 9 in wave 4, 8 in wave 7,
+  then sooner, with the crowd from wave 13), and each of the rest as you work through the
+  wave's reinforcements (at the latest 8 seconds after the one before). However close to a wall
+  a colonist stands, a seizure takes at least 8 seconds to become a loss in wave 2, a little less
+  each wave that sends Gleaners, and never under 3, so the alarm can always be answered. Laps
+  hugging the wall are no refuge: while the orb runs along a wall, new groups land on the path
+  ahead of it.
 - **The loop:** colonists shelter around the floor. Touch one and they follow you in a line; lead
   the line to the airlock to deliver them all at once. Each colonist in the line is worth more than
   the one before, so long lines pay, but enemies can take followers off the end. Every fourth
