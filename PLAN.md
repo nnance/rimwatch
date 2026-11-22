@@ -2218,3 +2218,39 @@ independent check of the fixes and tuning found (15d)" above. All mine.
   ramming rule, pods hanging over the Rift.
 - The novice bot is still only a model of you. The checker's last estimate for a person's
   first game was wave 4.5 to 5.5.
+
+### What the independent check of the second round found (2026-11-22)
+
+A separate checker with its own measurements. Verdict: **pass with notes.** Over 1,100 games
+and 218,000 test drops no pod was ever in rock; debug and release agree; every exploit bot is
+far under the bar; its novice numbers match the builder's (5.44 over 600 fresh games, median 5
+or 6). Resting on ledges now costs nothing measurable. It found:
+
+- **The app never showed the warning on a pod held over the Rift,** because pods are now held
+  higher than the app looked. Fixed the same day (`7db40fd`).
+- **Two of the three rules the builder added do nothing useful and can hurt.** The two-bounce
+  rule counts bounces the player did not cause, so a Warden that dives on you twice wins its
+  third dive, and nothing tells you. The harder knock for repeated bumps drives a rider
+  tapping steadily under a low ledge into the Rift. Switched off, neither changes any bot's
+  result. Both are being removed.
+- **Hatched rigs at full strength is costly for a slow beginner.** A novice that only notices
+  pods after 12 to 20 s reaches wave 3.5 with the rule and 4.9 without. But without it the
+  level-bouncing bot reaches wave 6.4, above the novice. It is being replaced with a gentler
+  guard.
+- **The resting count carried over into the next wave,** so a rider could be hunted the moment
+  a wave began. And in wave 1 a spared rider standing on a ledge was still thrown off it by
+  the bounce.
+- **The Warden's debut costs as much as its later appearances** (about 0.37 lives each).
+- **Lives lost jump about four times at wave 3,** because a Striker costs five to ten times a
+  Glider.
+- **Several exploit bots still do not do what they are named for,** and most never leave the
+  first cavern, so the other two layouts were untested against them.
+- **The novice bot now never falls into the Rift after wave 1,** which is too tidy. Its
+  estimate for a person's first game: wave 4.5 to 5.2, and 3 to 3.5 if slow to reach pods
+  (because of the hatching rule).
+- **For a skilled player the first half is empty:** the competent bot loses almost nothing
+  through wave 7, about four minutes. I am not changing this before you play; your complaint
+  about the last mode was that it was too hard, and this is the easier fault.
+
+A third and last round of corrections for these is being built. After it I will stop tuning
+against bots: what remains is yours to judge by playing.
