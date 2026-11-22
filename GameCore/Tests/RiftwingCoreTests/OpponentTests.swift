@@ -48,15 +48,17 @@ import GameCore
         #expect(span > 100)
     }
 
-    /// In its first appearances a Glider is shy of a rider just above it: it skips the flaps
-    /// that would lift it into the rider, so it flaps less than with no rider there.
+    /// With `RiftwingWaves.withGentleDebuts` (the early flying taken out on 2026-11-22), a
+    /// Glider in its first appearances is shy of a rider just above it: it skips the flaps that
+    /// would lift it into the rider, so it flaps less than with no rider there. By default it is
+    /// not: an eased Glider flaps the same as one at full strength.
     @Test func anEarlyGliderWillNotFlapUpIntoARiderJustAboveIt() throws {
-        func flaps(riderAbove: Bool) -> Int {
+        func flaps(riderAbove: Bool, waves: RiftwingWaves = .withGentleDebuts, ease: Double = 1) -> Int {
             var total = 0
             for seed: UInt64 in 1...8 {
-                var r = quietRun(seed: seed)
+                var r = quietRun(seed: seed, waves: waves)
                 if !riderAbove { r.removeRider() }
-                let id = r.place(.glider, at: Vec2(600, 300), ease: 1)
+                let id = r.place(.glider, at: Vec2(600, 300), ease: ease)
                 var last = 99.0
                 for _ in 0..<seconds(3) {
                     guard let g = r.opponent(id) else { break }
@@ -74,6 +76,7 @@ import GameCore
             return total
         }
         #expect(flaps(riderAbove: true) < flaps(riderAbove: false))
+        #expect(flaps(riderAbove: true, waves: RiftwingWaves(), ease: 1) == flaps(riderAbove: true, waves: RiftwingWaves(), ease: 0))
     }
 
     /// A rider that stays put for longer than the wave allows
@@ -284,14 +287,16 @@ import GameCore
         #expect(dived >= 1)
     }
 
-    /// A Warden in its first appearances dives less readily and less accurately: it dives less
-    /// often, and a dive aims some way to the side of the rider, so fewer of its dives reach it.
-    /// At full strength it dives readily and squarely.
+    /// With `RiftwingWaves.withGentleDebuts` (the early flying and missed dives taken out on
+    /// 2026-11-22), a Warden in its first appearances dives less readily and less accurately: it
+    /// dives less often, and a dive aims some way to the side of the rider, so fewer of its dives
+    /// reach it. At full strength it dives readily and squarely, and by default so does a Warden
+    /// at its debut.
     @Test func anEarlyWardenDivesLessReadilyAndLessAccurately() throws {
-        func dives(ease: Double) -> (count: Int, reaching: Int) {
+        func dives(ease: Double, waves: RiftwingWaves = .withGentleDebuts) -> (count: Int, reaching: Int) {
             var total = 0, reaching = 0
             for seed: UInt64 in 1...10 {
-                var r = quietRun(seed: seed)
+                var r = quietRun(seed: seed, waves: waves)
                 // The Wardens' debut wave: past wave 1, where a standing rider keeps its footing
                 // and the opponent that bounces off it is thrown clear for longer.
                 r.wave = 6
@@ -324,6 +329,10 @@ import GameCore
         let fullShare = Double(full.reaching) / Double(max(full.count, 1))
         #expect(earlyShare < 0.7 * fullShare, "\(early) against \(full)")
         #expect(fullShare > 0.4, "\(full)")
+        // By default the ease changes nothing about a Warden's dives.
+        let debut = dives(ease: 1, waves: RiftwingWaves()), plain = dives(ease: 0, waves: RiftwingWaves())
+        #expect(debut == plain, "\(debut) against \(plain)")
+        #expect(RiftwingWaves().wardenMissEase == 0)
     }
 
     @Test func aGleanerCarriesARestingPodOffTakingAtLeastTheMinimumTime() throws {
@@ -412,9 +421,12 @@ import GameCore
         #expect(r.mines.isEmpty)
     }
 
+    /// With `RiftwingWaves.withGentleDebuts` (the early flying taken out on 2026-11-22), a
+    /// Sower in its first appearances lays fewer mines and holds fewer at once; by default it
+    /// lays as many as one at full strength.
     @Test func aSowerInItsFirstAppearancesLaysFewerMinesAndHoldsFewer() throws {
-        func laid(ease: Double) -> (laid: Int, most: Int) {
-            var r = quietRun()
+        func laid(ease: Double, waves: RiftwingWaves = .withGentleDebuts) -> (laid: Int, most: Int) {
+            var r = quietRun(waves: waves)
             r.removeRider()
             let s = r.place(.sower, at: Vec2(100, 400), vel: Vec2(70, 0), ease: ease)
             r.opponents[r.index(of: s)].mineTimer = r.tuning.mineInterval * (1 + r.director.sowerIntervalEase * ease)
@@ -429,5 +441,8 @@ import GameCore
         #expect(early.laid < full.laid)
         #expect(early.most <= RiftwingTuning().minesPerSower - 2)
         #expect(full.most == RiftwingTuning().minesPerSower)
+        let debut = laid(ease: 1, waves: RiftwingWaves()), plain = laid(ease: 0, waves: RiftwingWaves())
+        #expect(debut == plain, "\(debut) against \(plain)")
+        #expect(debut.most == RiftwingTuning().minesPerSower)
     }
 }

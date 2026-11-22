@@ -57,13 +57,18 @@ import GameCore
     }
 
     /// To win, an opponent must be more than the margin and the lasting leniency above the rider
-    /// (about 27 units at figure scale 1: contact comes at about 29, so it must come down nearly
-    /// squarely on top; both grow with the figures). Winning for the rider is the margin alone.
+    /// (23 units at figure scale 1 since 2026-11-22, when the leniency went from 16.1 to 12:
+    /// contact comes at about 29, so it must still come down well above the rider; both grow
+    /// with the figures). Winning for the rider is the margin alone. With
+    /// `RiftwingWaves.withGentleDebuts` it is 27.1, nearly squarely on top, as before.
     @Test func aMeetingNeedsAClearHeightToWin() throws {
         let r = quietRun()
         let leniency = r.clashLeniency(ease: 0)
         let lose = r.tuning.clashMargin + leniency
-        #expect(lose > fig(24) && lose < fig(29))
+        #expect(lose > fig(22) && lose < fig(24))
+        let gentle = quietRun(waves: .withGentleDebuts)
+        let gentleLose = gentle.tuning.clashMargin + gentle.clashLeniency(ease: 0)
+        #expect(gentleLose > fig(24) && gentleLose < fig(29))
         #expect(lose < r.tuning.riderRadius + r.tuning.stats(for: .striker).radius)
         #expect(r.clashOutcome(rider: body(y: 300), opponent: body(y: 300 + lose - 0.5), leniency: leniency) == .bounce)
         #expect(r.clashOutcome(rider: body(y: 300), opponent: body(y: 300 + lose + 0.5), leniency: leniency) == .lose)

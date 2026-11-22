@@ -141,10 +141,14 @@ import GameCore
     /// colonists settled in this wave and the last meets it with all of its kind's ease; one who
     /// has freed hardly any (`hatchedEaseNoShare` or fewer: who leaves pods to hatch) meets it at
     /// full strength; between, in proportion. So a beginner slow to reach pods is not punished, and leaving pods to hatch
-    /// is no way to fill the gallery with gentle opponents.
+    /// is no way to fill the gallery with gentle opponents. Measured with
+    /// `RiftwingWaves.withGentleDebuts`, where the ease also slows its flying; by default (since
+    /// 2026-11-22) the ease no longer slows any rig, and a diligent rider's hatchling flies at
+    /// full speed.
     @Test func aHatchedRigKeepsItsKindsEaseForARiderWhoFreesColonists() throws {
-        func hatchling(freed: Int, lost: Int, previousFreed: Int = 0, previousLost: Int = 0, wave: Int = 1) throws -> RiftwingOpponent {
-            var r = quietRun()
+        func hatchling(freed: Int, lost: Int, previousFreed: Int = 0, previousLost: Int = 0, wave: Int = 1,
+                       waves: RiftwingWaves = .withGentleDebuts) throws -> RiftwingOpponent {
+            var r = quietRun(waves: waves)
             r.wave = wave
             r.removeRider()
             r.waveFreed = freed
@@ -162,13 +166,17 @@ import GameCore
             }
             return try r.req(opponent: try #require(opponent))
         }
-        let waves = RiftwingWaves()
+        let waves = RiftwingWaves.withGentleDebuts
         let full = waves.ease(of: .glider, inWave: 1)
         #expect(full == 1)
         // Freed every colonist so far (the hatching pod itself is the only one lost): all the ease.
         let diligent = try hatchling(freed: 3, lost: 0)
         #expect(abs(diligent.ease - full) < 1e-9)
+        #expect(waves.gliderSpeedEase > 0)
         #expect(abs(diligent.speed - RiftwingTuning().stats(for: .glider).maxSpeed * (1 - waves.gliderSpeedEase)) < 1e-9)
+        let plain = try hatchling(freed: 3, lost: 0, waves: RiftwingWaves())
+        #expect(abs(plain.ease - full) < 1e-9)
+        #expect(abs(plain.speed - RiftwingTuning().stats(for: .glider).maxSpeed) < 1e-9)
         // Freed none, in this wave or the last: full strength.
         let idle = try hatchling(freed: 0, lost: 4, previousFreed: 0, previousLost: 5, wave: 2)
         #expect(idle.ease == 0)

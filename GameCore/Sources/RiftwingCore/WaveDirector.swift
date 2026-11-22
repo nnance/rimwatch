@@ -13,7 +13,9 @@ import GameCore
 ///   `gleanerDelay(forWave:)` seconds into the wave, and only while a pod rests on a ledge.
 /// - **Each role's early appearances are gentler,** counted in that role's own appearances
 ///   (first, second, third time sent): `ease(of:inWave:)` steps down `rampEase`, so no role is a
-///   cliff when it returns after a wave away.
+///   cliff when it returns after a wave away. Since 2026-11-22 the ease no longer slows or
+///   gentles any opponent's flying (`withGentleDebuts` puts that back); it still eases the pods
+///   an early opponent drops and the hatched rigs a diligent rider meets.
 ///
 /// The numbers had a first tuning pass with the scripted pilots in `RiftwingPilot` (see
 /// `RiftwingDifficultyTests` and the harness's `riftwing` mode).
@@ -28,13 +30,19 @@ public struct RiftwingWaves: Sendable {
     /// An opponent must be this many units more clearly above the rider than the clash margin
     /// to win a clash, at every strength (`clashLeniencyBase`), and `clashLeniency` more times
     /// its ease in its first appearances; otherwise the meeting bounces. Winning is unchanged.
-    /// Contact comes at about 29 units between centres, so an opponent needing 25 to 30 units
-    /// must come down almost squarely on top of the rider: at its debut it can hardly win, and
-    /// its threat grows a little with each appearance as the angle it needs widens. Both are
-    /// units at figure scale 1 (`RiftwingTuning.figureScale`); the run scales them with the
-    /// figures (`RiftwingRun.clashLeniency(ease:)`), since they are measured against a rig.
+    /// Contact comes at about 29 units between centres. Both are units at figure scale 1
+    /// (`RiftwingTuning.figureScale`); the run scales them with the figures
+    /// (`RiftwingRun.clashLeniency(ease:)`), since they are measured against a rig.
+    ///
+    /// `clashLeniencyBase` was 16.1 until 2026-11-22, when the owner reached wave 8 with little
+    /// practice and asked for a typical game to end at wave 5 to 6. An even rule (0: the
+    /// opponent needing only the clash margin, as the rider does) took the competent pilot from
+    /// wave 12.8 to about 7.6 on its own, too far, so the rule was moved only part of the way to
+    /// even: at 12, with every kind at full strength from its debut (see `withGentleDebuts`),
+    /// the competent pilot reaches wave 8.7 (the owner had reached about 0.63 of its wave, so
+    /// about wave 5.5 for the owner). `withGentleDebuts` puts 16.1 back.
     public var clashLeniency = 0.0
-    public var clashLeniencyBase = 16.1
+    public var clashLeniencyBase = 12.0
     /// In its first appearances an opponent that would win a clash may misjudge it, and the
     /// meeting bounces instead (`mercy(ease:)`): `clashMercy` of the time at its debut, fading
     /// with its ease as a ramp (`clashMercyCurve` shapes it so the share it wins at most doubles
@@ -60,12 +68,47 @@ public struct RiftwingWaves: Sendable {
     /// bounced like any other. It was 1; `withBeginnerForgiveness` puts it back.
     public var standingGraceWaves = 0
 
+    /// The waves as they were between the two changes of 2026-11-22. In the second, the owner
+    /// had reached wave 8 with little practice and asked for a typical game to end at wave 5 to
+    /// 6, so: the clash leniency went from 16.1 to 12 (`clashLeniencyBase`); each kind flies at
+    /// full strength from its first appearance (the `...Ease` numbers for Gliders, Strikers,
+    /// Wardens, Sowers and Gleaners, set to 0); and early Warden dives no longer misjudge their
+    /// line (`wardenMissEase` 55 to 0). The wave table and each kind's debut wave are unchanged.
+    /// This puts all of that back; the beginner's forgiveness of lost clashes (the first change)
+    /// stays out.
+    public static var withGentleDebuts: RiftwingWaves {
+        var waves = RiftwingWaves()
+        waves.clashLeniencyBase = 16.1
+        waves.gleanerDelayEase = 14
+        waves.gleanerSlowdown = 2
+        waves.gleanerGrabEase = 1.5
+        waves.gleanerCarryEase = 4
+        waves.gliderSpeedEase = 0.25
+        waves.gliderSkipEase = 0.15
+        waves.gliderBandEase = 140
+        waves.gliderShyEase = 1
+        waves.strikerSpeedEase = 0.3
+        waves.strikerClimbEase = 0.6
+        waves.strikerReachEase = 0.3
+        waves.strikerReplanEase = 0.35
+        waves.strikerRecoverEase = 1
+        waves.wardenSpeedEase = 0.3
+        waves.wardenDiveEase = 0.6
+        waves.wardenReplanEase = 0.3
+        waves.wardenMissEase = 55
+        waves.sowerIntervalEase = 0.8
+        waves.sowerMinesEase = 2
+        waves.sowerSpeedEase = 0.25
+        return waves
+    }
+
     /// The waves with the beginner's forgiveness of lost clashes that was taken out on
     /// 2026-11-22: an opponent in its first appearances misjudging most clashes it would win
     /// (`clashMercy` 0.85), and a rider standing on a ledge in wave 1 never beaten and keeping
-    /// its footing (`standingGraceWaves` 1). With this the game is exactly the one before.
+    /// its footing (`standingGraceWaves` 1), on top of `withGentleDebuts`. With this the game is
+    /// exactly the one before both changes of that day.
     public static var withBeginnerForgiveness: RiftwingWaves {
-        var waves = RiftwingWaves()
+        var waves = RiftwingWaves.withGentleDebuts
         waves.clashMercy = 0.85
         waves.standingGraceWaves = 1
         return waves
@@ -134,50 +177,58 @@ public struct RiftwingWaves: Sendable {
     /// Seconds between the opening rigs' telegraphs.
     public var openingGap = 0.6
 
-    /// Gleaners: the first comes `gleanerDelayBase` plus `gleanerDelayEase` times its ease
-    /// seconds into the wave (22 s in its debut, 8 s at full strength); a later one in the same
-    /// wave `gleanerGap` seconds after the one before left.
-    public var gleanerDelayBase = 8.0
-    public var gleanerDelayEase = 14.0
-    public var gleanerGap = 8.0
-    /// At its fullest ease a Gleaner flies `gleanerSlowdown` times more slowly, holds a pod
-    /// `gleanerGrabEase` seconds longer before lifting it, and a carry takes at least
-    /// `gleanerCarryEase` seconds longer.
-    public var gleanerSlowdown = 2.0
-    public var gleanerGrabEase = 1.5
-    public var gleanerCarryEase = 4.0
+    // The opponents' early flying. Since 2026-11-22 every kind flies at full strength from its
+    // first appearance (the owner reached wave 8 with little practice and asked for a typical
+    // game to end at wave 5 to 6), so each number below is 0 (1 for `gleanerSlowdown`);
+    // `withGentleDebuts` puts back the values given as "was", with which each kind flew more
+    // slowly and gently in its first appearances, by its ease.
 
-    /// Glider: at its fullest ease, this much slower and skipping this much more of its flaps.
-    public var gliderSpeedEase = 0.25
-    public var gliderSkipEase = 0.15
-    /// ... wandering no higher than this much below the top of its band, and this much more
-    /// likely to skip a flap that would lift it into a rider just above it.
-    public var gliderBandEase = 140.0
-    public var gliderShyEase = 1.0
-    /// Striker: at its fullest ease, this much slower, climbing this share less high above the
-    /// rider before coming down, reaching this share less far across to come down, and taking
-    /// this many seconds longer over each decision.
-    public var strikerSpeedEase = 0.3
-    public var strikerClimbEase = 0.6
-    public var strikerReachEase = 0.3
-    public var strikerReplanEase = 0.35
-    /// ... and recovering this share longer after each strike.
-    public var strikerRecoverEase = 1.0
-    /// Warden: at its fullest ease, this much slower, this share less likely to dive when it
-    /// could, and this much slower to decide.
-    public var wardenSpeedEase = 0.3
-    public var wardenDiveEase = 0.6
-    public var wardenReplanEase = 0.3
+    /// Gleaners: the first comes `gleanerDelayBase` plus `gleanerDelayEase` times its ease
+    /// seconds into the wave (8 s; was 14, for 22 s at a debut); a later one in the same wave
+    /// `gleanerGap` seconds after the one before left.
+    public var gleanerDelayBase = 8.0
+    public var gleanerDelayEase = 0.0
+    public var gleanerGap = 8.0
+    /// At its fullest ease a Gleaner flies `gleanerSlowdown` times more slowly (was 2), holds a
+    /// pod `gleanerGrabEase` seconds longer before lifting it (was 1.5), and a carry takes at
+    /// least `gleanerCarryEase` seconds longer (was 4).
+    public var gleanerSlowdown = 1.0
+    public var gleanerGrabEase = 0.0
+    public var gleanerCarryEase = 0.0
+
+    /// Glider: at its fullest ease, this much slower (was 0.25) and skipping this much more of
+    /// its flaps (was 0.15) ...
+    public var gliderSpeedEase = 0.0
+    public var gliderSkipEase = 0.0
+    /// ... wandering no higher than this much below the top of its band (was 140), and this
+    /// much more likely to skip a flap that would lift it into a rider just above it (was 1).
+    public var gliderBandEase = 0.0
+    public var gliderShyEase = 0.0
+    /// Striker: at its fullest ease, this much slower (was 0.3), climbing this share less high
+    /// above the rider before coming down (was 0.6), reaching this share less far across to come
+    /// down (was 0.3), and taking this many seconds longer over each decision (was 0.35) ...
+    public var strikerSpeedEase = 0.0
+    public var strikerClimbEase = 0.0
+    public var strikerReachEase = 0.0
+    public var strikerReplanEase = 0.0
+    /// ... and recovering this share longer after each strike (was 1).
+    public var strikerRecoverEase = 0.0
+    /// Warden: at its fullest ease, this much slower (was 0.3), this share less likely to dive
+    /// when it could (was 0.6), and this much slower to decide (was 0.3) ...
+    public var wardenSpeedEase = 0.0
+    public var wardenDiveEase = 0.0
+    public var wardenReplanEase = 0.0
     /// ... and misjudging its line by up to this many units across at its fullest ease (at
-    /// least half of that, either side, drawn afresh for each dive): it lines up and dives beside
-    /// the rider, so fewer of its dives reach it. Contact comes at about 30 units. Units at figure
-    /// scale 1: the run scales it with the figures.
-    public var wardenMissEase = 55.0
-    /// Sower: at its fullest ease, its mines come this share less often, it holds this many
-    /// fewer at once, and it drifts this much more slowly.
-    public var sowerIntervalEase = 0.8
-    public var sowerMinesEase = 2.0
-    public var sowerSpeedEase = 0.25
+    /// least half of that, either side, drawn afresh for each dive), so that it dives beside the
+    /// rider and fewer of its dives reach it. Contact comes at about 30 units. Units at figure
+    /// scale 1: the run scales it with the figures. 0 since 2026-11-22, every Warden dive aimed
+    /// at the rider (was 55).
+    public var wardenMissEase = 0.0
+    /// Sower: at its fullest ease, its mines come this share less often (was 0.8), it holds
+    /// this many fewer at once (was 2), and it drifts this much more slowly (was 0.25).
+    public var sowerIntervalEase = 0.0
+    public var sowerMinesEase = 0.0
+    public var sowerSpeedEase = 0.0
 
     // MARK: The table
 

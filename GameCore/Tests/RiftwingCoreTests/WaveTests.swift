@@ -56,6 +56,27 @@ import GameCore
         }
     }
 
+    /// Since 2026-11-22 every kind flies at full strength from its first appearance: the ease
+    /// left in its first waves no longer slows it, and the clash leniency is 12 at every
+    /// strength. `RiftwingWaves.withGentleDebuts` puts back the slower, gentler debuts.
+    @Test func everyKindFliesAtFullStrengthFromItsDebut() throws {
+        let plain = quietRun(), gentle = quietRun(waves: .withGentleDebuts)
+        for role in RiftwingRole.allCases where role != .gleaner {
+            #expect(plain.speedScale(role, ease: 1) == 1, "\(role)")
+            #expect(gentle.speedScale(role, ease: 1) < 1, "\(role)")
+        }
+        #expect(waves.leniency(ease: 1) == 12)
+        #expect(waves.leniency(ease: 0) == 12)
+        #expect(RiftwingWaves.withGentleDebuts.leniency(ease: 0) == 16.1)
+        // The ease itself still steps down (it still eases pods and hatched rigs).
+        #expect(waves.ease(of: .warden, inWave: 6) == 1)
+        // The table and each kind's debut are as they were.
+        for wave in 1...30 {
+            let a = waves.composition(forWave: wave), b = RiftwingWaves.withGentleDebuts.composition(forWave: wave)
+            #expect(a.map(\.role) == b.map(\.role) && a.map(\.count) == b.map(\.count), "wave \(wave)")
+        }
+    }
+
     @Test func aRoleBetweenItsAppearancesFliesAtTheEaseOfItsNext() throws {
         // Wardens debut in wave 6; a Warden hatched in wave 4 flies at its first-appearance ease.
         #expect(waves.ease(of: .warden, inWave: 4) == 1)
@@ -234,11 +255,21 @@ import GameCore
             }
         }
         #expect(seen >= 3)
-        // Late and slow at first, sooner and faster with each appearance.
-        #expect(waves.gleanerDelay(forWave: 4) > waves.gleanerDelay(forWave: 5))
-        #expect(waves.gleanerSpeedScale(forWave: 4) < waves.gleanerSpeedScale(forWave: 7))
-        #expect(waves.gleanerMinCarry(forWave: 4, tuning: RiftwingTuning()) > waves.gleanerMinCarry(forWave: 12, tuning: RiftwingTuning()))
-        #expect(waves.gleanerMinCarry(forWave: 30, tuning: RiftwingTuning()) == RiftwingTuning().gleanerMinCarry)
+        // With `withGentleDebuts` (the early flying taken out on 2026-11-22): late and slow at
+        // first, sooner and faster with each appearance.
+        let gentle = RiftwingWaves.withGentleDebuts
+        #expect(gentle.gleanerDelay(forWave: 4) > gentle.gleanerDelay(forWave: 5))
+        #expect(gentle.gleanerSpeedScale(forWave: 4) < gentle.gleanerSpeedScale(forWave: 7))
+        #expect(gentle.gleanerMinCarry(forWave: 4, tuning: RiftwingTuning()) > gentle.gleanerMinCarry(forWave: 12, tuning: RiftwingTuning()))
+        #expect(gentle.gleanerMinCarry(forWave: 30, tuning: RiftwingTuning()) == RiftwingTuning().gleanerMinCarry)
+        // By default a Gleaner is at full strength from its debut: 8 s into the wave, at full
+        // speed, with the shortest grab and carry.
+        for wave in 4...30 {
+            #expect(waves.gleanerDelay(forWave: wave) == waves.gleanerDelayBase)
+            #expect(waves.gleanerSpeedScale(forWave: wave) == 1)
+            #expect(waves.gleanerGrab(forWave: wave, tuning: RiftwingTuning()) == RiftwingTuning().gleanerGrab)
+            #expect(waves.gleanerMinCarry(forWave: wave, tuning: RiftwingTuning()) == RiftwingTuning().gleanerMinCarry)
+        }
     }
     #endif
 

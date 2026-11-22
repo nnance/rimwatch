@@ -41,8 +41,10 @@ import GameCore
         #expect(c.hash != a.hash)
     }
 
-    /// 330 s of the competent pilot on seed 1: waves 1 to 8, into the Sower's debut in wave 8,
-    /// both cavern shifts and all five roles. Debug and Release builds give the
+    /// Up to 330 s of the competent pilot on seed 1: since 2026-11-22 it loses its last life in
+    /// wave 6, 135 s in, so the run covers waves 1 to 6, the first cavern shift and four roles
+    /// (before, it reached wave 10, with both shifts and all five roles; that run is still pinned
+    /// by `withGentleDebutsReplaysTheGameBeforeFullStrengthDebuts`). Debug and Release builds give the
     /// same values (`GOLDEN=1 .build/release/Harness riftwing` prints them from a release
     /// build). If a deliberate change to the rules, the tuning, the wave table or the pilot breaks
     /// it, capture the new values from the printed line and say so in the commit. First captured
@@ -54,10 +56,27 @@ import GameCore
     /// 35,000, and the pilots' routing), and again when the figures grew by half
     /// (`RiftwingTuning.figureScale` 1.5; the run now reaches wave 10), and again when the
     /// forgiveness of lost clashes was taken out (2026-11-22: `clashMercy` and
-    /// `standingGraceWaves` 0; the pilot now loses its last life in wave 10, 305 s in).
+    /// `standingGraceWaves` 0; the pilot now loses its last life in wave 10, 305 s in), and
+    /// again later that day when every kind came to fly at full strength from its debut and the
+    /// clash leniency went from 16.1 to 12 (the values before are kept by
+    /// `withGentleDebutsReplaysTheGameBeforeFullStrengthDebuts`).
     @Test func aScriptedRunReplaysExactly() throws {
         let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 330)
         print("RIFTWING GOLDEN hash \(hash) events \(events) score \(r.score) wave \(r.wave) saved \(r.colonistsSaved) lives \(r.rider.lives) tick \(r.tick)")
+        #expect(hash == 647_307_081_655_133_869)
+        #expect(events == 730)
+        #expect(r.score == 69_800)
+        #expect(r.wave == 6)
+        #expect(r.colonistsSaved == 24)
+        #expect(r.rider.lives == 0)
+        #expect(r.tick == 16_239)
+    }
+
+    /// With `RiftwingWaves.withGentleDebuts` the run is exactly the game between the two
+    /// changes of 2026-11-22 (no forgiveness of lost clashes; gentle debuts and a leniency of
+    /// 16.1): the golden values captured when the forgiveness was taken out.
+    @Test func withGentleDebutsReplaysTheGameBeforeFullStrengthDebuts() throws {
+        let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 330, waves: .withGentleDebuts)
         #expect(hash == 7_540_357_914_633_432_388)
         #expect(events == 1548)
         #expect(r.score == 166_750)

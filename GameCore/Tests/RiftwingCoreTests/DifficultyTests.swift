@@ -19,6 +19,14 @@ import GameCore
 /// it now does. Measured then (harness, three sets of 200 seeds, 25-minute cap): novice mean
 /// wave 3.44, 3.40, 3.60 (median 3); slow novice 3.33, 3.35, 3.20; competent 12.77, 12.83,
 /// 12.80 (median 13).
+///
+/// Re-centred again later on 2026-11-22: the owner reached wave 8 with little practice and
+/// asked for a typical game to end at wave 5 to 6. Taking the owner to reach about 0.63 of the
+/// competent pilot's wave, the competent pilot was brought to about wave 8.75: every kind flies
+/// at full strength from its debut, Warden dives no longer miss, and the clash leniency went
+/// from 16.1 to 12 (`RiftwingWaves.withGentleDebuts` puts all of it back). Measured then
+/// (harness, three sets of 200 seeds, 25-minute cap): competent 8.69, 8.71, 8.69 (median 9);
+/// novice 2.47, 2.54, 2.55 (median 3); slow novice 2.51, 2.44, 2.52.
 @Suite struct RiftwingDifficultyTests {
     static func seeds(_ count: Int, from base: UInt64 = 1000) -> [UInt64] {
         (0..<count).map { base + UInt64($0) * 7919 }
@@ -129,36 +137,39 @@ import GameCore
     static let competentFromSpur: [Game] = playAll(.competent, seeds: seeds(20), maxSeconds: 1500, startAt: 4)
     static let competentFromShelves: [Game] = playAll(.competent, seeds: seeds(20), maxSeconds: 1500, startAt: 7)
 
-    /// A rider who never touches the controls is lost in the first wave or two, about two and a
-    /// half minutes in. Standing on its ledge no longer spares it (`standingGraceWaves` 0 since
-    /// 2026-11-22): it loses lives to clashes in wave 1, about 1.5 a game (1.59, 1.44, 1.47 over
-    /// three sets of 200 seeds), and is thrown off its ledge into the Rift as well (about 1 a
-    /// game; none while it kept its footing).
+    /// A rider who never touches the controls is lost in the first wave or two, under two minutes
+    /// in (median 106, 110 and 106 s over three sets of 200 seeds; 96 s on this set; about two
+    /// and a half minutes while the Gliders flew gently in their first waves). Standing on its
+    /// ledge no longer spares it (`standingGraceWaves` 0 since 2026-11-22): nearly all its lives
+    /// go to clashes in wave 1 (2.7 a game), and now and then it is thrown off its ledge into the
+    /// Rift (0.08 to 0.15 a game).
     @Test func anIdleRiderIsLostInTheFirstWaves() throws {
         let games = Self.playAll(.idle, seeds: Self.seeds(24), maxSeconds: 600)
         #expect(games.allSatisfy { $0.isOver && $0.wave <= 2 }, "\(games.map(\.wave))")
         let survival = Self.median(games.map(\.survival))
         print("RIFTWING IDLE median survival \(survival) s")
-        #expect((100...300).contains(survival), "\(survival)")
+        #expect((60...200).contains(survival), "\(survival)")
         let clashes = games.reduce(0) { $0 + ($1.clashLosses[1] ?? 0) }
         #expect(Double(clashes) >= 1.0 * Double(games.count), "\(clashes) clash losses in wave 1")
         let rift = games.reduce(0) { $0 + $1.riftLosses.count { $0 == 1 } }
         #expect(rift > 0, "\(rift) lost to the Rift in wave 1")
     }
 
-    /// The novice pilot reaches about wave 3.5: mean 3.44, 3.40 and 3.60 on three sets of 200
-    /// seeds in the harness, median 3 (it was 5.3 to 5.9 with the beginner's forgiveness). The
-    /// mean of 120 games has a standard error of about 0.08, so this set is held to 3.1 to 3.9;
-    /// its median to 3 or 4.
-    @Test func aNoviceRunReachesAboutWaveThreeOrFour() throws {
+    /// The novice pilot reaches about wave 2.5: mean 2.47, 2.54 and 2.55 on three sets of 200
+    /// seeds in the harness, median 3 (3.4 to 3.6 while each kind flew gently in its first
+    /// waves; 5.3 to 5.9 with the beginner's forgiveness). It is no longer the owner, who plays
+    /// far above it. The mean of 120 games has a standard error of about 0.06, so this set
+    /// (2.46) is held to 2.2 to 2.8; its median to 2 or 3.
+    @Test func aNoviceRunReachesAboutWaveTwoOrThree() throws {
         let waves = Self.novice.map { Double($0.wave) }
         let mean = Self.mean(waves)
         print("RIFTWING NOVICE mean wave \(mean), median \(Self.median(waves))")
-        #expect((3.1...3.9).contains(mean), "\(waves)")
-        #expect((3...4).contains(Self.median(waves)), "\(waves)")
-        #expect(Self.novice.allSatisfy { $0.isOver && $0.wave <= 10 }, "\(waves)")
-        // Hardly any game ends in the first wave (none of 600 in the harness).
-        #expect(Self.novice.count { $0.wave <= 1 } <= 2, "\(waves)")
+        #expect((2.2...2.8).contains(mean), "\(waves)")
+        #expect((2...3).contains(Self.median(waves)), "\(waves)")
+        #expect(Self.novice.allSatisfy { $0.isOver && $0.wave <= 6 }, "\(waves)")
+        // About one game in ten ends in the first wave (11.5%, 10.0% and 10.5% in the harness;
+        // none of 600 while the Gliders flew gently in their first waves): held to a fifth.
+        #expect(Self.novice.count { $0.wave <= 1 } <= Self.novice.count / 5, "\(waves)")
     }
 
     /// It flies like a person: some of its lives go into the Rift (about a tenth), and pods lie a
@@ -192,10 +203,11 @@ import GameCore
     /// A novice slow to notice pods (12 to 20 s after each is knocked loose) frees fewer
     /// colonists and meets more hatched rigs, but is not punished for it out of proportion: the
     /// rigs hatched while it still frees about half its colonists keep their kind's early ease.
-    /// It reaches mean wave 3.33, 3.35 and 3.20 on three sets of 200 seeds in the harness, about
-    /// 0.2 under the novice (3.48). It is compared with the novice on the same 60 seeds: held to
-    /// within half a wave under it, and no more than 0.15 over it (on 60 games each mean has a
-    /// standard error of about 0.07; on this set it is 3.45 against the novice's 3.5).
+    /// It reaches mean wave 2.51, 2.44 and 2.52 on three sets of 200 seeds in the harness, level
+    /// with the novice (2.47, 2.54, 2.55): it seldom lives long enough for its slowness to cost
+    /// it. It is compared with the novice on the same 60 seeds: held to within half a wave under
+    /// it, and no more than 0.15 over it (on 60 games each mean has a standard error of about
+    /// 0.07; on this set it is 2.45 against the novice's 2.43).
     @Test func aNoviceSlowToNoticePodsIsNotPunishedOutOfProportion() throws {
         let games = Self.playAll(.slowNovice, seeds: Self.seeds(60), maxSeconds: 1500)
         let wave = Self.mean(games.map { Double($0.wave) })
@@ -239,55 +251,62 @@ import GameCore
     }
 
     /// The novice's lives lost per wave rise from wave to wave through the waves it reaches.
-    /// Measured on three sets of 200 seeds in the harness: wave 1 0.42, 0.41, 0.38; wave 2 0.65,
-    /// 0.62, 0.58; wave 3 1.42, 1.44, 1.39; wave 4 1.84, 1.84, 1.58 (about 0.5 in waves 1 and 2
-    /// together while lost clashes were forgiven; about 1.0 now). Under 15% of its games reach
-    /// wave 5, so waves from 5 on are left to the competent pilot
-    /// (`competentLivesLostRiseThroughTheLaterWaves`).
+    /// Measured on three sets of 200 seeds in the harness: wave 1 1.10, 1.02, 0.97; wave 2 1.09,
+    /// 0.94, 1.00; wave 3 1.62, 1.77, 1.72 (about 0.5 in waves 1 and 2 together while lost
+    /// clashes were forgiven, about 1.0 while each kind flew gently in its first waves, about 2
+    /// now). Only 1% to 2.5% of its games reach wave 4, so waves from 4 on are left to the
+    /// competent pilot (`competentLivesLostRiseThroughTheLaterWaves`).
     @Test func noviceLivesLostRiseFromWaveToWave() throws {
-        let rates = (1...4).map { Self.livesLostRate(Self.novice, [$0]) }
+        let rates = (1...3).map { Self.livesLostRate(Self.novice, [$0]) }
         print("RIFTWING NOVICE lives lost per wave \(rates)")
-        // Waves 1 and 2 cost about a life between them (1.07, 1.03, 0.96 in the harness).
-        #expect(rates[0] + rates[1] <= 1.25, "\(rates)")
+        // Waves 1 and 2 cost about two lives between them (2.19, 1.96, 1.97 in the harness;
+        // 2.23 on this set).
+        #expect(rates[0] + rates[1] <= 2.5, "\(rates)")
         // Each wave costs at least nearly what the one before did ...
-        for w in 1..<4 {
+        for w in 1..<3 {
             #expect(rates[w] >= rates[w - 1] - 0.15, "wave \(w + 1): \(rates)")
         }
-        // ... and no more than about twice as much (from a floor of 0.4).
-        #expect(rates[1] <= max(rates[0], 0.4) * 2.2, "wave 2: \(rates)")
-        #expect(rates[3] <= max(rates[2], 0.4) * 2.2, "wave 4: \(rates)")
-        // OPEN: wave 3, the Strikers' debut, costs 2.2 to 2.4 times wave 2 (1.42 against 0.65,
-        // 1.44 against 0.62, 1.39 against 0.58 in the harness; Strikers alone cost 1.2 lives a
-        // game there), a little over the "about double" bar of 2.2. Held here at what the game
-        // does now, with no retuning, for the owner to decide.
-        #expect(rates[2] <= max(rates[1], 0.4) * 2.6, "wave 3: \(rates)")
+        // ... and no more than about twice as much (from a floor of 0.4). Wave 3, the Strikers'
+        // debut, was over this bar (2.2 to 2.4 times wave 2); it is now 1.5 to 1.9 times (1.45 on
+        // this set), so the bar is back to 2.2 for every wave.
+        for w in 1..<3 {
+            #expect(rates[w] <= max(rates[w - 1], 0.4) * 2.2, "wave \(w + 1): \(rates)")
+        }
     }
 
-    /// The competent pilot now loses some lives, from the early waves on, and they rise from
-    /// wave to wave with no wave costing more than about twice the one before (from a floor of
-    /// 0.4). Measured on three sets of 200 seeds in the harness: about 0.02 a wave in waves 1 and
-    /// 2, 0.1 in waves 3 to 5, 0.3 in 6 and 7, 0.4 in 8, 0.6 in 9, 1.25 in 10, 2.1 in 11, 2.4 in
-    /// 12 and 2.5 in 13 (it lost almost none before wave 9 while lost clashes were forgiven).
+    /// The competent pilot loses lives from the first waves on, and they rise from wave to wave
+    /// with no wave costing more than about twice the one before (from a floor of 0.4).
+    /// Measured on three sets of 200 seeds in the harness: about 0.1 a wave in waves 1 and 2,
+    /// 0.4 to 0.5 in waves 3 to 5, 1.0 in 6 and 0.9 in 7, 1.2 in 8, 1.2 to 1.5 in 9, 2.1 to 2.4
+    /// in 10 and 2.5 in 11 (about 0.02 in waves 1 and 2 and 0.1 in 3 to 5 while each kind flew
+    /// gently in its first waves). Under a quarter of its games reach wave 11, so the waves
+    /// checked end at 10.
     @Test func competentLivesLostRiseThroughTheLaterWaves() throws {
         let games = Self.competent
-        let rates = (1...12).map { Self.livesLostRate(games, [$0]) }
+        let rates = (1...10).map { Self.livesLostRate(games, [$0]) }
         print("RIFTWING COMPETENT lives lost per wave \(rates)")
-        // Some lives before the later waves: about 1.4 a game in waves 1 to 8.
+        // Lives from the first waves: about 0.2 a game in waves 1 and 2 (0.20, 0.22, 0.17 in the
+        // harness; 0.23 on this set), and about 4.5 in waves 1 to 8 (4.3 on this set).
+        #expect(rates[0] + rates[1] >= 0.1, "\(rates)")
         let early = (1...8).reduce(0.0) { $0 + rates[$1 - 1] }
-        #expect((0.7...2.5).contains(early), "\(early): \(rates)")
-        for w in 1..<12 {
+        #expect((3.5...5.5).contains(early), "\(early): \(rates)")
+        for w in 1..<10 {
             #expect(rates[w] >= rates[w - 1] - 0.15, "wave \(w + 1): \(rates)")
-            // OPEN: wave 10 costs 2.1 to 2.25 times wave 9 (1.25 against 0.68, 1.28 against 0.57,
-            // 1.24 against 0.59 in the harness; 1.49 against 0.67 on this set), a little over the
-            // "about double" bar of 2.2. Held here at what the game does now, with no retuning,
-            // for the owner to decide.
-            let most = w == 9 ? 2.6 : 2.2
+            // OPEN: wave 6, the Wardens' debut (now at full strength from it), costs 1.9 to 2.5
+            // times wave 5 (0.97 against 0.51, 0.99 against 0.36, 1.05 against 0.48 in the
+            // harness; 0.94 against 0.42 on this set, 2.26 times), around the "about double" bar
+            // of 2.2. Held here at what the game does now, for the owner to decide. Wave 10,
+            // over the bar before (2.1 to 2.25 times wave 9), is now 1.4 to 2.0 times it and held
+            // to 2.2 again.
+            let most = w == 5 ? 2.6 : 2.2
             #expect(rates[w] <= max(rates[w - 1], 0.4) * most, "wave \(w + 1): \(rates)")
         }
     }
 
     /// Rescue starts gently: few pods lost in waves 1 and 2, none lost quickly, and losses grow
-    /// in later waves.
+    /// in later waves. The novice now seldom reaches the later waves (1% to 2.5% of its games
+    /// reach wave 4), so the growth is measured with the competent pilot, which loses 0.1% to
+    /// 0.5% of its pods in waves 1 and 2 and 5% to 9% in waves 6 and 7 in the harness.
     @Test func noviceRescueStartsGentlyAndRamps() throws {
         let games = Self.novice
         let dropped = games.reduce(0) { $0 + ($1.dropped[1] ?? 0) + ($1.dropped[2] ?? 0) }
@@ -295,19 +314,28 @@ import GameCore
         let quick = games.reduce(0) { $0 + ($1.lostQuickly[1] ?? 0) + ($1.lostQuickly[2] ?? 0) }
         #expect(Double(lost) <= 0.1 * Double(dropped), "\(lost) of \(dropped) pods lost in waves 1 and 2")
         #expect(Double(quick) <= 0.05 * Double(games.count), "\(quick) lost within 5 s of landing")
-        let laterDropped = games.reduce(0) { $0 + ($1.dropped[6] ?? 0) + ($1.dropped[7] ?? 0) }
-        let laterLost = games.reduce(0) { $0 + ($1.lost[6] ?? 0) + ($1.lost[7] ?? 0) }
-        #expect(Double(laterLost) / Double(max(laterDropped, 1)) > 2 * Double(lost) / Double(max(dropped, 1)))
+        let competent = Self.competent
+        func share(_ waves: [Int]) -> Double {
+            let dropped = competent.reduce(0) { g, game in g + waves.reduce(0) { $0 + (game.dropped[$1] ?? 0) } }
+            let lost = competent.reduce(0) { g, game in g + waves.reduce(0) { $0 + (game.lost[$1] ?? 0) } }
+            return Double(lost) / Double(max(dropped, 1))
+        }
+        print("RIFTWING COMPETENT pods lost: waves 1 and 2 \(share([1, 2])), waves 6 and 7 \(share([6, 7]))")
+        #expect(share([6, 7]) > 2 * share([1, 2]), "\(share([1, 2])) against \(share([6, 7]))")
+        #expect(share([6, 7]) > 2 * Double(lost) / Double(max(dropped, 1)))
     }
 
+    /// The competent pilot reaches about wave 9 (median 9 in each of three sets of 200 seeds in
+    /// the harness; 10 on this set), seldom ends before wave 6 (under a tenth of its games), and
+    /// loses only a few lives in waves 1 and 2 (about 0.2 a game).
     @Test func aCompetentRunReachesTheLaterWaves() throws {
         let games = Self.playAll(.competent, seeds: Self.seeds(12), maxSeconds: 1500)
         let waves = games.map { Double($0.wave) }
         print("RIFTWING COMPETENT waves \(waves)")
-        #expect((8...15).contains(Self.median(waves)), "\(waves)")
+        #expect((7...11).contains(Self.median(waves)), "\(waves)")
         #expect(games.filter { $0.wave < 6 }.count <= 2, "\(waves)")
         let early = games.reduce(0) { $0 + ($1.livesLost[1] ?? 0) + ($1.livesLost[2] ?? 0) }
-        #expect(early <= games.count / 3)
+        #expect(early <= games.count * 2 / 3, "\(early) lives lost in waves 1 and 2")
         // Opening waves last long enough to be a fight and not so long they drag.
         for wave in 1...4 {
             let lengths = games.compactMap { $0.waveLength[wave] }
@@ -353,7 +381,12 @@ import GameCore
     // nearest the owner's: an exploit may clear at most half as many waves as it (waves cleared:
     // the wave reached less the wave started) and score at most a quarter as much a minute. The
     // novice is kept as a second, lower bar, the least honest play does: no exploit may reach a
-    // later wave or score more a minute than it, except where marked OPEN.
+    // later wave or score more a minute than it, except where marked OPEN. Since the opponents
+    // came to fly at full strength from their debuts (later on 2026-11-22) the novice reaches
+    // only about wave 2.5 and clears almost nothing from waves 4 and 7, so several exploits now
+    // outlast it by a wave or outscore it a minute there (marked OPEN), while every exploit stays
+    // within the bars against the competent pilot. Score a minute below is the harness's median
+    // over three sets of 200 seeds (25-minute cap).
 
     /// The bars against the competent pilot from the same start.
     private func expectWellUnderCompetentPlay(_ skill: RiftwingPilot.Skill, games: [Game], competent: [Game],
@@ -373,10 +406,10 @@ import GameCore
     /// under the roof or under the highest ledge, riding one vent, hiding low, bouncing level
     /// without committing, camping the side seam, and hiding high (still or pacing) to stoop on
     /// what passes below; each from the start of a run (the first layout). Measured on three sets
-    /// of 200 seeds (25-minute cap): the competent pilot clears 11.8 waves and scores 39,000 a
-    /// minute; the best exploit, the level bouncer, reaches wave 5.9 (6.04, 5.83, 5.85) at 2,800 a
-    /// minute; every other stays at wave 3.1 or under and 2,150 a minute or under. The novice
-    /// reaches 3.48 at 10,000 a minute.
+    /// of 200 seeds: the competent pilot clears 7.7 waves and scores 34,600 a minute; the best
+    /// exploit, the level bouncer, reaches wave 4.6 (4.55, 4.60, 4.54; 3.55 to 3.6 waves cleared,
+    /// a little under half the competent pilot's 3.85) at 3,200 a minute; every other stays at
+    /// wave 3.0 or under and 2,100 a minute or under. The novice reaches 2.5 at 8,650 a minute.
     @Test(arguments: exploits)
     func noExploitComesNearHonestPlay(_ skill: RiftwingPilot.Skill) throws {
         let games = Self.playAll(skill, seeds: Self.seeds(30), maxSeconds: 1500)
@@ -386,20 +419,30 @@ import GameCore
         let noviceRate = Self.mean(Self.novice.map(\.scorePerMinute))
         print("RIFTWING EXPLOIT \(skill): wave \(wave) against the novice's \(Self.noviceLevel), score a minute \(rate) against \(noviceRate), longest \(games.map(\.survival).max() ?? 0) s")
         #expect(rate < noviceRate, "\(skill)")
-        if skill == .levelBouncer {
-            // OPEN: the level bouncer outlasts the novice: mean wave 5.9 against 3.48 (three sets
-            // of 200 seeds), though at well under a third of its score a minute (2,800 against
-            // 10,000) and under half the competent pilot's waves. Held at what the game does now.
-            #expect(wave <= Self.noviceLevel + 3, "\(skill)")
-        } else {
+        switch skill {
+        case .levelBouncer:
+            // OPEN: the level bouncer outlasts the novice: mean wave 4.6 against 2.5 (three sets
+            // of 200 seeds; 5.9 against 3.48 before the full-strength debuts), though at well
+            // under half its score a minute (3,200 against 8,650) and under half the competent
+            // pilot's waves cleared. Held at what the game does now.
+            #expect(wave <= Self.noviceLevel + 2.5, "\(skill)")
+        case .roofHoverer, .underLedgeHoverer, .ventRider, .ambusher, .pacingAmbusher:
+            // OPEN: hovering under the roof or a ledge, riding a vent and hiding high to stoop
+            // now last into wave 3 and no further (2.8 to 3.0 against the novice's 2.5, three sets
+            // of 200 seeds; 3.0 against 2.46 on this set), at a quarter of its score a minute or
+            // less (2,100 or under against 8,650). Held at what the game does now.
+            #expect(wave <= Self.noviceLevel + 0.75, "\(skill)")
+        default:
             #expect(wave <= Self.noviceLevel, "\(skill)")
         }
     }
 
     /// The same exploits started in the second layout (Spur, wave 4). Measured on three sets of
-    /// 200 seeds: the competent pilot from there reaches wave 12.5 at 39,000 a minute; the level
-    /// bouncer 6.1 at 2,600 a minute; every other exploit 4.07 or under and 2,400 a minute or
-    /// under. The novice from there reaches 4.55 at 6,100 a minute.
+    /// 200 seeds: the competent pilot from there reaches wave 8.3 (8.51, 8.31, 8.16) at 33,400 a
+    /// minute; the level bouncer 5.9 (5.86, 5.88, 5.93) at 3,500 a minute; every other exploit
+    /// 4.01 or under and 2,200 a minute or under. The novice from there reaches 4.05 at 2,250 a
+    /// minute (median; its mean on this set is 3,900): it seldom clears wave 4, so the other
+    /// exploits are held under it by a hair (4.00 against 4.04 to 4.07).
     @Test(arguments: exploits)
     func noExploitComesNearHonestPlayInTheSecondLayout(_ skill: RiftwingPilot.Skill) throws {
         let games = Self.playAll(skill, seeds: Self.seeds(20), maxSeconds: 1500, startAt: 4)
@@ -411,9 +454,10 @@ import GameCore
         print("RIFTWING EXPLOIT FROM WAVE 4 \(skill): wave \(wave) against the novice's \(novice), score a minute \(rate) against \(noviceRate)")
         #expect(rate < noviceRate, "\(skill)")
         if skill == .levelBouncer {
-            // OPEN: the level bouncer outlasts the novice from wave 4 too: wave 6.1 against 4.55
-            // (three sets of 200 seeds), at under half its score a minute (2,600 against 6,100).
-            // Held at what the game does now.
+            // OPEN: the level bouncer outlasts the novice from wave 4 too: wave 5.9 against 4.05
+            // (three sets of 200 seeds; 6.1 against 4.55 before the full-strength debuts), at
+            // under its score a minute on this set (3,500 against 3,900). Held at what the game
+            // does now.
             #expect(wave <= novice + 2.5, "\(skill)")
         } else {
             #expect(wave <= novice, "\(skill)")
@@ -421,9 +465,10 @@ import GameCore
     }
 
     /// The same exploits started in the third layout (Shelves, wave 7). Measured on three sets of
-    /// 200 seeds: the competent pilot from there clears 5.1 waves at 39,000 a minute; no exploit
-    /// clears more than 0.33 (the level bouncer) or scores more than 5,600 a minute (the pacing
-    /// ambusher). The novice clears only 0.18 waves there, at 3,700 a minute.
+    /// 200 seeds: the competent pilot from there clears 2.4 waves (2.40, 2.47, 2.35) at 34,000 a
+    /// minute; no exploit clears more than 0.2 (the level bouncer, 0.17 to 0.22) or scores more
+    /// than 5,500 a minute (the pacing ambusher). The novice clears only 0.01 to 0.03 waves there,
+    /// at 2,100 to 2,700 a minute.
     @Test(arguments: exploits)
     func noExploitComesNearHonestPlayInTheThirdLayout(_ skill: RiftwingPilot.Skill) throws {
         let games = Self.playAll(skill, seeds: Self.seeds(20), maxSeconds: 1500, startAt: 7)
@@ -435,19 +480,27 @@ import GameCore
         print("RIFTWING EXPLOIT FROM WAVE 7 \(skill): waves cleared \(cleared) against the novice's \(novice), score a minute \(rate) against \(noviceRate)")
         switch skill {
         case .levelBouncer:
-            // OPEN: the level bouncer clears more waves from wave 7 than the novice (0.33 against
-            // 0.18, three sets of 200 seeds), at under half its score a minute (1,640 against
-            // 3,700). Held at what the game does now.
+            // OPEN: the level bouncer clears more waves from wave 7 than the novice (0.17 to 0.22
+            // against 0.01 to 0.03, three sets of 200 seeds; 0.15 against 0.02 on this set) and,
+            // on this set, scores more a minute (3,080 against 2,470; their medians in the harness
+            // are level, 2,100 to 2,200 against 2,100 to 2,700). Held at what the game does now.
             #expect(cleared <= novice + 0.5, "\(skill)")
-            #expect(rate < noviceRate, "\(skill)")
+            #expect(rate < noviceRate * 2, "\(skill)")
+        case .seamCamper:
+            // OPEN: camping the side seam outscores the novice a minute from wave 7 (3,600 to
+            // 3,850 against 2,100 to 2,700, three sets of 200 seeds; 4,030 against 2,470 on this
+            // set), though it clears no wave there. Held at what the game does now.
+            #expect(cleared < novice, "\(skill)")
+            #expect(rate < noviceRate * 2, "\(skill)")
         case .ambusher, .pacingAmbusher:
             // OPEN: hiding high to stoop outscores the novice a minute from wave 7: the ambusher
-            // 4,780 and the pacing ambusher 5,590 against the novice's 3,700 (three sets of 200
-            // seeds); the pacing ambusher also clears as many waves as the novice there (0.18
-            // against 0.18; the ambusher 0.10). Both stay far under the competent pilot. Held at
-            // what the game does now.
+            // 4,300 to 5,000 and the pacing ambusher 5,400 to 5,500 against the novice's 2,100 to
+            // 2,700 (three sets of 200 seeds; 3,330 and 5,110 against 2,470 on this set); the
+            // pacing ambusher also clears a little more than the novice there (0.02 to 0.05
+            // against 0.01 to 0.03). Both stay far under the competent pilot. Held at what the
+            // game does now.
             #expect(cleared <= novice + 0.2, "\(skill)")
-            #expect(rate < noviceRate * 2, "\(skill)")
+            #expect(rate < noviceRate * 2.5, "\(skill)")
         default:
             #expect(cleared < novice, "\(skill)")
             #expect(rate < noviceRate, "\(skill)")
