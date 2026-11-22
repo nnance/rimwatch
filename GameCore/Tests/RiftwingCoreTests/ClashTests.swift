@@ -33,7 +33,7 @@ import GameCore
 
     @Test func theLowerRigLosesALife() throws {
         // Clearly above: more than the margin and the lasting leniency (`aMeetingNeedsAClearHeightToWin`).
-        let (r, id, events) = meet(.striker, riderAt: Vec2(450, 305), at: Vec2(450, 333))
+        let (r, id, events) = meet(.striker, riderAt: Vec2(450, 305), at: Vec2(450, 305 + fig(28)))
         #expect(events.contains { if case .clashLost(id, .striker, _) = $0 { true } else { false } })
         #expect(events.contains { if case .riderLost(_, 2, .clash(id, .striker)) = $0 { true } else { false } })
         #expect(!r.rider.isAlive)
@@ -57,18 +57,20 @@ import GameCore
     }
 
     /// To win, an opponent must be more than the margin and the lasting leniency above the rider
-    /// (about 27 units: contact comes at about 29, so it must come down nearly squarely on top).
-    /// Winning for the rider is the margin alone.
+    /// (about 27 units at figure scale 1: contact comes at about 29, so it must come down nearly
+    /// squarely on top; both grow with the figures). Winning for the rider is the margin alone.
     @Test func aMeetingNeedsAClearHeightToWin() throws {
         let r = quietRun()
-        let lose = r.tuning.clashMargin + r.director.leniency(ease: 0)
-        #expect(lose > 24 && lose < 29)
-        #expect(r.clashOutcome(rider: body(y: 300), opponent: body(y: 300 + lose - 0.5), leniency: r.director.leniency(ease: 0)) == .bounce)
-        #expect(r.clashOutcome(rider: body(y: 300), opponent: body(y: 300 + lose + 0.5), leniency: r.director.leniency(ease: 0)) == .lose)
+        let leniency = r.clashLeniency(ease: 0)
+        let lose = r.tuning.clashMargin + leniency
+        #expect(lose > fig(24) && lose < fig(29))
+        #expect(lose < r.tuning.riderRadius + r.tuning.stats(for: .striker).radius)
+        #expect(r.clashOutcome(rider: body(y: 300), opponent: body(y: 300 + lose - 0.5), leniency: leniency) == .bounce)
+        #expect(r.clashOutcome(rider: body(y: 300), opponent: body(y: 300 + lose + 0.5), leniency: leniency) == .lose)
         #expect(r.clashOutcome(rider: body(y: 300 + r.tuning.clashMargin + 0.5), opponent: body(y: 300),
-                               leniency: r.director.leniency(ease: 0)) == .win)
-        // 20 units above is not enough, even at full strength.
-        let near = meet(.striker, riderAt: Vec2(450, 300), at: Vec2(450, 320), ease: 0)
+                               leniency: leniency) == .win)
+        // 20 units above (at figure scale 1) is not enough, even at full strength.
+        let near = meet(.striker, riderAt: Vec2(450, 300), at: Vec2(450, 300 + fig(20)), ease: 0)
         #expect(has(near.events, "clashBounced"))
     }
 
@@ -93,7 +95,7 @@ import GameCore
             (0..<200).count { i in
                 var r = quietRun(seed: UInt64(100 + i))
                 r.placeRider(at: Vec2(450, 300))
-                let id = r.place(.striker, at: Vec2(450, 328), ease: ease)
+                let id = r.place(.striker, at: Vec2(450, 300 + fig(28)), ease: ease)
                 r.freeze(id)
                 return has(r.step(still), "riderLost")
             }
@@ -117,7 +119,7 @@ import GameCore
                 let stand = RiftwingRun.standingPoint(on: ledge, radius: r.rider.body.radius, tuning: r.tuning)
                 r.placeRider(at: standing ? stand : Vec2(stand.x, stand.y + 40))
                 if standing { r.rider.body.ledge = 1 }
-                let id = r.place(.glider, at: Vec2(r.rider.pos.x + 2, r.rider.pos.y + 28.5),
+                let id = r.place(.glider, at: Vec2(r.rider.pos.x + 2, r.rider.pos.y + fig(28.5)),
                                  ease: r.director.ease(of: .glider, inWave: wave))
                 r.freeze(id)
                 return has(r.step(still), "riderLost")
@@ -149,10 +151,10 @@ import GameCore
             return r.step(still)
         }
         // Squarely on top, at its debut: no mercy for a rider clinging to a ceiling.
-        #expect(has(outcome(above: 28.5), "riderLost"))
+        #expect(has(outcome(above: fig(28.5)), "riderLost"))
         // A little above: the ordinary rule bounces it (it once lost here).
-        #expect(has(outcome(above: 5), "clashBounced"))
-        #expect(has(outcome(above: 20), "clashBounced"))
+        #expect(has(outcome(above: fig(5)), "clashBounced"))
+        #expect(has(outcome(above: fig(20)), "clashBounced"))
     }
 
     /// A rider camping by staying in one place draws opponents, but the clash rule is unchanged

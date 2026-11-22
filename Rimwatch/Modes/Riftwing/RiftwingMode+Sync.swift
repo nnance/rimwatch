@@ -114,7 +114,8 @@ extension RiftwingMode {
         if camping, !wasCamping, clock - campingCueAt > 8 {
             campingCueAt = clock
             let at = run.rider.pos
-            effects.ring(at: at, color: theme.palette.warning, from: 60, to: 18, duration: 0.5, width: 0.8)
+            let fig = tuning.figureScale
+            effects.ring(at: at, color: theme.palette.warning, from: 60 * fig, to: 18 * fig, duration: 0.5, width: 0.8)
             popup(.hunted, at: at)
         }
         wasCamping = camping

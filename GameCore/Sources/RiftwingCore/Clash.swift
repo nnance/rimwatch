@@ -25,6 +25,13 @@ extension RiftwingRun {
         return .bounce
     }
 
+    /// The extra height an opponent with `ease` left must have over the rider to win a clash, at
+    /// the figure scale: `RiftwingWaves.leniency(ease:)` is in units at figure scale 1, since it
+    /// is measured against a rig's body.
+    public func clashLeniency(ease: Double) -> Double {
+        tuning.figure(director.leniency(ease: ease))
+    }
+
     mutating func resolveContacts() {
         guard rider.isAlive else { return }
         // Pods the rider reaches are freed (caught, if still falling).
@@ -65,7 +72,7 @@ extension RiftwingRun {
         // the clash is judged by the ordinary rule: nothing makes it harder to win or easier to
         // lose than that.
         let clinging = isRiderClinging
-        let leniency = director.leniency(ease: clinging ? 0 : o.ease)
+        let leniency = clashLeniency(ease: clinging ? 0 : o.ease)
         var outcome = clashOutcome(rider: rider.body, opponent: o.body, leniency: leniency)
         if outcome == .lose, rider.isInvulnerable { outcome = .bounce }
         // Wave 1 is for learning the controls: a rider standing on a ledge in it is never beaten,

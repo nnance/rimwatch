@@ -360,7 +360,7 @@ extension RiftwingRun {
     /// How far to one side of the rider a Warden with `ease` left misjudges its line: up to
     /// `RiftwingWaves.wardenMissEase` times its ease, either side; none at full strength.
     mutating func wardenMiss(ease: Double) -> Double {
-        let most = director.wardenMissEase * min(max(ease, 0), 1)
+        let most = tuning.figure(director.wardenMissEase) * min(max(ease, 0), 1)
         guard most > 0 else { return 0 }
         return (rng.chance(0.5) ? 1 : -1) * rng.range((most * 0.5)...most)
     }
@@ -434,7 +434,8 @@ extension RiftwingRun {
     /// least the wave's minimum time. With nothing to go for, it leaves.
     private mutating func updateGleaner(_ index: Int, _ dt: Double) {
         var o = opponents[index]
-        let carryHeight = tuning.figure(o.body.radius + tuning.basePodRadius)
+        // Its own radius is already at the figure scale.
+        let carryHeight = o.body.radius + tuning.podRadius
         switch o.state {
         case .seeking(let target):
             var podIndex = target.flatMap { id in pods.firstIndex { $0.id == id } }

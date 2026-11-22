@@ -69,6 +69,8 @@ final class RiftwingMode: GameMode {
     let roofSprite = SKSpriteNode()
     let mouthSprite = SKSpriteNode()
     let riftGlow = SKSpriteNode()
+    /// The Rift's glow running on past the left and right edges, fading out.
+    let riftGlowSides = [SKSpriteNode(), SKSpriteNode()]
     let riftLine = SKSpriteNode()
     let gasSprite = SKSpriteNode()
     let gasTop = SKSpriteNode()

@@ -50,10 +50,26 @@ import GameCore
     /// mercy changes and the retuning that followed them, and again after the last round of
     /// corrections (no ramming rule or harder knock, hatched rigs eased for a rider who frees
     /// colonists, the standing rider's footing, the Warden's early dives, the extra life back at
-    /// 35,000, and the pilots' routing).
+    /// 35,000, and the pilots' routing), and again when the figures grew by half
+    /// (`RiftwingTuning.figureScale` 1.5; the run now reaches wave 10).
     @Test func aScriptedRunReplaysExactly() throws {
         let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 330)
         print("RIFTWING GOLDEN hash \(hash) events \(events) score \(r.score) wave \(r.wave) saved \(r.colonistsSaved) lives \(r.rider.lives) tick \(r.tick)")
+        #expect(hash == 4_453_590_931_376_833_822)
+        #expect(events == 1667)
+        #expect(r.score == 161_500)
+        #expect(r.wave == 10)
+        #expect(r.colonistsSaved == 52)
+        #expect(r.rider.lives == 3)
+        #expect(r.tick == 39_600)
+    }
+
+    /// With `RiftwingTuning.figureScale` at 1 the run is exactly the game before the figures
+    /// grew by half: the golden values captured for the last round of corrections.
+    @Test func figureScaleOneReplaysTheGameBeforeTheFiguresGrew() throws {
+        var tuning = RiftwingTuning()
+        tuning.figureScale = 1
+        let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 330, tuning: tuning)
         #expect(hash == 17_106_605_481_073_300_803)
         #expect(events == 1483)
         #expect(r.score == 108_100)

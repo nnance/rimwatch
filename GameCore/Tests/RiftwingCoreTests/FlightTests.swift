@@ -11,8 +11,8 @@ import GameCore
         #expect(r.rider.body.ledge == RiftwingCavern.terraces.startLedge)
         #expect(r.rider.pos.y == ledge.top + r.tuning.riderRadius * r.tuning.feetShare)
         #expect(r.rider.lives == 3)
-        // The rig is about 5% of the gallery's height across.
-        #expect(abs(r.tuning.riderRadius * 2 / r.tuning.height - 0.05) < 0.001)
+        // The rig is about 5% of the gallery's height across at figure scale 1 (7.5% at 1.5).
+        #expect(abs(r.tuning.riderRadius * 2 / r.tuning.height - 0.05 * r.tuning.figureScale) < 0.001)
     }
 
     @Test func gravityPullsARiderInTheAirDown() throws {
@@ -271,6 +271,29 @@ import GameCore
         r.rider.invulnerableTimer = 10
         let events = run(&r, steps: seconds(1), until: { $0.kind == "riderLost" })
         #expect(events.contains { if case .riderLost(_, 2, .rift) = $0 { true } else { false } })
+    }
+
+    /// At the figure scale every rig still fits the cavern: the largest rig can stand on any
+    /// ledge under the rock above it (another ledge or the roof) and pass between two ledges
+    /// one above the other, with room to spare, and can fly under the lowest ledges above the
+    /// Rift.
+    @Test func theLargestRigFitsEveryGapInEveryLayout() throws {
+        let t = RiftwingTuning()
+        let largest = (RiftwingRole.allCases.map { t.stats(for: $0).radius } + [t.riderRadius]).max() ?? 0
+        let feet = largest * t.feetShare, head = largest * t.headShare
+        for layout in RiftwingCavern.layouts {
+            for lower in layout.ledges {
+                // Standing under the roof.
+                #expect(lower.top + feet + head < t.roof - 20, "\(layout.name) \(lower)")
+                // Room to fly beneath it, above the Rift.
+                #expect(lower.top - t.ledgeThickness - head - t.riftLevel > 2 * feet, "\(layout.name) \(lower)")
+                for upper in layout.ledges where upper.top > lower.top
+                    && upper.minX < lower.maxX && upper.maxX > lower.minX {
+                    let gap = upper.top - t.ledgeThickness - lower.top
+                    #expect(gap > 2 * (feet + head), "\(layout.name) \(lower) under \(upper): \(gap)")
+                }
+            }
+        }
     }
 }
 

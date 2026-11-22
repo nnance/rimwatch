@@ -30,7 +30,9 @@ public struct RiftwingWaves: Sendable {
     /// its ease in its first appearances; otherwise the meeting bounces. Winning is unchanged.
     /// Contact comes at about 29 units between centres, so an opponent needing 25 to 30 units
     /// must come down almost squarely on top of the rider: at its debut it can hardly win, and
-    /// its threat grows a little with each appearance as the angle it needs widens.
+    /// its threat grows a little with each appearance as the angle it needs widens. Both are
+    /// units at figure scale 1 (`RiftwingTuning.figureScale`); the run scales them with the
+    /// figures (`RiftwingRun.clashLeniency(ease:)`), since they are measured against a rig.
     public var clashLeniency = 0.0
     public var clashLeniencyBase = 16.1
     /// In its first appearances an opponent that would win a clash misjudges it, and the meeting
@@ -146,7 +148,8 @@ public struct RiftwingWaves: Sendable {
     public var wardenReplanEase = 0.3
     /// ... and misjudging its line by up to this many units across at its fullest ease (at
     /// least half of that, either side, drawn afresh for each dive): it lines up and dives beside
-    /// the rider, so fewer of its dives reach it. Contact comes at about 30 units.
+    /// the rider, so fewer of its dives reach it. Contact comes at about 30 units. Units at figure
+    /// scale 1: the run scales it with the figures.
     public var wardenMissEase = 55.0
     /// Sower: at its fullest ease, its mines come this share less often, it holds this many
     /// fewer at once, and it drifts this much more slowly.

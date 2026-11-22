@@ -34,6 +34,9 @@ extension RiftwingMode {
         static let breathMark: CGFloat = 6.7
         static let effects: CGFloat = 7
         static let masks: CGFloat = 8
+        /// Over the covers: the Rift's glow running on past the sides.
+        static let sideGlow: CGFloat = 8.4
+        /// Over the covers: the roof, the Rift's edge and the tunnel lines past the sides.
         static let mouths: CGFloat = 8.5
         static let arrivalGlow: CGFloat = 8.55
         static let arrival: CGFloat = 8.6
@@ -109,6 +112,11 @@ extension RiftwingMode {
         }
         gasSprite.blendMode = .add
         riftGlow.blendMode = .add
+        for glow in riftGlowSides {
+            glow.blendMode = .add
+            glow.zPosition = Depth.sideGlow
+            galleryLayer.addChild(glow)
+        }
         for _ in 0..<4 {
             let mask = SKSpriteNode(color: .black, size: CGSize(width: 1, height: 1))
             mask.anchorPoint = .zero
@@ -216,19 +224,47 @@ extension RiftwingMode {
         RiftwingSprites.dress(roofSprite, with: glyphs.glyph(key: "roof", strokes: roof, pointsPerUnit: ppu), factory: factory)
         roofSprite.position = .zero
 
-        // The tunnel mouths: each side edge opens into a tunnel receding into the rock beyond it.
+        // The open sides: a rig flying off one side comes back on the other, so nothing closes
+        // the gallery at its edges. Past each edge (over the black covers that keep figures out
+        // of the margins) the roof and the Rift's edge run on and fade out, and faint lines
+        // recede into the tunnel the opponents come out of, fading with no stroke to close them.
         var mouths: [ShapeStroke] = []
-        let faint = palette.rockFaint.lightened(0.2)
+        let reach = sideReach
+        let level = tuning.riftLevel
+        let wobble = [0.0, 3, -2, 4, -3, 1, -4, 2]
         for side in [-1.0, 1.0] {
             let edge = side < 0 ? 0.0 : w
-            let depth = 46.0
-            mouths.append(ShapeStroke([Vec2(edge, h), Vec2(edge + side * depth, h - 40), Vec2(edge + side * depth, 60),
-                                       Vec2(edge, 0)], color: faint))
-            mouths.append(ShapeStroke([Vec2(edge + side * depth * 0.5, h - 20), Vec2(edge + side * depth * 0.5, 30)],
-                                      color: palette.rockFaint))
-            for y in stride(from: 120.0, through: 480, by: 120) {
-                mouths.append(ShapeStroke([Vec2(edge, y), Vec2(edge + side * depth, y + (300 - y) * 0.12)],
-                                          color: palette.rockFaint.scaled(0.8)))
+            // The roof, continued round the join (its jag from the other end) and fading.
+            var roofOn: [Vec2] = []
+            for i in 0...4 {
+                let j = side > 0 ? jag[i % jag.count] : jag[(jag.count - 1 - i) % jag.count]
+                roofOn.append(Vec2(edge + side * Double(i) * w / Double(jag.count - 1), h - j))
+            }
+            mouths += Self.fading(roofOn, color: palette.rock.scaled(0.8), edge: edge, reach: reach)
+            // The Rift's fissure and the crack under it, running on and fading (the same marks
+            // as `riftLine`, continued past its last point).
+            var fissureOn: [Vec2] = []
+            var crackOn: [Vec2] = []
+            for k in 0...5 {
+                let i = side > 0 ? 36 + k : -k
+                let x = Double(i) * w / 36
+                let wob = wobble[((i % 8) + 8) % 8]
+                fissureOn.append(Vec2(x, level - 4 + wob))
+                crackOn.append(Vec2(x + 6, level - 12 - wob * 0.6))
+            }
+            mouths += Self.fading(crackOn, color: palette.rift.scaled(0.6), edge: edge, reach: reach)
+            mouths += Self.fading(fissureOn, color: palette.rift, edge: edge, reach: reach)
+            // The tunnel: faint lines receding toward a point deep in the rock beyond, brightest
+            // at the edge and fading out both ways: into the gallery a little, and out past the
+            // edge into the margin. Nothing closes them.
+            let vanish = Vec2(edge + side * 520, h * 0.52)
+            let inner = Self.tunnelInside
+            for (y, strength) in [(h - 14, 0.75), (470.0, 0.55), (360.0, 0.45), (250.0, 0.45), (140.0, 0.55), (52.0, 0.7)] {
+                let atEdge = Vec2(edge, y)
+                let toward = (vanish - atEdge) * (1 / abs(vanish.x - edge))
+                mouths += Self.fading([atEdge - toward * inner, atEdge + toward * (reach * 1.05)],
+                                      color: palette.rockFaint.lightened(0.35).scaled(strength),
+                                      edge: edge, reach: reach, side: side, inside: inner)
             }
         }
         RiftwingSprites.dress(mouthSprite, with: glyphs.glyph(key: "mouths", strokes: mouths, pointsPerUnit: ppu),
@@ -250,6 +286,15 @@ extension RiftwingMode {
         riftGlow.anchorPoint = .zero
         riftGlow.size = CGSize(width: w, height: 80)
         riftGlow.position = .zero
+        // ... running on past each side and fading out, over the black covers.
+        let sideGlow = Self.sideGlowTexture(palette.rift, bottom: 0.55, top: 0)
+        for (index, glow) in riftGlowSides.enumerated() {
+            glow.texture = sideGlow
+            glow.anchorPoint = .zero
+            glow.size = CGSize(width: reach, height: 80)
+            glow.xScale = index == 0 ? -1 : 1
+            glow.position = CGPoint(x: index == 0 ? 0 : w, y: 0)
+        }
         // The breath gathering: a sickly glow that climbs out of the Rift while it warns.
         breathGlow.texture = Self.gradientTexture(palette.gas, bottom: 0.6, top: 0.04)
         breathGlow.anchorPoint = .zero
@@ -259,12 +304,11 @@ extension RiftwingMode {
         for sprite in ventColumns { sprite.texture = column }
         var fissure: [Vec2] = []
         var crack: [Vec2] = []
-        let level = tuning.riftLevel
         for i in 0...36 {
             let x = Double(i) * w / 36
-            let wobble = [0.0, 3, -2, 4, -3, 1, -4, 2][i % 8]
-            fissure.append(Vec2(x, level - 4 + wobble))
-            crack.append(Vec2(x + 6, level - 12 - wobble * 0.6))
+            let wob = wobble[i % 8]
+            fissure.append(Vec2(x, level - 4 + wob))
+            crack.append(Vec2(x + 6, level - 12 - wob * 0.6))
         }
         RiftwingSprites.dress(riftLine, with: glyphs.glyph(key: "rift", strokes: [
             ShapeStroke(crack, color: palette.rift.scaled(0.6)),
@@ -301,6 +345,65 @@ extension RiftwingMode {
         let mote = glyphs.glyph(key: "mote", strokes: [ShapeStroke([Vec2(0, -2.5), Vec2(0, 2.5)], color: palette.vent)],
                                 pointsPerUnit: ppu)
         for sprite in moteSprites { RiftwingSprites.dress(sprite, with: mote, factory: factory) }
+    }
+
+    /// The most the roof, the Rift and the tunnel lines run on past each side edge before they
+    /// have faded out, in gallery units.
+    static let sideRun = 80.0
+    /// How far into the gallery the tunnel lines reach from a side edge, fading in.
+    static let tunnelInside = 30.0
+
+    /// How far past the side edges things run on before fading out: the visible margin beside
+    /// the gallery (so they are gone before the screen's edge cuts them), up to `sideRun`.
+    var sideReach: Double {
+        let ppu = max(pointsPerUnit, 0.01)
+        let left = galleryOrigin.x / ppu
+        let right = (size.width - galleryOrigin.x) / ppu - tuning.width
+        return min(max(Double(min(left, right)), 10), Self.sideRun)
+    }
+
+    /// `points` as a line that fades out with distance from the side edge at `edge`, gone by
+    /// `reach` units past it: cut into short pieces, each dimmer than the one before. With a
+    /// `side` (-1 for the left edge, 1 for the right) and an `inside`, it also fades in from
+    /// `inside` units within the gallery, brightest at the edge.
+    static func fading(_ points: [Vec2], color: RGB, edge: Double, reach: Double, side: Double = 0,
+                       inside: Double = 0) -> [ShapeStroke] {
+        var strokes: [ShapeStroke] = []
+        for (a, b) in zip(points, points.dropFirst()) {
+            let length = hypot(b.x - a.x, b.y - a.y)
+            let pieces = max(Int((length / 4).rounded(.up)), 1)
+            for k in 0..<pieces {
+                let p = a + (b - a) * (Double(k) / Double(pieces))
+                let q = a + (b - a) * (Double(k + 1) / Double(pieces))
+                let past = ((p.x + q.x) / 2 - edge) * side
+                let out = side != 0 && past < 0 ? -past / max(inside, 1e-9) : abs((p.x + q.x) / 2 - edge) / reach
+                let strength = pow(max(1 - out, 0), 1.6)
+                guard strength > 0.03 else { continue }
+                strokes.append(ShapeStroke([p, q], color: color.scaled(strength)))
+            }
+        }
+        return strokes
+    }
+
+    /// The Rift's glow for past a side edge: `gradientTexture`'s rise from the bottom, fading out
+    /// across from full at its left to nothing at its right.
+    static func sideGlowTexture(_ color: RGB, bottom: Double, top: Double) -> SKTexture {
+        let size = CGSize(width: 32, height: 128)
+        let image = GlowShapeFactory.image(size: size, scale: 1) { context in
+            let space = CGColorSpaceCreateDeviceRGB()
+            let up = CGGradient(colorsSpace: space, colors: [color.cgColor(alpha: bottom), color.cgColor(alpha: top)] as CFArray,
+                                locations: [0, 1])!
+            context.drawLinearGradient(up, start: CGPoint(x: 0, y: size.height), end: .zero, options: [])
+            context.setBlendMode(.destinationIn)
+            let across = CGGradient(colorsSpace: space, colors: [UIColor(white: 1, alpha: 1).cgColor,
+                                                                 UIColor(white: 1, alpha: 0.35).cgColor,
+                                                                 UIColor(white: 1, alpha: 0).cgColor] as CFArray,
+                                    locations: [0, 0.35, 1])!
+            context.drawLinearGradient(across, start: .zero, end: CGPoint(x: size.width, y: 0), options: [])
+        }
+        let texture = SKTexture(image: image)
+        texture.filteringMode = .linear
+        return texture
     }
 
     /// A ledge as rock in outline: a flat bright top (the standing surface), the ends rounding
@@ -622,6 +725,11 @@ extension RiftwingMode {
         let beat = filling ? 14.0 : 9.0
         riftGlow.alpha = CGFloat(warning ? flicker + 0.35 * abs(sin(clock * beat)) : flicker)
         riftGlow.yScale = warning ? CGFloat((filling ? 1.9 : 1.4) + 0.3 * sin(clock * beat)) : CGFloat(1 + 0.08 * sin(clock * 1.1))
+        for glow in riftGlowSides {
+            // Dimmed with the lamps out, as the darkness dims the glow inside the gallery.
+            glow.alpha = riftGlow.alpha * CGFloat(1 - 0.6 * darkMix)
+            glow.yScale = riftGlow.yScale
+        }
         riftLine.alpha = CGFloat(0.8 + 0.2 * sin(clock * 5))
         for (i, spot) in riftSpots.enumerated() {
             let phase = Double(i) * 1.7
@@ -716,6 +824,7 @@ extension RiftwingMode {
             darknessTwin.alpha = darkness.alpha
         }
         roofSprite.alpha = CGFloat(1 - 0.7 * darkMix)
+        mouthSprite.alpha = roofSprite.alpha
     }
 
     // MARK: Warm-up and the title backdrop
@@ -808,6 +917,7 @@ extension RiftwingMode {
         darkness.isHidden = true
         darknessTwin.isHidden = true
         roofSprite.alpha = 1
+        mouthSprite.alpha = 1
         shake = 0
         isShifting = false
         fallingLayout = -1

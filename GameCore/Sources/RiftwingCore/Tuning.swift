@@ -28,11 +28,15 @@ public struct RiftwingTuning: Sendable {
     public init() {}
 
     /// Figure size. Every figure (the rider's rig, each opponent, pods, mines, and the reaches
-    /// that follow from their sizes) is its base size times this. The app draws them at the same
-    /// factor, so what is drawn is what collides. At 1 the rig is 30 units across, 5% of the
-    /// gallery's height, as the owner asked after finding Redoubt's first figures too small.
-    /// The gallery, ledges, speeds and heights do not follow it.
-    public var figureScale = 1.0
+    /// that follow from their sizes: the pod slack, the clash margin and leniency, a Warden's
+    /// early misjudged line, a mine's tether and sway) is its base size times this. The app
+    /// draws them at the same factor, so what is drawn is what collides. At 1 the rig is 30
+    /// units across, 5% of the gallery's height; raised to 1.5 (45 across) after the owner's
+    /// first play found the rigs too small on the phone. At 1 the game is exactly the one
+    /// before. Each scaled distance reads its `base` value (the size at 1) times this; setting
+    /// the scaled name sets the base. The gallery, ledges, speeds, heights, behaviour distances
+    /// and the Rift's levels do not follow it.
+    public var figureScale = 1.5
 
     // The gallery
     public var width = 900.0
@@ -109,8 +113,13 @@ public struct RiftwingTuning: Sendable {
     public var podSlack: Double { basePodSlack * figureScale }
 
     // The clash
-    /// Within this many units of level, both bounce apart and nobody is hurt.
-    public var clashMargin = 11.0
+    /// Within this many units of level, both bounce apart and nobody is hurt (11 at figure
+    /// scale 1, measured against a rig's body).
+    public var clashMargin: Double {
+        get { baseClashMargin * figureScale }
+        set { baseClashMargin = newValue / figureScale }
+    }
+    public var baseClashMargin = 11.0
     /// No longer used: camping once narrowed the clash to this many units, so a rider resting
     /// or flying near the roof lost to anything a little above it. Camping now never changes
     /// the clash rule; a rider clinging to a ceiling (`RiftwingRun.isRiderClinging`) only loses
@@ -307,8 +316,16 @@ public struct RiftwingTuning: Sendable {
     public var sowerBand = 260.0...470.0
     public var mineInterval = 3.5
     public var minesPerSower = 4
-    public var mineTether = 34.0
-    public var mineSway = 5.0
+    public var mineTether: Double {
+        get { baseMineTether * figureScale }
+        set { baseMineTether = newValue / figureScale }
+    }
+    public var baseMineTether = 34.0
+    public var mineSway: Double {
+        get { baseMineSway * figureScale }
+        set { baseMineSway = newValue / figureScale }
+    }
+    public var baseMineSway = 5.0
     public var mineLifetime = 18.0
     /// A Sower lays no mine this close to the rider.
     public var mineClearance = 110.0

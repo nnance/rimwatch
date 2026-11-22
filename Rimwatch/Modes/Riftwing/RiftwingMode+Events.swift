@@ -165,7 +165,7 @@ extension RiftwingMode {
                 effects.spray(at: at, angle: Double.pi / 2, spread: 1.1, color: cyan.lightened(0.4), count: 6, speed: 170,
                               life: 0.3, size: 0.8, length: 1.6)
                 kickRider(stoop ? 0.3 : 0.2)
-                if stoop { popup(.stoop, at: at + Vec2(0, 20)) }
+                if stoop { popup(.stoop, at: at + Vec2(0, 20 * fig)) }
                 if role == .gleaner { effects.burst(at: at, color: theme.color(of: role), count: 10, speed: 160, life: 0.4) }
             case .clashBounced(_, let role, let at):
                 // Level: both thrown apart sideways, with a clang of white.
@@ -280,7 +280,7 @@ extension RiftwingMode {
                 effects.flash(at: at, radius: 30 * fig, color: mint, life: 0.3, strength: 0.8)
                 effects.ring(at: at, color: mint, from: 8 * fig, to: 34 * fig, duration: 0.35, width: 0.8)
                 callouts.popup("+\(groupedDigits(points))", at: screenPoint(at), color: palette.reward, scale: 1.15)
-                popup(.freed, at: at + Vec2(0, -24))
+                popup(.freed, at: at + Vec2(0, -24 * fig))
                 hud.flash(.saved, at: clock)
             case .podCaught(_, let at, _, let points):
                 effects.colonist(at: at)
@@ -288,7 +288,7 @@ extension RiftwingMode {
                 effects.flash(at: at, radius: 40 * fig, color: palette.reward, life: 0.35, strength: 0.9)
                 effects.ring(at: at, color: palette.reward, from: 10 * fig, to: 50 * fig, duration: 0.45, width: 1.2)
                 callouts.popup("+\(groupedDigits(points))", at: screenPoint(at), color: palette.reward, scale: 1.3)
-                popup(.caught, at: at + Vec2(0, -24))
+                popup(.caught, at: at + Vec2(0, -24 * fig))
                 hud.flash(.saved, at: clock)
             case .podSeized(_, _, let at):
                 popup(.taken, at: at)

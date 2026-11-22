@@ -80,10 +80,14 @@ import GameCore
     /// (`RiftwingTuning.gliderDrawAfter(forWave:)`) draws the Gliders' wandering to about its
     /// height, so no perch is safe for ever.
     @Test func aGliderIsDrawnToARiderThatStaysPut() throws {
-        // Opponents cannot win here (a huge leniency), so the rider stays put unhurt.
+        // Nobody can win here (a huge leniency and margin), so the rider stays put unhurt and the
+        // Glider is not knocked off when it comes near (at the grown figure size a Glider at the
+        // top of its band already reaches a rider perched under the roof).
         var waves = RiftwingWaves()
         waves.clashLeniencyBase = 1000
-        var r = quietRun(seed: 3, waves: waves)
+        var tuning = RiftwingTuning()
+        tuning.clashMargin = 1000
+        var r = quietRun(seed: 3, tuning: tuning, waves: waves)
         let perch = Vec2(450, 560)
         let id = r.place(.glider, at: Vec2(150, 300), ease: 0)
         let allowed = r.tuning.gliderDrawAfter(forWave: 1)

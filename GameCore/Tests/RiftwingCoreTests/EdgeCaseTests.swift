@@ -124,7 +124,7 @@ import GameCore
         var r = quietRun()
         let id = r.place(.glider, at: Vec2(450, 300))
         r.freeze(id)
-        r.placeRider(at: Vec2(440, 318))
+        r.placeRider(at: Vec2(450 - fig(10), 300 + fig(18)))
         var podID: Int?
         for _ in 0..<seconds(0.1) {
             for event in r.step(still) {

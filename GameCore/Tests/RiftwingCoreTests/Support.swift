@@ -113,3 +113,7 @@ func count(_ events: [RiftwingEvent], _ kind: String) -> Int {
 func has(_ events: [RiftwingEvent], _ kind: String) -> Bool {
     events.contains { $0.kind == kind }
 }
+
+/// A size at figure scale 1 (`base`) at the tuning's figure scale: test geometry measured against
+/// a rig's body grows with the figures.
+func fig(_ base: Double) -> Double { RiftwingTuning().figure(base) }
