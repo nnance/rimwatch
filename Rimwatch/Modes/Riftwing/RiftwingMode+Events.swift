@@ -11,7 +11,7 @@ extension RiftwingMode {
     /// Where an event happened, if it has a place.
     func position(of event: RiftwingEvent) -> Vec2? {
         switch event {
-        case .flapped(let at, _), .landed(let at, _), .bumpedLedge(let at), .diveBegan(let at), .wingsOpening(let at),
+        case .flapped(let at, _), .landed(let at, _), .bumpedLedge(let at), .bumpedRoof(let at), .diveBegan(let at), .wingsOpening(let at),
              .wingsOpened(let at), .ventEntered(_, let at), .clashWon(_, _, let at, _), .clashBounced(_, _, let at),
              .clashLost(_, _, let at), .gleanerBumped(_, let at), .riderLost(let at, _, _), .riderRespawned(let at, _),
              .arrivalTelegraphed(_, _, _, let at), .opponentArrived(_, _, let at), .opponentDived(_, _, let at),
@@ -22,7 +22,7 @@ extension RiftwingMode {
              .podHatched(_, _, _, let at):
             return at
         case .waveStarted, .waveCleared, .cavernShifting, .cavernShifted, .allColonistsLost, .lampsFailed,
-             .lampsRestored, .riftWarning, .riftBreathed, .riftSettled, .extraLife, .gameOver:
+             .lampsRestored, .riftWarning, .riftFillWarning, .riftBreathed, .riftSettled, .extraLife, .gameOver:
             return nil
         }
     }
@@ -89,6 +89,10 @@ extension RiftwingMode {
                 callouts.flash(palette.reward, strength: 0.15, duration: 0.5)
             case .riftWarning:
                 callouts.notice("THE RIFT IS BREATHING. CLIMB!", color: palette.gas, life: 2.4)
+            case .riftFillWarning:
+                // The last step of the breath: the gas fills the gallery.
+                callouts.notice("THE RIFT ERUPTS. FINISH THE FIGHT!", color: palette.warning, life: 3.0)
+                addShake(4)
             case .riftBreathed:
                 callouts.flash(palette.gas, strength: 0.06, duration: 0.5)
                 addShake(2)
@@ -98,7 +102,7 @@ extension RiftwingMode {
             // The rider
             case .flapped, .landed, .wingsOpening, .wingsOpened, .ventEntered:
                 break
-            case .bumpedLedge(let at):
+            case .bumpedLedge(let at), .bumpedRoof(let at):
                 effects.burst(at: at + Vec2(0, tuning.riderRadius * 0.6), color: palette.rock, count: 3, speed: 60, life: 0.25,
                               size: 0.7)
             case .diveBegan(let at):

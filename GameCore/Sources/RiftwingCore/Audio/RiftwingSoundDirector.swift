@@ -116,10 +116,10 @@ public struct RiftwingSoundDirector: Sendable {
     /// How much an event matters to the ear (see the type's notes).
     public static func tier(of event: RiftwingEvent) -> Tier {
         switch event {
-        case .clashLost, .riderLost, .podLost, .podSeized, .hatchWarning, .riftWarning, .lampsFailed,
+        case .clashLost, .riderLost, .podLost, .podSeized, .hatchWarning, .riftWarning, .riftFillWarning, .lampsFailed,
              .allColonistsLost, .gameOver:
             .urgent
-        case .flapped, .landed, .bumpedLedge, .ventEntered, .mineLaid, .podLanded, .arrivalTelegraphed,
+        case .flapped, .landed, .bumpedLedge, .bumpedRoof, .ventEntered, .mineLaid, .podLanded, .arrivalTelegraphed,
              .opponentFell, .riftSettled:
             .small
         default:
@@ -134,7 +134,7 @@ public struct RiftwingSoundDirector: Sendable {
         case .flapped(_, false): flapGapTicks
         case .flapped(_, true): 18
         case .landed: 30
-        case .bumpedLedge: 30
+        case .bumpedLedge, .bumpedRoof: 30
         case .ventEntered: 120
         case .mineLaid: 30
         case .arrivalTelegraphed: 48
@@ -159,12 +159,12 @@ public struct RiftwingSoundDirector: Sendable {
         case .allColonistsLost: 5
         case .lampsFailed: 6
         case .lampsRestored: 7
-        case .riftWarning: 8
+        case .riftWarning, .riftFillWarning: 8
         case .riftBreathed: 9
         case .riftSettled: 10
         case .flapped(_, let fromLedge): fromLedge ? 12 : 11
         case .landed: 13
-        case .bumpedLedge: 14
+        case .bumpedLedge, .bumpedRoof: 14
         case .diveBegan: 15
         case .wingsOpening: 16
         case .ventEntered: 17

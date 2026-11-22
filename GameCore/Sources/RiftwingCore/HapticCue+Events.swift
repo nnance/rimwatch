@@ -23,7 +23,7 @@ extension HapticCue {
             .tap
         case .podFreed, .podCaught, .waveCleared, .extraLife, .lampsRestored:
             .doubleTap
-        case .podSeized, .hatchWarning, .riftWarning:
+        case .podSeized, .hatchWarning, .riftWarning, .riftFillWarning:
             .warning
         case .podLost:
             .impact
