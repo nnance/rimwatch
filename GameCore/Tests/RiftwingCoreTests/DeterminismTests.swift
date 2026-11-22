@@ -41,19 +41,20 @@ import GameCore
     }
 
     /// Three minutes of the competent pilot on seed 1: waves 1 to 6, the cavern's first shift,
-    /// four of the five roles and two extra lives. Debug and Release builds give the same values
+    /// four of the five roles. Debug and Release builds give the same values
     /// (`GOLDEN=1 .build/release/Harness riftwing` prints them from a release build). If a
     /// deliberate change to the rules, the tuning, the wave table or the pilot breaks it, capture
-    /// the new values from the printed line and say so in the commit. First captured for 15a.
+    /// the new values from the printed line and say so in the commit. First captured for 15a;
+    /// re-captured after the check's fixes (a catch needs pursuit).
     @Test func aScriptedRunReplaysExactly() throws {
         let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180)
         print("RIFTWING GOLDEN hash \(hash) events \(events) score \(r.score) wave \(r.wave) saved \(r.colonistsSaved) lives \(r.rider.lives) tick \(r.tick)")
-        #expect(hash == 9_537_427_139_909_576_491)
-        #expect(events == 840)
-        #expect(r.score == 79_100)
+        #expect(hash == 6_526_289_674_064_225_972)
+        #expect(events == 908)
+        #expect(r.score == 60_050)
         #expect(r.wave == 6)
-        #expect(r.colonistsSaved == 25)
-        #expect(r.rider.lives == 5)
+        #expect(r.colonistsSaved == 20)
+        #expect(r.rider.lives == 3)
         #expect(r.tick == 21_600)
     }
 }

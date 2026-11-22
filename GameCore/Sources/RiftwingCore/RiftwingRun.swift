@@ -64,6 +64,8 @@ public struct RiftwingRun: Sendable {
     /// Gleaners this wave still has to send, and the wave-clock time the next may come.
     var gleanersLeft = 0
     var gleanerNextAt = 0.0
+    /// The step since which no place in the mouths has been clear for a new arrival.
+    var arrivalBlockedSince: Int?
     /// Wave-clock time of the next breath's warning.
     var nextBreathAt = 0.0
     /// The next wave's layout is ready (applied in the last second of the break).
@@ -121,6 +123,16 @@ public struct RiftwingRun: Sendable {
         min(tuning.breathLevel + tuning.breathGrowth * Double(max(breathsThisWave - 1, 0)), tuning.roof)
     }
 
+    /// Seconds until the current breath stops taking what is under it (0 while calm or falling).
+    public var breathDeadlyTimeLeft: Double {
+        switch breath {
+        case .calm, .falling: 0
+        case .warning(let remaining): remaining + tuning.breathRise + tuning.breathHold
+        case .rising(let remaining): remaining + tuning.breathHold
+        case .holding(let remaining): remaining
+        }
+    }
+
     /// True while the gas takes whatever is under `gasLevel`.
     public var isBreathDeadly: Bool {
         switch breath {
@@ -155,13 +167,18 @@ public struct RiftwingRun: Sendable {
         events.removeAll(keepingCapacity: true)
         tick += 1
         let dt = Self.timeStep
+        // Nothing happens after the game is over, even later in the step that ended it, so the
+        // score `gameOver` announced is the final score.
         updatePhase(dt)
         updateRider(input, dt)
+        if isGameOver { return events }
         updateOpponents(dt)
         updatePods(dt)
         updateMines(dt)
         resolveContacts()
+        if isGameOver { return events }
         applyBreath()
+        if isGameOver { return events }
         opponents.removeAll { $0.isDead }
         checkWaveCleared()
         return events
@@ -206,20 +223,80 @@ public struct RiftwingRun: Sendable {
         }
     }
 
-    /// Puts the gallery in layout `index`. A rider standing on a ledge that is gone takes to the
-    /// air; one caught inside new rock is lifted onto it.
+    /// Puts the gallery in layout `index`. Nothing is left inside rock: a rider (or rig) that
+    /// was standing ends standing on the nearest ledge of the new layout, one flying is moved
+    /// out of any rock into free space, and pods are treated the same way (a resting pod rests
+    /// on the nearest new ledge). The shift itself never costs the rider a life.
     mutating func applyLayout(_ index: Int) {
         layoutIndex = index
         events.append(.cavernShifted(layout: index))
-        rider.body.ledge = nil
-        for (i, ledge) in ledges.enumerated() where ledge.spans(rider.body.pos.x) {
-            let feet = rider.body.radius * tuning.feetShare, head = rider.body.radius * tuning.headShare
-            if rider.body.pos.y - feet < ledge.top + 1, rider.body.pos.y + head > ledge.top - tuning.ledgeThickness {
-                rider.body.pos.y = ledge.top + feet
-                rider.body.vel.y = 0
-                rider.body.ledge = i
+        if rider.isAlive { settleAfterShift(&rider.body) }
+        for i in opponents.indices where !opponents[i].isDead {
+            settleAfterShift(&opponents[i].body)
+        }
+        let r = tuning.podRadius
+        for i in pods.indices {
+            switch pods[i].state {
+            case .resting:
+                let (ledge, p) = nearestStand(to: pods[i].pos, lift: r)
+                pods[i].pos = p
+                pods[i].state = .resting(ledge: ledge)
+            case .falling:
+                pods[i].pos.y = outOfRock(pods[i].pos, feet: r, head: r)
+            case .seized, .freed, .lost:
+                break
             }
         }
+    }
+
+    /// A body after the cavern shifted: standing, it stands on the nearest new ledge; flying, it
+    /// is moved out of any rock it is now inside.
+    private func settleAfterShift(_ b: inout RiftwingBody) {
+        let feet = b.radius * tuning.feetShare, head = b.radius * tuning.headShare
+        if b.isGrounded {
+            let (ledge, p) = nearestStand(to: b.pos, lift: feet)
+            b.pos = p
+            b.vel = .zero
+            b.ledge = ledge
+            b.isDiving = false
+            b.reopen = 0
+        } else {
+            b.pos.y = outOfRock(b.pos, feet: feet, head: head)
+        }
+    }
+
+    /// The ledge whose standing surface is nearest `p` (with `lift` from the feet to the
+    /// centre), and the point on it, a little in from its ends.
+    func nearestStand(to p: Vec2, lift: Double) -> (Int, Vec2) {
+        var best = 0
+        var bestPoint = p
+        var bestGap = Double.infinity
+        for (index, ledge) in ledges.enumerated() {
+            let inset = min(2, ledge.length / 2)
+            let q = Vec2(clamp(p.x, ledge.minX + inset, ledge.maxX - inset), ledge.top + lift)
+            let gap = hypot(q.x - p.x, q.y - p.y)
+            if gap < bestGap {
+                bestGap = gap
+                best = index
+                bestPoint = q
+            }
+        }
+        return (best, bestPoint)
+    }
+
+    /// A height for something at `p` (reaching `feet` below its centre and `head` above) that is
+    /// clear of every ledge's rock: unchanged if it is clear, else moved to the nearer of just
+    /// above or just below the rock it is in.
+    func outOfRock(_ p: Vec2, feet: Double, head: Double) -> Double {
+        var y = p.y
+        for _ in 0..<3 {
+            guard let ledge = ledges.first(where: { l in
+                l.spans(p.x) && y - feet < l.top && y + head > l.top - tuning.ledgeThickness
+            }) else { break }
+            let up = ledge.top + feet + 0.5, down = ledge.top - tuning.ledgeThickness - head - 0.5
+            y = up - y <= y - down ? up : down
+        }
+        return y
     }
 
     mutating func startWave() {
@@ -254,7 +331,7 @@ public struct RiftwingRun: Sendable {
     }
 
     private mutating func checkWaveCleared() {
-        guard wavesEnabled, phase == .fighting, rigsHoldingWave == 0, podsInPlay == 0 else { return }
+        guard wavesEnabled, !isGameOver, phase == .fighting, rigsHoldingWave == 0, podsInPlay == 0 else { return }
         clearWave()
     }
 
@@ -340,7 +417,8 @@ public struct RiftwingRun: Sendable {
 
     /// Starts an arrival's glow in a tunnel mouth at a height at least `safeDistance` from the
     /// rider (and from where it will return while it is down). False when no mouth is clear;
-    /// the caller tries again next step.
+    /// the caller tries again next step. Once no mouth has been clear for
+    /// `arrivalPatience`, it glows anyway at the farthest place, for longer, and will come out.
     @discardableResult
     mutating func telegraph(_ role: RiftwingRole) -> Bool {
         let r = tuning.stats(for: role).radius
@@ -349,12 +427,45 @@ public struct RiftwingRun: Sendable {
             let y = rng.range(tuning.arrivalHeights)
             let p = Vec2(side == .left ? r : tuning.width - r, y)
             guard isClearOfRider(p, by: tuning.safeDistance) else { continue }
+            arrivalBlockedSince = nil
             let id = takeID()
-            arrivals.append(RiftwingArrival(id: id, role: role, side: side, pos: p, remaining: tuning.telegraphTime))
+            arrivals.append(RiftwingArrival(id: id, role: role, side: side, pos: p, remaining: tuning.telegraphTime,
+                                            glowTime: tuning.telegraphTime))
             events.append(.arrivalTelegraphed(id: id, role: role, side: side, at: p))
             return true
         }
-        return false
+        let since = arrivalBlockedSince ?? tick
+        arrivalBlockedSince = since
+        guard Double(tick - since) * Self.timeStep >= tuning.arrivalPatience - 1e-9 else { return false }
+        arrivalBlockedSince = nil
+        forceArrival(id: takeID(), role: role)
+        return true
+    }
+
+    /// An arrival that waited too long for a clear place glows at the place in the mouths
+    /// farthest from the rider, for `forcedTelegraphTime`, and comes out there whatever happens.
+    private mutating func forceArrival(id: Int, role: RiftwingRole) {
+        let r = tuning.stats(for: role).radius
+        let heights = tuning.arrivalHeights
+        var best = Vec2(r, heights.lowerBound)
+        var bestSide = RiftwingSide.left
+        var bestGap = -Double.infinity
+        for side in RiftwingSide.allCases {
+            for i in 0...20 {
+                let y = heights.lowerBound + (heights.upperBound - heights.lowerBound) * Double(i) / 20
+                let p = Vec2(side == .left ? r : tuning.width - r, y)
+                let gap = wrapDistance(p, rider.body.pos)
+                if gap > bestGap + 1e-9 {
+                    bestGap = gap
+                    best = p
+                    bestSide = side
+                }
+            }
+        }
+        arrivals.append(RiftwingArrival(id: id, role: role, side: bestSide, pos: best,
+                                        remaining: tuning.forcedTelegraphTime, glowTime: tuning.forcedTelegraphTime,
+                                        isForced: true))
+        events.append(.arrivalTelegraphed(id: id, role: role, side: bestSide, at: best))
     }
 
     private mutating func updateArrivals(_ dt: Double) {
@@ -370,8 +481,8 @@ public struct RiftwingRun: Sendable {
             let arrival = arrivals[index]
             // The rider came close to the mouth while it glowed: the arrival moves to a clear
             // height (or the other mouth) and glows again there, so nothing ever appears on top
-            // of the rider.
-            if !isClearOfRider(arrival.pos, by: tuning.safeDistance) {
+            // of the rider. A forced arrival comes out regardless.
+            if !arrival.isForced, !isClearOfRider(arrival.pos, by: tuning.safeDistance) {
                 arrivals.remove(at: index)
                 retelegraph(arrival)
                 continue
@@ -383,7 +494,8 @@ public struct RiftwingRun: Sendable {
     }
 
     /// An arrival that could not come out where it glowed glows again at a clear place, keeping
-    /// its id; if none is clear it waits a moment where it is.
+    /// its id; if none is clear it waits a moment where it is, and once it has waited
+    /// `arrivalPatience` it is forced out at the farthest place.
     private mutating func retelegraph(_ arrival: RiftwingArrival) {
         let r = tuning.stats(for: arrival.role).radius
         for _ in 0..<10 {
@@ -391,11 +503,16 @@ public struct RiftwingRun: Sendable {
             let p = Vec2(side == .left ? r : tuning.width - r, rng.range(tuning.arrivalHeights))
             guard isClearOfRider(p, by: tuning.safeDistance) else { continue }
             arrivals.append(RiftwingArrival(id: arrival.id, role: arrival.role, side: side, pos: p,
-                                            remaining: tuning.telegraphTime))
+                                            remaining: tuning.telegraphTime, glowTime: tuning.telegraphTime))
             events.append(.arrivalTelegraphed(id: arrival.id, role: arrival.role, side: side, at: p))
             return
         }
         var waiting = arrival
+        waiting.waited += 0.25
+        if waiting.waited >= tuning.arrivalPatience - 1e-9 {
+            forceArrival(id: arrival.id, role: arrival.role)
+            return
+        }
         waiting.remaining = 0.25
         arrivals.append(waiting)
     }
@@ -558,7 +675,9 @@ public struct RiftwingRun: Sendable {
     }
 
     /// Returns the rider standing on the ledge farthest from the fight (opponents, mines and
-    /// arrivals), never under the gas while the Rift is breathing, protected for a moment.
+    /// arrivals), above the gas while the Rift is breathing if any ledge is, protected for a
+    /// moment. If every ledge is under the gas it returns anyway, protected until the gas has
+    /// gone, so a respawn is never lost to the breath already in the gallery.
     private mutating func respawnRider() {
         let r = rider.body.radius
         var best = layout.startLedge
@@ -582,6 +701,9 @@ public struct RiftwingRun: Sendable {
         rider.body.isDiving = false
         rider.body.reopen = 0
         rider.invulnerableTimer = tuning.respawnInvulnerability
+        if breath != .calm, rider.body.pos.y < breathLevel + r {
+            rider.invulnerableTimer = max(rider.invulnerableTimer, breathDeadlyTimeLeft + 0.25)
+        }
         events.append(.riderRespawned(at: rider.body.pos, ledge: best))
     }
 

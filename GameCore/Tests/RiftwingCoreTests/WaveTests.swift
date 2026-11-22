@@ -407,6 +407,7 @@ import GameCore
         #expect(!r.lampsOutPending)
         // Freeing a colonist brings them back.
         let pod = r.dropPod(at: Vec2(570, 400), vel: .zero, from: .glider)
+        r.pods[r.pods.count - 1].catchableIn = 0
         r.placeRider(at: Vec2(570, 395))
         r.rider.invulnerableTimer = .infinity
         let freed = r.step(still)

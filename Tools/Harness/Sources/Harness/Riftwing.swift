@@ -102,6 +102,8 @@ private struct RiftwingStats {
     var landings: [Double] = []
     var stepSeconds = 0.0
     var steps = 0
+    /// Seconds from each caught pod's drop to its catch.
+    var catchDelays: [Double] = []
 }
 
 private func cause(_ c: RiftwingLossCause) -> String {
@@ -119,6 +121,7 @@ private func playRiftwing(skill: RiftwingPilot.Skill, seed: UInt64, maxMinutes: 
     var stats = RiftwingStats()
     var waveStart = 0.0
     var carriedAt: [Int: Double] = [:]
+    var droppedAt: [Int: Double] = [:]
     let clock = ContinuousClock()
     for _ in 0..<Int(maxMinutes * 60 * 120) {
         let input = pilot.input(for: run)
@@ -140,12 +143,14 @@ private func playRiftwing(skill: RiftwingPilot.Skill, seed: UInt64, maxMinutes: 
             case .riderLost(_, _, let c):
                 stats.waves[w, default: RiftwingWaveStats()].livesLost += 1
                 stats.causes[cause(c), default: 0] += 1
-            case .podDropped:
+            case .podDropped(let id, _, _):
                 stats.waves[w, default: RiftwingWaveStats()].dropped += 1
+                droppedAt[id] = t
             case .podFreed(let id, _, _, _):
                 stats.waves[w, default: RiftwingWaveStats()].freed += 1
                 if let pod = before.pod(id) { stats.waves[w, default: RiftwingWaveStats()].lieTimes.append(pod.restedFor) }
-            case .podCaught:
+            case .podCaught(let id, _, _, _):
+                if let at = droppedAt[id] { stats.catchDelays.append(t - at) }
                 stats.waves[w, default: RiftwingWaveStats()].freed += 1
                 stats.waves[w, default: RiftwingWaveStats()].caught += 1
             case .podCarried(let id, _, _):
@@ -288,6 +293,12 @@ func runRiftwing(_ args: [String]) {
                      Double(all.reduce(0) { $0 + $1.flaps }) / max(all.reduce(0) { $0 + $1.survival } / 60, 0.01)))
         var causes: [String: Int] = [:]
         for g in all { for (k, v) in g.causes { causes[k, default: 0] += v } }
+        let delays = all.flatMap(\.catchDelays)
+        let dropped = all.reduce(0) { $0 + $1.waves.values.reduce(0) { $0 + $1.dropped } }
+        print(String(format: "catches            %.1f%% of pods dropped, %.1f%% within 0.05 s of the drop, %.1f%% within 0.4 s",
+                     Double(delays.count) / Double(max(dropped, 1)) * 100,
+                     Double(delays.count { $0 <= 0.05 }) / Double(max(delays.count, 1)) * 100,
+                     Double(delays.count { $0 <= 0.4 }) / Double(max(delays.count, 1)) * 100))
         print("lives lost to     ", causes.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
             .map { "\($0.key):\($0.value)" }.joined(separator: " "))
         let landings = all.flatMap(\.landings).sorted()

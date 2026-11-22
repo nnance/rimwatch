@@ -130,6 +130,11 @@ public struct RiftwingTuning: Sendable {
     public var telegraphTime = 1.0
     /// No opponent arrives closer than this to the rider (round the wrap).
     public var safeDistance = 220.0
+    /// If no place in the mouths has been clear of the rider for this long (a rider camping the
+    /// side seam), an arrival comes anyway, at the place farthest from the rider, after a glow
+    /// this long.
+    public var arrivalPatience = 2.5
+    public var forcedTelegraphTime = 2.0
     /// Heights at which opponents fly in from the mouths.
     public var arrivalHeights = 140.0...540.0
     /// Speed an opponent flies out of a mouth at.
@@ -143,6 +148,11 @@ public struct RiftwingTuning: Sendable {
     /// Downward speed a pod is knocked away at, and the share of the rig's speed it keeps.
     public var podKnock = 30.0
     public var podInherit = 0.25
+    /// Speed across a knocked pod is thrown at, away from the rider who struck, and seconds after
+    /// the drop before it can be taken: a mid-air catch means going after the pod, not flying on
+    /// through the blow.
+    public var podThrow = 60.0
+    public var podCatchDelay = 0.4
     /// Seconds a pod rests on a ledge before it hatches, by wave: `podLifeFirst` in wave 1,
     /// `podLifeShrink` less each wave, never under `podLifeFloor`.
     public var podLifeFirst = 15.0

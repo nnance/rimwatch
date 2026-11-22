@@ -29,7 +29,7 @@ extension RiftwingRun {
         guard rider.isAlive else { return }
         // Pods the rider reaches are freed (caught, if still falling).
         let reach = rider.body.radius + tuning.podRadius + tuning.podSlack
-        for index in pods.indices where pods[index].isUnsettled
+        for index in pods.indices where pods[index].isUnsettled && pods[index].isCatchable
             && wrapDistance(pods[index].pos, rider.body.pos) < reach {
             freePod(at: index)
         }
@@ -125,7 +125,10 @@ extension RiftwingRun {
         addScore(points)
         events.append(.opponentDestroyed(id: o.id, role: o.role, at: o.pos, points: points, stoopBonus: bonus))
         if o.role == .sower { clearMines(of: o.id, reason: .sowerDown) }
-        if o.role.isRig { dropPod(at: o.pos, vel: o.body.vel, from: o.role, ease: o.ease) }
+        if o.role.isRig {
+            let away: Double = dxWrap(rider.body.pos.x, o.pos.x) >= 0 ? 1 : -1
+            dropPod(at: o.pos, vel: o.body.vel, from: o.role, ease: o.ease, away: away)
+        }
     }
 
     /// The rider meets a Gleaner: from above or level it is destroyed (and a pod it holds is

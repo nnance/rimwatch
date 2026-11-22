@@ -4,15 +4,19 @@ extension RiftwingRun {
     // MARK: Pods
 
     /// A knocked-off rig's colonist drops in a pod: knocked downward (the winner springs up),
-    /// keeping a little of the rig's speed across, so a mid-air catch means going after it.
+    /// thrown clear across away from the winner (`away`, 1 or -1, 0 for none) and keeping a
+    /// little of the rig's speed, and it cannot be taken for `RiftwingTuning.podCatchDelay`, so a
+    /// mid-air catch means going after it rather than flying on through the blow.
     /// A pod from a role in one of its first appearances (`ease` above 0) falls more slowly
     /// (`RiftwingWaves.podFallEase`), so early catches are within a new player's reach.
     @discardableResult
-    mutating func dropPod(at pos: Vec2, vel: Vec2, from role: RiftwingRole, ease: Double = 0) -> Int {
+    mutating func dropPod(at pos: Vec2, vel: Vec2, from role: RiftwingRole, ease: Double = 0, away: Double = 0) -> Int {
         let id = takeID()
         var pod = RiftwingPod(id: id, pos: pos, from: role)
         pod.terminal = tuning.podTerminal * (1 - director.podFallEase * min(max(ease, 0), 1))
-        pod.vel = Vec2(vel.x * tuning.podInherit, min(vel.y * tuning.podInherit, 0) - tuning.podKnock)
+        pod.vel = Vec2(vel.x * tuning.podInherit + away * tuning.podThrow,
+                       min(vel.y * tuning.podInherit, 0) - tuning.podKnock)
+        pod.catchableIn = tuning.podCatchDelay
         pods.append(pod)
         waveDropped += 1
         events.append(.podDropped(id: id, at: pos, from: role))
@@ -23,6 +27,7 @@ extension RiftwingRun {
         var index = 0
         while index < pods.count {
             defer { index += 1 }
+            if pods[index].catchableIn > 0 { pods[index].catchableIn = max(pods[index].catchableIn - dt, 0) }
             switch pods[index].state {
             case .falling:
                 fall(index, dt)
@@ -31,7 +36,7 @@ extension RiftwingRun {
                 pods[index].restedFor += dt
                 if !pods[index].warned, pods[index].hatchIn <= tuning.hatchWarning {
                     pods[index].warned = true
-                    events.append(.hatchWarning(id: pods[index].id, at: pods[index].pos, becomes: pods[index].from.hatchesInto))
+                    events.append(.hatchWarning(id: pods[index].id, at: pods[index].pos, becomes: hatchRole(for: pods[index])))
                 }
                 if pods[index].hatchIn <= 0 { hatch(index, ledge: ledge) }
             case .seized, .freed, .lost:
@@ -74,7 +79,7 @@ extension RiftwingRun {
     private mutating func hatch(_ index: Int, ledge: Int) {
         let pod = pods[index]
         losePod(at: index, cause: .hatched)
-        let role = pod.from.hatchesInto
+        let role = hatchRole(for: pod)
         let stats = tuning.stats(for: role)
         let stand = Vec2(pod.pos.x, ledges[ledge].top + stats.radius * tuning.feetShare)
         let id = addOpponent(role, at: stand, heading: rider.body.pos.x >= pod.pos.x ? 1 : -1)
@@ -84,6 +89,14 @@ extension RiftwingRun {
         opponents[o].state = .waking(remaining: tuning.hatchWake)
         opponents[o].hatched = true
         events.append(.podHatched(id: pod.id, opponent: id, role: role, at: stand))
+    }
+
+    /// What a pod would hatch into now: one grade tougher, but its own kind until the tougher
+    /// kind has had its debut wave.
+    public func hatchRole(for pod: RiftwingPod) -> RiftwingRole {
+        let tougher = pod.from.hatchesInto
+        guard let debut = director.debut(of: tougher), debut <= max(wave, 1) else { return pod.from }
+        return tougher
     }
 
     /// A pod's colonist is lost.

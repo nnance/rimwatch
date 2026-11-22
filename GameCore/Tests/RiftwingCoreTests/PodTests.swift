@@ -28,14 +28,6 @@ import GameCore
         #expect(r.podsInPlay == 0)
     }
 
-    @Test func aKnockedPodDropsAwayFromTheWinnerSoACatchMeansGoingAfterIt() throws {
-        var r = quietRun()
-        let id = r.dropPod(at: Vec2(300, 300), vel: Vec2(80, 100), from: .glider)
-        let pod = try r.req(pod: id)
-        #expect(pod.vel.y < 0)
-        #expect(abs(pod.vel.x - 80 * r.tuning.podInherit) < 1e-9)
-    }
-
     @Test func aPodFromARoleInItsFirstAppearancesFallsMoreSlowly() throws {
         var r = quietRun()
         let early = r.dropPod(at: Vec2(560, 430), vel: .zero, from: .glider, ease: 1)
@@ -78,6 +70,8 @@ import GameCore
     @Test func catchingAPodInTheAirScoresDouble() throws {
         var r = quietRun()
         let id = r.dropPod(at: Vec2(570, 400), vel: .zero, from: .glider)
+        // Past the moment after the drop when it cannot be taken (`aCatchNeedsPursuit`).
+        r.pods[0].catchableIn = 0
         r.placeRider(at: Vec2(575, 380))
         let events = r.step(still)
         #expect(events.contains { if case .podCaught(id, _, 1, 1000) = $0 { true } else { false } })
@@ -101,11 +95,13 @@ import GameCore
     @Test func aPodLeftTooLongWarnsThenHatchesOneGradeTougher() throws {
         for (from, into) in [(RiftwingRole.glider, RiftwingRole.striker), (.striker, .warden), (.warden, .warden), (.sower, .warden)] {
             var r = quietRun()
+            // Every kind has had its debut (before then a pod hatches into its own kind).
+            r.wave = 8
             r.removeRider()
             let ledge = r.ledges[1]
             let id = r.dropPod(at: Vec2(ledge.midX, ledge.top + 20), vel: .zero, from: from)
             run(&r, steps: seconds(1))
-            let life = r.director.podLife(forWave: 1, tuning: r.tuning)
+            let life = r.director.podLife(forWave: 8, tuning: r.tuning)
             var warnedAt: Double?
             var hatchedAt: Double?
             var hatched: (Int, RiftwingRole)?

@@ -167,6 +167,12 @@ public struct RiftwingPod: Sendable, Identifiable, Equatable {
     public var terminal = 190.0
     var warned = false
 
+    /// Seconds before it can be taken, from its drop (`RiftwingTuning.podCatchDelay`).
+    public internal(set) var catchableIn = 0.0
+
+    /// True once it can be taken: not in the moment after it is knocked loose.
+    public var isCatchable: Bool { catchableIn <= 0 }
+
     /// Still in play: falling, resting or seized.
     public var isUnsettled: Bool {
         switch state {
@@ -198,6 +204,14 @@ public struct RiftwingArrival: Sendable, Identifiable, Equatable {
     /// Where it will appear (at the edge, at its height).
     public var pos: Vec2
     public var remaining: Double
+    /// The whole glow, seconds (`remaining` counts down from it).
+    public var glowTime = 1.0
+    /// No place in the mouths was clear of the rider for `RiftwingTuning.arrivalPatience`: this
+    /// one comes out anyway, at the place farthest from the rider, after a longer glow
+    /// (`RiftwingTuning.forcedTelegraphTime`).
+    public var isForced = false
+    /// Seconds it has waited for a clear place.
+    var waited = 0.0
 }
 
 /// What the Rift is doing.
