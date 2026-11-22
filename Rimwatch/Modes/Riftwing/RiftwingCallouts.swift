@@ -8,7 +8,10 @@ import UIKit
 /// - a banner announces a wave, its clear or the lamps failing: a compact line or two along the
 ///   top of the gallery, left of the crease, on a dark band, for about a second;
 /// - a notice gives a short status (extra life, the Rift breathing) along the top right of it.
-/// Nothing reaches up into the HUD strip above the gallery.
+/// Nothing reaches up into the HUD strip above the gallery, and nothing covers the rider: a
+/// popup starts above the figure it comes from, a banner or notice goes to the bottom of the
+/// gallery when the rider is up in the top band, and anything that still finds itself over the
+/// rider fades right down until the rider has passed (`update(elapsed:avoid:)`).
 /// Each is a short-lived node made when its event happens (a few a second at most), never per
 /// frame.
 @MainActor
@@ -29,8 +32,15 @@ final class RiftwingCallouts: SKNode {
     private var bannerWidth: CGFloat = 200
     private var noticeWidth: CGFloat = 200
     private(set) var textSize: CGFloat = 13
+    /// How far above a figure's centre a popup starts, in points (about a figure's height).
+    var figureClearance: CGFloat = 20
+    /// The rider on screen, padded: what text keeps clear of.
+    private var avoid: CGRect?
+    private var bannerLow: CGPoint = .zero
+    private var noticeLow: CGPoint = .zero
     private var clock: TimeInterval = 0
     private let subtitleColor: RGB
+    private static let veilName = "veil"
 
     init(subtitleColor: RGB) {
         self.subtitleColor = subtitleColor
@@ -61,11 +71,15 @@ final class RiftwingCallouts: SKNode {
             bannerWidth = left.width
             noticeCenter = CGPoint(x: right.midX, y: playfield.maxY - textSize * 1.3)
             noticeWidth = right.width
+            bannerLow = CGPoint(x: bannerCenter.x, y: playfield.minY + playfield.height * 0.3)
+            noticeLow = CGPoint(x: noticeCenter.x, y: playfield.minY + playfield.height * 0.3)
         } else {
             bannerCenter = CGPoint(x: playfield.midX, y: playfield.maxY - textSize * 1.5)
             bannerWidth = playfield.width - 2 * margin
             noticeCenter = CGPoint(x: playfield.midX, y: bannerCenter.y - textSize * 3.2)
             noticeWidth = bannerWidth
+            bannerLow = CGPoint(x: bannerCenter.x, y: playfield.minY + playfield.height * 0.36)
+            noticeLow = CGPoint(x: noticeCenter.x, y: bannerLow.y - textSize * 3.2)
         }
     }
 
@@ -98,7 +112,7 @@ final class RiftwingCallouts: SKNode {
         let slot = textSize * scale * 1.4
         // Highest start that still ends (after rising) with the text inside the gallery.
         let top = playfield.maxY - textSize * 1.6 - textSize * scale * 0.8 - 4
-        var y = min(max(point.y + textSize, playfield.minY + textSize), top)
+        var y = min(max(point.y + figureClearance + textSize * 0.4, playfield.minY + textSize), top)
         let x = min(max(point.x, playfield.minX + half + 4), playfield.maxX - half - 4)
         // Stacked above a popup still showing nearby, or below it when there is no room above.
         let step = y + slot * 6 > top ? -slot : slot
@@ -134,15 +148,24 @@ final class RiftwingCallouts: SKNode {
     /// the banner's area: text too long for it shrinks, then (the subtitle) wraps onto a second
     /// line, and only then is cut short (`fit`).
     func banner(_ title: String, subtitle: String? = nil, color: RGB, subtitleColor: RGB? = nil,
-                life: TimeInterval = 1.1) {
+                life: TimeInterval = 1.1, icon: SKNode? = nil) {
         banner?.removeFromParent()
         let container = SKNode()
-        container.position = bannerCenter
+        container.position = clearOfRider(bannerCenter, low: bannerLow, height: textSize * 4)
+        let veil = SKNode()
+        veil.name = Self.veilName
+        container.addChild(veil)
         let heading = Self.fit(title, size: textSize * 1.45, minSize: textSize, width: bannerWidth, maxLines: 1,
                                style: GlowText.Style.heading)
         let headingSize = heading.size
-        container.addChild(GlowText.sprite(heading.lines[0], style: .heading(headingSize), color: color))
+        veil.addChild(GlowText.sprite(heading.lines[0], style: .heading(headingSize), color: color))
         var width = heading.width
+        if let icon {
+            // The newcomer's figure just left of the heading.
+            icon.position = CGPoint(x: -heading.width / 2 - headingSize * 1.1, y: 0)
+            veil.addChild(icon)
+            width += headingSize * 2.6
+        }
         var height = headingSize * 1.3
         var subHeight: CGFloat = 0
         if let subtitle {
@@ -152,7 +175,7 @@ final class RiftwingCallouts: SKNode {
             for (index, text) in sub.lines.enumerated() {
                 let line = GlowText.sprite(text, style: .item(sub.size), color: lineColor)
                 line.position = CGPoint(x: 0, y: -headingSize * 0.9 - CGFloat(index) * sub.size * 1.25)
-                container.addChild(line)
+                veil.addChild(line)
             }
             width = max(width, sub.width)
             subHeight = sub.size * 1.3 + CGFloat(sub.lines.count - 1) * sub.size * 1.25
@@ -164,7 +187,7 @@ final class RiftwingCallouts: SKNode {
         band.alpha = 0.55
         band.position = CGPoint(x: 0, y: headingSize * 0.65 - height / 2)
         band.zPosition = -0.2
-        container.addChild(band)
+        veil.addChild(band)
         container.alpha = 0
         container.setScale(1.08)
         container.run(.sequence([
@@ -238,12 +261,15 @@ final class RiftwingCallouts: SKNode {
         let fitted = Self.fit(text, size: textSize * 1.05, minSize: 9, width: noticeWidth, maxLines: 2,
                               style: GlowText.Style.item)
         let sprite = SKNode()
+        let veil = SKNode()
+        veil.name = Self.veilName
+        sprite.addChild(veil)
         for (index, line) in fitted.lines.enumerated() {
             let node = GlowText.sprite(line, style: .item(fitted.size), color: color)
             node.position = CGPoint(x: 0, y: -CGFloat(index) * fitted.size * 1.25)
-            sprite.addChild(node)
+            veil.addChild(node)
         }
-        sprite.position = noticeCenter
+        sprite.position = clearOfRider(noticeCenter, low: noticeLow, height: textSize * 3)
         sprite.alpha = 0
         sprite.run(.sequence([
             .fadeIn(withDuration: 0.12),
@@ -264,7 +290,29 @@ final class RiftwingCallouts: SKNode {
         flashSprite.run(.fadeOut(withDuration: duration))
     }
 
-    func update(elapsed: TimeInterval) {
+    /// `place` (a centre along the top), or `low` when the rider is in the band `height` high
+    /// around it.
+    private func clearOfRider(_ place: CGPoint, low: CGPoint, height: CGFloat) -> CGPoint {
+        guard let avoid else { return place }
+        let band = CGRect(x: playfield.minX, y: place.y - height, width: playfield.width, height: height * 1.6)
+        return band.intersects(avoid) ? low : place
+    }
+
+    /// `avoid` is the rider on screen (padded), or nil while it is down. Text over it fades to a
+    /// trace and comes back once it has passed.
+    func update(elapsed: TimeInterval, avoid: CGRect?) {
         clock += elapsed
+        self.avoid = avoid
+        var shown: [SKNode] = popups.map(\.node)
+        if let banner { shown.append(banner) }
+        if let notice { shown.append(notice) }
+        for node in shown where node.parent != nil {
+            let over = avoid.map { node.calculateAccumulatedFrame().intersects($0) } ?? false
+            let target: CGFloat = over ? 0.15 : 1
+            // A banner's and a notice's own alpha runs their fades, so their content sits in a
+            // veil node; a popup's container runs no fade, so it is its own veil.
+            let veil = node.childNode(withName: Self.veilName) ?? node
+            veil.alpha += (target - veil.alpha) * min(CGFloat(elapsed) * 14, 1)
+        }
     }
 }

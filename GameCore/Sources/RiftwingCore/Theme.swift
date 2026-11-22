@@ -65,12 +65,14 @@ public enum RiftwingShape: Sendable, Hashable {
     case life
     /// The colonists-saved icon in the HUD: a pod. Not a figure: unit size.
     case colonist
+    /// A freed colonist climbing out of its pod and away, arms up. A figure at a pod's size.
+    case freedColonist
 
     /// Drawn at the figure scale (`RiftwingTuning.figureScale`), so it matches its collision
     /// size.
     public var isFigure: Bool {
         switch self {
-        case .rider, .opponent, .pod, .mine: true
+        case .rider, .opponent, .pod, .mine, .freedColonist: true
         case .arrival, .life, .colonist: false
         }
     }
@@ -78,7 +80,7 @@ public enum RiftwingShape: Sendable, Hashable {
     public static var allCases: [RiftwingShape] {
         RiftwingWingPose.allCases.map { .rider($0) }
             + RiftwingRole.allCases.flatMap { role in RiftwingWingPose.allCases.map { .opponent(role, $0) } }
-            + [.pod, .mine, .arrival, .life, .colonist]
+            + [.pod, .mine, .freedColonist, .arrival, .life, .colonist]
     }
 }
 
@@ -180,10 +182,10 @@ extension RiftwingTheme {
 /// Riftwing's first theme: the galleries in the caves of Calder's crater wall, in the same neon
 /// world as the other two modes. The rider wears the Watch's cyan; pods the colonists' mint;
 /// the Glider is the Husk's magenta (it is the first turned rig). Each opponent has its own
-/// colour and silhouette: the Glider broad drooping wings with a ragged edge, the Striker narrow
-/// swept wings and a spike at the nose, the Warden an armour plate and a crest, the Sower a seed
-/// sac slung under its frame, and the Gleaner, not on a rig at all, a round drone with buzzing
-/// wings and a hanging claw. The rock is a cool grey-blue so the figures stand out against it,
+/// colour and silhouette (see `rig(_:pose:)`): the Glider magenta and broad, the Striker an
+/// azure dart, the Warden violet and armoured, the Sower orange with a seed sac, and the
+/// Gleaner, not on a rig at all, a yellow lozenge with wing blades and a hanging pincer. Mines
+/// are a pale pink, well apart from the Glider, the Striker and the warning red. The rock is a cool grey-blue so the figures stand out against it,
 /// and the Rift glows a hot orange. Its sounds and music are in `Themes/RiftCavesSounds.swift`.
 public struct RiftCaves: RiftwingTheme {
     public init() {}
@@ -199,7 +201,7 @@ public struct RiftCaves: RiftwingTheme {
         vent: RGB(hex: 0xA8DCFF),
         warning: RGB(hex: 0xFF3030),
         reward: RGB(hex: 0xFFFF80),
-        shield: RGB(hex: 0x60B0FF),
+        shield: RGB(hex: 0xB8FBFF),
         controls: RGB(hex: 0x60E0FF),
         hud: RGB(hex: 0x60E0FF),
         heading: RGB(hex: 0xFFB347)
@@ -234,6 +236,8 @@ public struct RiftCaves: RiftwingTheme {
             return ShapeDescription(scale: 1, strokes: Self.rig(.rider, pose: .spread))
         case .colonist:
             return ShapeDescription(scale: 1, strokes: Self.pod)
+        case .freedColonist:
+            return ShapeDescription(scale: tuning.basePodRadius, strokes: Self.freedColonist)
         }
     }
 
@@ -245,11 +249,14 @@ public struct RiftCaves: RiftwingTheme {
     static let mint = RGB(hex: 0x7DF0B4)
     /// The Husk's magenta: the Glider is the first turned rig.
     static let magenta = RGB(hex: 0xFF3FD2)
-    static let red = RGB(hex: 0xFF3355)
+    /// The Striker's azure: well clear of the warning red, the mines' pale pink and the
+    /// Warden's violet (a red Striker was hard to tell from both at 17 points).
+    static let azure = RGB(hex: 0x2F9BFF)
     static let violet = RGB(hex: 0xB070FF)
     static let yellow = RGB(hex: 0xF5E83A)
     static let orange = RGB(hex: 0xFF8A2A)
-    static let pink = RGB(hex: 0xFF4F96)
+    /// The mines' pale pink: clear of the Glider's magenta, the warning red and the Striker.
+    static let pink = RGB(hex: 0xFFB0D0)
 
     // MARK: Rigs
 
@@ -271,13 +278,19 @@ public struct RiftCaves: RiftwingTheme {
 
     /// A one-person frame with two wings, side on: a spar from the tail fin to the nose, the pilot
     /// slung prone beneath it in flight or standing under it on a ledge, and two wings hinged at
-    /// the spar, the far one dimmer and a little behind so both read. The role colour is always
-    /// the last stroke (the near wing), so `color(of:)` finds it.
+    /// the spar, the far one dimmer and a little behind so both read. Wings are closed outlines,
+    /// so the app can give them a faint fill and the figure a solid silhouette at 17 points. The
+    /// role colour is always the last stroke (the near wing), so `color(of:)` finds it.
+    ///
+    /// Each kind has a silhouette of its own as well as a colour: the Glider broad drooping wings
+    /// with a ragged edge and a trailing streamer; the Striker a narrow swept dart with a long
+    /// nose spike and a split tail; the Warden a squared wing, an armour plate and a crest; the
+    /// Sower a big seed sac slung under its frame with a tendril trailing from it.
     static func rig(_ style: RigStyle, pose: RiftwingWingPose) -> [ShapeStroke] {
         let c: RGB = switch style {
         case .rider: cyan
         case .glider: magenta
-        case .striker: red
+        case .striker: azure
         case .warden: violet
         case .sower: orange
         }
@@ -306,14 +319,24 @@ public struct RiftCaves: RiftwingTheme {
         }
         let shape = wing(style, front: rootFront, back: rootBack, tip: tips.near)
         let farShape = wing(style, front: rootFront + v(0.06, 0.04), back: rootBack + v(0.06, 0.04), tip: tips.far)
-        strokes.append(ShapeStroke(farShape.outline, color: far))
+        strokes.append(ShapeStroke(farShape.outline, closed: true, color: far))
 
-        // The frame: spar, tail fin and nose.
+        // The frame: spar, tail and nose.
         strokes.append(ShapeStroke([v(-0.88, sparY + 0.04), v(0.86, sparY - 0.04)], color: frame))
-        strokes.append(ShapeStroke([v(-0.88, sparY + 0.04), v(-1.02, sparY + 0.32), v(-0.7, sparY + 0.04)], color: frame))
-        if style == .striker {
-            // A spike at the nose.
-            strokes.append(ShapeStroke([v(0.78, sparY + 0.02), v(1.24, sparY - 0.08), v(0.78, sparY - 0.1)], color: c))
+        switch style {
+        case .striker:
+            // A split tail and a long spike at the nose: a dart.
+            strokes.append(ShapeStroke([v(-0.7, sparY + 0.03), v(-1.08, sparY + 0.3), v(-0.9, sparY + 0.03),
+                                        v(-1.08, sparY - 0.22), v(-0.7, sparY + 0.02)], color: frame))
+            strokes.append(ShapeStroke([v(0.74, sparY + 0.06), v(1.3, sparY - 0.06), v(0.74, sparY - 0.14)],
+                                       closed: true, color: c))
+        case .glider:
+            // A streamer trailing from the tail, rising and falling.
+            strokes.append(ShapeStroke([v(-0.88, sparY + 0.04), v(-1.02, sparY + 0.32), v(-0.7, sparY + 0.04)], color: frame))
+            strokes.append(ShapeStroke([v(-0.88, sparY + 0.02), v(-1.05, sparY - 0.12), v(-1.2, sparY + 0.0),
+                                        v(-1.3, sparY - 0.16)], color: c.scaled(0.7)))
+        default:
+            strokes.append(ShapeStroke([v(-0.88, sparY + 0.04), v(-1.02, sparY + 0.32), v(-0.7, sparY + 0.04)], color: frame))
         }
 
         // The pilot.
@@ -337,17 +360,24 @@ public struct RiftCaves: RiftwingTheme {
 
         switch style {
         case .warden:
-            // An armour plate over the pilot and a crest on the frame.
+            // An armour plate over the pilot and a tall crest on the frame.
             let plateCentre = grounded ? v(0.02, -0.22) : v(0.02, -0.3)
-            strokes.append(ShapeStroke(ShapeKit.polygon(sides: 6, radius: 0.3, rotation: Double.pi / 6, center: plateCentre),
+            strokes.append(ShapeStroke(ShapeKit.polygon(sides: 6, radius: 0.32, rotation: Double.pi / 6, center: plateCentre),
                                        closed: true, color: c.lightened(0.3)))
-            strokes.append(ShapeStroke([v(0.5, sparY - 0.02), v(0.62, sparY + 0.3), v(0.72, sparY - 0.03)], color: c))
+            strokes.append(ShapeStroke([v(0.42, sparY - 0.02), v(0.56, sparY + 0.42), v(0.66, sparY + 0.2),
+                                        v(0.76, sparY - 0.03)], closed: true, color: c))
         case .sower:
-            // A seed sac slung under the frame, with seeds in it.
-            let sac = grounded ? v(-0.48, -0.32) : v(-0.42, -0.6)
-            strokes.append(ShapeStroke(ShapeKit.polygon(sides: 10, radius: 0.28, center: sac), closed: true, color: c.lightened(0.2)))
-            strokes.append(ShapeStroke([sac + v(-0.08, 0.05), sac + v(0.06, -0.06)], color: pink))
-            strokes.append(ShapeStroke([v(-0.42, sparY), sac + v(0, 0.28)], color: frame))
+            // A big seed sac slung under the frame, seeds in it and a tendril trailing below.
+            let sac = grounded ? v(-0.48, -0.32) : v(-0.42, -0.58)
+            strokes.append(ShapeStroke(ShapeKit.polygon(sides: 10, radius: 0.34, center: sac), closed: true,
+                                       color: c.lightened(0.2)))
+            strokes.append(ShapeStroke([sac + v(-0.12, 0.06), sac + v(0.04, -0.04)], color: pink))
+            strokes.append(ShapeStroke([sac + v(0.08, 0.12), sac + v(0.14, 0.02)], color: pink))
+            strokes.append(ShapeStroke([v(-0.42, sparY), sac + v(0, 0.34)], color: frame))
+            if !grounded {
+                strokes.append(ShapeStroke([sac + v(0, -0.34), sac + v(0.1, -0.5), sac + v(-0.04, -0.62)],
+                                           color: c.scaled(0.7)))
+            }
         case .rider, .glider, .striker:
             break
         }
@@ -356,12 +386,12 @@ public struct RiftCaves: RiftwingTheme {
         if style == .warden || style == .glider {
             for rib in shape.ribs.dropFirst() { strokes.append(ShapeStroke(rib, color: c.scaled(0.75))) }
         }
-        strokes.append(ShapeStroke(shape.outline, color: c))
+        strokes.append(ShapeStroke(shape.outline, closed: true, color: c))
         return strokes
     }
 
-    /// A wing's outline (front root, tip, back root, with a ragged trailing edge for the Glider)
-    /// and its ribs.
+    /// A wing's outline (front root, tip, back root, with a ragged trailing edge for the Glider
+    /// and a squared tip for the Warden) and its ribs.
     private static func wing(_ style: RigStyle, front: Vec2, back: Vec2, tip: Vec2) -> (outline: [Vec2], ribs: [[Vec2]]) {
         var back = back, tip = tip
         switch style {
@@ -370,9 +400,9 @@ public struct RiftCaves: RiftwingTheme {
             back = back + v(-0.18, 0)
             tip = tip + v(-0.08, tip.y > 0 ? -0.08 : 0.06)
         case .striker:
-            // Narrow and swept: a short root, the tip pulled back.
-            back = back + v(0.2, 0)
-            tip = tip + v(-0.12, 0)
+            // Narrow and swept hard back: a short root, the tip pulled back.
+            back = back + v(0.26, 0)
+            tip = tip + v(-0.2, 0)
         case .rider, .warden, .sower:
             break
         }
@@ -385,6 +415,9 @@ public struct RiftCaves: RiftwingTheme {
                 let notch = (i % 2 == 0 ? 0.08 : -0.08)
                 outline.append(p + v(notch, tip.y > back.y ? -0.06 : 0.06))
             }
+        } else if style == .warden {
+            // A squared tip: a short edge across the end of the wing.
+            outline.append(tip + (back - tip) * 0.22)
         }
         outline.append(back)
         let mid = (front + back) * 0.5
@@ -396,41 +429,57 @@ public struct RiftCaves: RiftwingTheme {
         return (outline, ribs)
     }
 
-    /// The Gleaner: not on a rig. A round drone body with a pale eye, two small wings buzzing up
-    /// and down, and a claw hanging below for gripping a pod. The body colour is the last stroke.
+    /// The Gleaner: not on a rig. A pointed lozenge of a body with a pale eye, two thin wing
+    /// blades buzzing up and down over it, and a big open pincer hanging below for gripping a
+    /// pod: a thief's hand, not a blob. The body colour is the last stroke.
     static func gleaner(pose: RiftwingWingPose) -> [ShapeStroke] {
         let c = yellow
         let wingTip: (near: Vec2, far: Vec2) = switch pose {
-        case .raised: (v(-0.55, 1.05), v(-0.25, 1.0))
-        case .swept: (v(-0.55, -0.35), v(-0.25, -0.3))
-        default: (v(-0.95, 0.5), v(-0.7, 0.55))
+        case .raised: (v(-0.5, 1.05), v(-0.2, 1.0))
+        case .swept: (v(-0.7, -0.05), v(-0.4, 0.0))
+        default: (v(-0.95, 0.55), v(-0.7, 0.6))
         }
-        let root = v(0.0, 0.42)
+        let root = v(0.0, 0.26)
+        let body = [v(0.68, 0.02), v(0.22, 0.32), v(-0.42, 0.24), v(-0.62, 0.0), v(-0.42, -0.24), v(0.22, -0.3)]
         return [
-            ShapeStroke([root + v(0.15, 0), wingTip.far, root + v(-0.25, 0)], color: c.scaled(0.5)),
-            ShapeStroke([v(-0.28, -0.5), v(-0.42, -0.9), v(-0.12, -1.02)], color: c.scaled(0.85)),
-            ShapeStroke([v(0.28, -0.5), v(0.42, -0.9), v(0.12, -1.02)], color: c.scaled(0.85)),
-            ShapeStroke(ShapeKit.polygon(sides: 4, radius: 0.18, center: v(0.22, 0.05)), closed: true,
+            ShapeStroke([root + v(0.14, 0), wingTip.far, root + v(-0.22, 0)], closed: true, color: c.scaled(0.5)),
+            // The pincer: a stalk and two hooked prongs, open.
+            ShapeStroke([v(-0.02, -0.28), v(-0.02, -0.5)], color: c.scaled(0.9)),
+            ShapeStroke([v(-0.02, -0.5), v(-0.42, -0.72), v(-0.34, -1.02), v(-0.2, -0.9)], color: c.scaled(0.9)),
+            ShapeStroke([v(-0.02, -0.5), v(0.38, -0.72), v(0.3, -1.02), v(0.16, -0.9)], color: c.scaled(0.9)),
+            ShapeStroke(ShapeKit.polygon(sides: 4, radius: 0.13, center: v(0.32, 0.04)), closed: true,
                         color: RGB(hex: 0xFFF8B0)),
-            ShapeStroke([root + v(0.15, 0), wingTip.near, root + v(-0.25, 0)], color: c.lightened(0.2)),
-            ShapeStroke(ShapeKit.polygon(sides: 12, radius: 0.58), closed: true, color: c),
+            ShapeStroke([root + v(0.14, 0), wingTip.near, root + v(-0.22, 0)], closed: true, color: c.lightened(0.2)),
+            ShapeStroke(body, closed: true, color: c),
         ]
     }
 
     // MARK: Pods, mines, markers
 
-    /// A capsule with a handle on top and a small figure inside, in the colonists' mint (the
+    /// A broad capsule with a handle on top and a small figure inside, in the colonists' mint (the
     /// last stroke).
     static let pod: [ShapeStroke] = {
-        let shell = ShapeKit.arc(center: Vec2(0, 0.25), radius: 0.62, from: 0, to: Double.pi, segments: 10)
-            + ShapeKit.arc(center: Vec2(0, -0.25), radius: 0.62, from: Double.pi, to: 2 * Double.pi, segments: 10)
+        let shell = ShapeKit.arc(center: Vec2(0, 0.22), radius: 0.74, from: 0, to: Double.pi, segments: 12)
+            + ShapeKit.arc(center: Vec2(0, -0.22), radius: 0.74, from: Double.pi, to: 2 * Double.pi, segments: 12)
         let figure = mint.lightened(0.4)
         return [
-            ShapeStroke([Vec2(-0.25, 0.92), Vec2(0, 1.05), Vec2(0.25, 0.92)], color: mint.scaled(0.8)),
-            ShapeStroke(ShapeKit.polygon(sides: 6, radius: 0.14, center: Vec2(0, 0.3)), closed: true, color: figure),
-            ShapeStroke([Vec2(0, 0.16), Vec2(0, -0.22)], color: figure),
-            ShapeStroke([Vec2(-0.2, -0.5), Vec2(0, -0.22), Vec2(0.2, -0.5)], color: figure),
+            ShapeStroke([Vec2(-0.3, 0.9), Vec2(0, 1.06), Vec2(0.3, 0.9)], color: mint.scaled(0.8)),
+            ShapeStroke(ShapeKit.polygon(sides: 6, radius: 0.15, center: Vec2(0, 0.3)), closed: true, color: figure),
+            ShapeStroke([Vec2(0, 0.15), Vec2(0, -0.22)], color: figure),
+            ShapeStroke([Vec2(-0.24, 0.06), Vec2(0, -0.02), Vec2(0.24, 0.06)], color: figure),
+            ShapeStroke([Vec2(-0.22, -0.52), Vec2(0, -0.22), Vec2(0.22, -0.52)], color: figure),
             ShapeStroke(shell, closed: true, color: mint),
+        ]
+    }()
+
+    /// A colonist out of its pod, arms raised, climbing away. Mint, the body the last stroke.
+    static let freedColonist: [ShapeStroke] = {
+        let light = mint.lightened(0.35)
+        return [
+            ShapeStroke(ShapeKit.polygon(sides: 8, radius: 0.24, center: Vec2(0, 0.62)), closed: true, color: light),
+            ShapeStroke([Vec2(-0.5, 0.86), Vec2(0, 0.24), Vec2(0.5, 0.86)], color: light),
+            ShapeStroke([Vec2(-0.34, -0.9), Vec2(0, -0.2), Vec2(0.34, -0.9)], color: light),
+            ShapeStroke([Vec2(0, 0.36), Vec2(0, -0.2)], color: mint),
         ]
     }()
 
@@ -439,12 +488,13 @@ public struct RiftCaves: RiftwingTheme {
         var strokes: [ShapeStroke] = []
         for i in 0..<8 {
             let a = Double(i) * Double.pi / 4 + Double.pi / 8
-            strokes.append(ShapeStroke([Vec2(0.62 * cos(a), 0.62 * sin(a)), Vec2(1.05 * cos(a), 1.05 * sin(a))],
-                                       color: pink.lightened(0.2)))
+            let side = 0.2
+            strokes.append(ShapeStroke([Vec2(0.58 * cos(a - side), 0.58 * sin(a - side)), Vec2(1.05 * cos(a), 1.05 * sin(a)),
+                                        Vec2(0.58 * cos(a + side), 0.58 * sin(a + side))], color: pink.lightened(0.2)))
         }
-        strokes.append(ShapeStroke(ShapeKit.polygon(sides: 4, radius: 0.24, rotation: Double.pi / 4), closed: true,
-                                   color: RGB(hex: 0xFFD0E0)))
-        strokes.append(ShapeStroke(ShapeKit.arc(radius: 0.62, segments: 18), closed: true, color: pink))
+        strokes.append(ShapeStroke(ShapeKit.polygon(sides: 4, radius: 0.26, rotation: Double.pi / 4), closed: true,
+                                   color: RGB(hex: 0xFF5070)))
+        strokes.append(ShapeStroke(ShapeKit.arc(radius: 0.6, segments: 18), closed: true, color: pink))
         return strokes
     }()
 

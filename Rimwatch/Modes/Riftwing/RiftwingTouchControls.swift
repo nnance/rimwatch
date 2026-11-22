@@ -14,6 +14,16 @@ import UIKit
 /// offered to the run as a press that lasts until a simulation step has seen it, and a tap that
 /// follows straight on from another is offered only after one step has seen the flap let go.
 /// Taps that come faster than that wait their turn (at most a couple are kept).
+///
+/// At rest the controls sit in the black margins either side of the gallery when the screen is
+/// wide enough to have them, so they never cover the low ledges or the Rift; on a squarer screen
+/// they rest low in the corners, very faint. Either way the stick floats to wherever a thumb
+/// lands in its half.
+///
+/// A touch the system cancels (an edge gesture taking it over) takes back its flap if no step has
+/// used it yet. Taps made while the rider is down are dropped, not carried to the respawn: the
+/// rider returns standing on a ledge with a moment of protection, and a flap queued a second or
+/// more earlier would lift it off before the player has seen where it is.
 @MainActor
 final class RiftwingTouchControls: SKNode, TouchControlSurface {
     var handedness: GameOptions.Handedness = .stickLeft {
@@ -29,8 +39,12 @@ final class RiftwingTouchControls: SKNode, TouchControlSurface {
     private let diveMarker = SKSpriteNode()
     private var flapZone: CGRect = .zero
     private var flapTouches: [UITouch] = []
-    /// Taps not yet seen by a step.
-    private var pendingTaps = 0
+    /// Taps not yet seen by a step, oldest first, by the touch that made each.
+    private var queuedTaps: [ObjectIdentifier] = []
+    private var pendingTaps: Int { queuedTaps.count }
+    private var riderAlive = true
+    /// The controls rest in the margins beside the gallery (else low in the corners, faint).
+    private var restsInMargins = false
     /// The flap offered for the coming steps, and what the last step saw.
     private var offered = false
     private var lastSeen = false
@@ -42,6 +56,7 @@ final class RiftwingTouchControls: SKNode, TouchControlSurface {
     private var sceneSize: CGSize = .zero
     private var safeArea: UIEdgeInsets = .zero
     private var keepClear: ClosedRange<CGFloat>?
+    private var gallery: CGRect = .zero
 
     init(factory: GlowShapeFactory, palette: RiftwingPalette, diveThreshold: Double) {
         self.factory = factory
@@ -63,10 +78,12 @@ final class RiftwingTouchControls: SKNode, TouchControlSurface {
         return RiftwingInput(stick: stick.vector, flap: offered, dive: false)
     }
 
-    func layout(size: CGSize, safeArea: UIEdgeInsets, keepClear: ClosedRange<CGFloat>?) {
+    /// `gallery` is the gallery on screen, to rest the controls in the margins beside it.
+    func layout(size: CGSize, safeArea: UIEdgeInsets, keepClear: ClosedRange<CGFloat>?, gallery: CGRect) {
         sceneSize = size
         self.safeArea = safeArea
         self.keepClear = keepClear
+        self.gallery = gallery
         relayout()
     }
 
@@ -87,8 +104,16 @@ final class RiftwingTouchControls: SKNode, TouchControlSurface {
         let radius = min(max(short * 0.095, 38), 60)
         stickRadius = radius
         let restInset = radius * 1.08
-        let leftRest = CGPoint(x: left + restInset, y: bottom + restInset + radius * 0.3)
-        let rightRest = CGPoint(x: right - restInset, y: bottom + restInset + radius * 0.3)
+        var leftRest = CGPoint(x: left + restInset, y: bottom + restInset + radius * 0.3)
+        var rightRest = CGPoint(x: right - restInset, y: bottom + restInset + radius * 0.3)
+        // Wide margins beside the gallery: rest there, a third of the way up.
+        let leftMargin = gallery.minX - left, rightMargin = right - gallery.maxX
+        restsInMargins = !gallery.isEmpty && min(leftMargin, rightMargin) >= 2 * restInset
+        if restsInMargins {
+            let y = max(bottom + restInset, gallery.minY + gallery.height * 0.3)
+            leftRest = CGPoint(x: (left + gallery.minX) / 2, y: y)
+            rightRest = CGPoint(x: (gallery.maxX + right) / 2, y: y)
+        }
         let leftZone = CGRect(x: 0, y: 0, width: middleLow, height: size.height)
         let rightZone = CGRect(x: middleHigh, y: 0, width: size.width - middleHigh, height: size.height)
         stick.layout(radius: radius, rest: stickOnLeft ? leftRest : rightRest, zone: stickOnLeft ? leftZone : rightZone)
@@ -107,8 +132,10 @@ final class RiftwingTouchControls: SKNode, TouchControlSurface {
     }
 
     /// Whether the rider is diving now, to light the dive chevron; `time` is the game clock.
-    func setStatus(diving: Bool, time: TimeInterval) {
+    func setStatus(diving: Bool, alive: Bool, time: TimeInterval) {
         self.time = time
+        riderAlive = alive
+        if !alive { queuedTaps.removeAll() }
         guard diving != self.diving || tappedAt >= 0 else { return }
         self.diving = diving
         refresh()
@@ -123,7 +150,8 @@ final class RiftwingTouchControls: SKNode, TouchControlSurface {
             if stick.touchBegan(touch, at: p) { continue }
             if flapZone.contains(p) {
                 flapTouches.append(touch)
-                pendingTaps = min(pendingTaps + 1, 2)
+                // Dropped while the rider is down (see the type's note).
+                if riderAlive, queuedTaps.count < 2 { queuedTaps.append(ObjectIdentifier(touch)) }
                 tappedAt = time
             }
         }
@@ -138,35 +166,48 @@ final class RiftwingTouchControls: SKNode, TouchControlSurface {
         for touch in touches {
             stick.touchEnded(touch)
             flapTouches.removeAll { $0 === touch }
+            if touch.phase == .cancelled {
+                // The system took the touch over: its flap is taken back if no step has used it.
+                let id = ObjectIdentifier(touch)
+                if let index = queuedTaps.firstIndex(of: id) { queuedTaps.remove(at: index) }
+            }
         }
         refresh()
     }
 
     /// A step has seen this frame's input: a flap offered to it is spent.
     func consumePresses() {
-        if offered { pendingTaps = max(pendingTaps - 1, 0) }
+        if offered, !queuedTaps.isEmpty { queuedTaps.removeFirst() }
         lastSeen = offered
         offered = false
     }
 
     func releaseAll() {
         flapTouches.removeAll()
-        pendingTaps = 0
+        queuedTaps.removeAll()
         stick.release()
         refresh()
     }
 
     private func refresh() {
         stick.refresh()
+        if !stick.isActive, !restsInMargins {
+            // Resting over the gallery on a squarer screen: barely there.
+            stick.base.alpha = 0.09
+            stick.knob.alpha = 0.11
+        }
         let center = stick.base.position
-        diveMarker.position = CGPoint(x: center.x, y: center.y - stickRadius * 0.62)
-        diveMarker.alpha = diving ? 0.95 : (stick.isActive ? 0.3 : 0.1)
+        // The chevron marks the dive threshold (`diveThreshold` of the stick's reach down) and
+        // lights as the stick passes it, then fully while diving.
+        diveMarker.position = CGPoint(x: center.x, y: center.y - stickRadius * CGFloat(diveThreshold))
+        let pastThreshold = stick.isActive && stick.vector.y <= -diveThreshold
+        diveMarker.alpha = diving ? 0.95 : pastThreshold ? 0.6 : (stick.isActive ? 0.3 : (restsInMargins ? 0.1 : 0.05))
         diveMarker.setScale(diving ? 1.15 : 1)
         // The flap marker answers each tap with a short swell.
         let since = time - tappedAt
         let pressed = tappedAt >= 0 && since < 0.15
         if !pressed { tappedAt = -1 }
-        flapMarker.alpha = !flapTouches.isEmpty || pressed ? 0.8 : 0.2
+        flapMarker.alpha = !flapTouches.isEmpty || pressed ? 0.8 : (restsInMargins ? 0.2 : 0.1)
         flapMarker.setScale(pressed ? 0.9 : 1)
     }
 

@@ -73,10 +73,31 @@ final class RiftwingMode: GameMode {
     let gasSprite = SKSpriteNode()
     let gasTop = SKSpriteNode()
     let breathMark = SKSpriteNode()
+    /// The lamps-out darkness: two tiles side by side, each a gallery wide with a pool of light at
+    /// its centre, so the pool reaches across the join (`syncDarkness`).
     let darkness = SKSpriteNode()
+    let darknessTwin = SKSpriteNode()
+    /// Where the pool of light is (the rider, or where it was lost).
+    var lightCentre = Vec2(450, 300)
+    /// The Rift's living glow: hot spots drifting along it, and a sickly glow that swells while
+    /// it is about to breathe.
+    var riftSpots: [SKSpriteNode] = []
+    let breathGlow = SKSpriteNode()
+    /// Red bars up both side walls while the Rift is about to fill the gallery.
+    var fillBars: [SKSpriteNode] = []
+    /// The rider was being hunted for staying put, last frame (for the cue when it starts).
+    var wasCamping = false
+    var campingCueAt = -100.0
+    /// A faint column over each vent up to the height it lifts to.
+    var ventColumns: [SKSpriteNode] = []
+    /// Time to the next wisp of gas or falling pebble (seconds of animation time).
+    var wispDue = 0.0
+    var pebbleDue = 0.0
+    var trailDue = 0.0
     var masks: [SKSpriteNode] = []
-    /// One outline sprite per layout, cross-faded when the cavern shifts.
-    var ledgeSprites: [SKSpriteNode] = []
+    /// One outline sprite per ledge, by layout: when the cavern shifts the old ledges crumble and
+    /// fall and the new ones rise into place, one after another.
+    var ledgeSprites: [[SKSpriteNode]] = []
     let effects = RiftwingEffects()
     let callouts: RiftwingCallouts
     let hud: RiftwingHUD
@@ -113,9 +134,20 @@ final class RiftwingMode: GameMode {
     /// The cavern is rumbling toward its next layout (between `cavernShifting` and
     /// `cavernShifted`).
     var isShifting = false
-    /// Each layout's ledges' current alpha.
-    var ledgeAlpha: [Double] = []
     var shownLayout = -1
+    /// The layout the cavern last shifted from, and when (animation time) the new one arrived.
+    var fallingLayout = -1
+    var layoutArrivedAt = -100.0
+    /// When the rider last recoiled from a clash (animation time), and how hard.
+    var riderKickAt = -100.0
+    var riderKick: CGFloat = 0
+    /// Pods knocked loose that cannot be taken yet (to show the moment they can).
+    var uncatchablePods: Set<Int> = []
+    /// When each pod landed, for its squash.
+    var podLandedAt: [Int: TimeInterval] = [:]
+    /// Time that runs only while a run is played (or the title's backdrop shows), so effects,
+    /// motes, the shake and every pulse freeze on the pause screen and the other menus.
+    var animationClock: TimeInterval = 0
     /// Glyphs for the frame loop, looked up once per scale.
     var looks = Looks()
     #if DEBUG
@@ -130,14 +162,16 @@ final class RiftwingMode: GameMode {
     var needsPrewarm = false
 
     var size: CGSize { services.geometry.size }
-    var clock: TimeInterval { services.clock }
+    /// The mode's animation time (`animationClock`), not the shell's, so a paused game stands still.
+    var clock: TimeInterval { animationClock }
 
     init(services: ShellServices, session: @escaping () -> RiftwingSession) {
         self.services = services
         currentSession = session
         tuning = session().tuning
         factory = services.factory
-        glyphs = RiftwingGlyphs(factory: factory, theme: theme, figureScale: tuning.figureScale)
+        // Figures are drawn at 3 pixels a point: they are small, and crispness is what they need.
+        glyphs = RiftwingGlyphs(factory: factory, theme: theme, figureScale: tuning.figureScale, screenScale: 3)
         callouts = RiftwingCallouts(subtitleColor: theme.palette.hud)
         hud = RiftwingHUD(theme: theme, factory: factory)
         controls = RiftwingTouchControls(factory: factory, palette: theme.palette,
@@ -181,10 +215,12 @@ final class RiftwingMode: GameMode {
         if abs(ppu - pointsPerUnit) > 0.0001 {
             pointsPerUnit = ppu
             factory.clear()
+            glyphs.clearFigures()
             looks = Looks()
             buildCavern()
             dressPools()
             effects.setPointsPerUnit(ppu, factory: factory, gallery: gallery, figureScale: tuning.figureScale)
+            effects.setColonistGlyph(glyphs.glyph(.freedColonist, pointsPerUnit: ppu), factory: factory)
             buildDecor()
             needsPrewarm = true
         }
@@ -196,10 +232,10 @@ final class RiftwingMode: GameMode {
         hud.layout(strip: stripRect, left: (stripRect.minX + 4)...(middleLow - gap),
                    right: (middleHigh + gap)...max(middleHigh + gap + 1, pauseButtonFrame.minX + 4),
                    maxLives: tuning.maxLives)
-        controls.layout(size: size, safeArea: geometry.safeArea, keepClear: geometry.keepClear)
-        callouts.layout(size: size, playfield: CGRect(origin: galleryOrigin,
-                                                      size: CGSize(width: gallery.width * ppu, height: gallery.height * ppu)),
-                        keepClear: geometry.keepClear)
+        let galleryRect = CGRect(origin: galleryOrigin, size: CGSize(width: gallery.width * ppu, height: gallery.height * ppu))
+        controls.layout(size: size, safeArea: geometry.safeArea, keepClear: geometry.keepClear, gallery: galleryRect)
+        callouts.figureClearance = CGFloat(tuning.riderRadius) * ppu * 1.3
+        callouts.layout(size: size, playfield: galleryRect, keepClear: geometry.keepClear)
         if needsPrewarm {
             needsPrewarm = false
             return true
@@ -256,6 +292,13 @@ final class RiftwingMode: GameMode {
         effects.removeAll()
         callouts.removeAll()
         hitAt.removeAll()
+        podLandedAt.removeAll()
+        uncatchablePods.removeAll()
+        fallingLayout = -1
+        layoutArrivedAt = -100
+        riderKickAt = -100
+        campingCueAt = -100
+        wasCamping = false
         soundDirector.reset()
         moodDirector.reset()
         darkMix = 0
@@ -270,9 +313,13 @@ final class RiftwingMode: GameMode {
         dressPools()
         if looks.riders.isEmpty { looks = makeLooks() }
         let palette = theme.palette
-        _ = GlowText.texture("+500", style: .item(callouts.textSize * 1.3), color: palette.reward)
-        for word in ["CAUGHT", "FREED", "LOST", "HATCHING", "TAKEN"] {
-            _ = GlowText.texture(word, style: .item(callouts.textSize * 0.9), color: palette.warning)
+        for scale in [0.8, 1.0, 1.15, 1.3] as [CGFloat] {
+            _ = GlowText.texture("+500", style: .item(callouts.textSize * scale), color: palette.reward)
+        }
+        // Every word a popup shows, at the size and in the colour it is shown in.
+        for word in PopupWord.allCases {
+            let look = popupLook(word)
+            _ = GlowText.texture(look.text, style: .item(callouts.textSize * look.scale), color: look.color)
         }
         callouts.prewarmBanner("WAVE 1", subtitle: "Win by height. Free the colonists in the pods.", color: palette.heading)
         callouts.prewarmBanner("LAMPS OUT", subtitle: "Free a colonist to bring them back", color: palette.warning)
@@ -291,19 +338,32 @@ final class RiftwingMode: GameMode {
     }
 
     func update(events: [RiftwingEvent], elapsed: Double, state: ScreenState) {
+        // Animation time runs while a game is played and behind the title; on the pause screen,
+        // game over and the other menus everything stands still where it was.
+        let animating = state.showsBackdrop || state.screen == .playing
+        let dt = animating ? min(max(elapsed, 0), 0.1) : 0
+        animationClock += dt
         if state.showsBackdrop {
-            updateBackdrop(min(elapsed, 0.1))
+            updateBackdrop(dt)
         } else if !galleryLayer.isHidden {
             let run = session.run
             handle(events, run: run)
-            sync(run, elapsed: min(elapsed, 0.1), screen: state.screen)
+            sync(run, elapsed: dt, screen: state.screen)
         }
     }
 
     func updateOverlays(elapsed: Double) {
         guard !hud.isHidden else { return }
-        hud.update(readout(session.run), time: clock)
-        callouts.update(elapsed: elapsed)
+        let run = session.run
+        hud.update(readout(run), time: clock)
+        // Text keeps clear of the rider: anything over it fades right down.
+        var avoid: CGRect?
+        if run.rider.isAlive {
+            let centre = screenPoint(run.rider.pos)
+            let r = CGFloat(tuning.riderRadius) * pointsPerUnit * 1.6
+            avoid = CGRect(x: centre.x - r, y: centre.y - r, width: 2 * r, height: 2 * r)
+        }
+        callouts.update(elapsed: elapsed, avoid: avoid)
     }
 
     func readout(_ run: RiftwingRun) -> RiftwingHUD.Readout {

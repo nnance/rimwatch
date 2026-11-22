@@ -156,7 +156,7 @@ extension RiftCaves {
             SoundLayer(.triangle, e6, envelope: .pluck(0.1), delay: 0.06, duration: 0.12, gain: 0.4),
         ]),
         // Lost a clash: the rig is struck from above. A hard crunch and a dissonant stab.
-        make("clash.lost", .player, gain: 0.9, priority: 10, cooldown: 0.3, maxVoices: 1, [
+        make("clash.lost", .player, gain: 0.9, priority: 10, cooldown: 0, maxVoices: 2, [
             SoundLayer(.noise, 0, envelope: .pluck(0.03, attack: 0.0005),
                        filter: FilterSpec(.highPass, cutoff: 3000), duration: 0.04, gain: 0.9),
             SoundLayer(.noise, 0, envelope: Envelope(attack: 0.002, decay: 0.22, sustain: 0, release: 0.03, curve: 2),
@@ -168,7 +168,7 @@ extension RiftCaves {
             SoundLayer(.sine, 90, to: 40, envelope: .pluck(0.2), duration: 0.24, gain: 0.6),
         ]),
         // A life lost: the rig tumbles down into the dark, its tone fluttering and falling away.
-        make("rider.lost", .player, gain: 0.82, priority: 10, cooldown: 0.5, maxVoices: 1, echo: cave(0.16, feedback: 0.35, mix: 0.3), [
+        make("rider.lost", .player, gain: 0.82, priority: 10, cooldown: 0, maxVoices: 2, echo: cave(0.16, feedback: 0.35, mix: 0.3), [
             SoundLayer(.square, e5, to: e2, tremolo: (8, 1.0),
                        envelope: Envelope(attack: 0.004, decay: 1.0, sustain: 0, release: 0.05, curve: 1.5),
                        filter: FilterSpec(.lowPass, cutoff: 2000, to: 300), duration: 1.05),
@@ -329,7 +329,7 @@ extension RiftCaves {
                        gain: 0.4),
         ]),
         // A Gleaner has hold of a pod: a fast, shrill trill, the highest sound in the game.
-        make("pod.seized", .colonist, gain: 0.74, priority: 9, cooldown: 0.3, maxVoices: 1, [
+        make("pod.seized", .colonist, gain: 0.74, priority: 10, cooldown: 0, maxVoices: 2, [
             SoundLayer(.sine, 2349, steps: [0, -3, 0, -3, 0, -3, 0], stepTime: 0.05, vibrato: (12, 0.2),
                        tremolo: (1 / 0.05, 0.6),
                        envelope: Envelope(attack: 0.003, decay: 0.04, sustain: 0.85, release: 0.05), duration: 0.36),
@@ -339,14 +339,14 @@ extension RiftCaves {
         ]),
         // A pod will hatch soon: three slow pings, each louder and lower, falling a fifth like a
         // clock running down.
-        make("hatch.warning", .colonist, gain: 0.72, priority: 10, cooldown: 0.4, maxVoices: 1, [
+        make("hatch.warning", .colonist, gain: 0.72, priority: 10, cooldown: 0, maxVoices: 2, [
             SoundLayer(.triangle, 988, steps: [0, -3, -7], stepTime: 0.2, tremolo: (1 / 0.2, 0.95),
                        envelope: Envelope(attack: 0.4, decay: 0.0, sustain: 1, release: 0.08, curve: 1), duration: 0.6),
             SoundLayer(.sine, 1976, steps: [0, -3, -7], stepTime: 0.2, tremolo: (1 / 0.2, 0.95),
                        envelope: Envelope(attack: 0.4, decay: 0.0, sustain: 1, release: 0.08, curve: 1), duration: 0.6, gain: 0.35),
         ]),
         // A colonist lost: three notes sinking a sixth, wavering, and a low sigh under them.
-        make("pod.lost", .colonist, gain: 0.66, priority: 10, cooldown: 0.25, maxVoices: 1, echo: cave(0.14, feedback: 0.35, mix: 0.3), [
+        make("pod.lost", .colonist, gain: 0.66, priority: 10, cooldown: 0, maxVoices: 2, echo: cave(0.14, feedback: 0.35, mix: 0.3), [
             SoundLayer(.triangle, b5, steps: [0, -4, -9], stepTime: 0.2, vibrato: (6, 0.4),
                        envelope: Envelope(attack: 0.01, decay: 0.25, sustain: 0.7, release: 0.2), duration: 0.72),
             SoundLayer(.sine, b4, steps: [0, -4, -9], stepTime: 0.2,
@@ -401,7 +401,7 @@ extension RiftCaves {
         ]),
         // Every colonist of the wave lost: a low two-note swell of dread, a draught through the
         // galleries. The dark comes next wave.
-        make("colonists.gone", .alert, gain: 0.62, priority: 9, cooldown: 1, maxVoices: 1, echo: cave(0.2, feedback: 0.4, mix: 0.32), [
+        make("colonists.gone", .alert, gain: 0.62, priority: 10, cooldown: 0, maxVoices: 2, echo: cave(0.2, feedback: 0.4, mix: 0.32), [
             SoundLayer(.triangle, e3, steps: [0, 1], stepTime: 0.55,
                        envelope: Envelope(attack: 0.9, decay: 0.1, sustain: 0.8, release: 0.4), duration: 1.2),
             SoundLayer(.sine, e5, steps: [0, 1], stepTime: 0.55,
@@ -410,7 +410,7 @@ extension RiftCaves {
                        filter: FilterSpec(.bandPass, cutoff: 500, to: 900, resonance: 1.5), duration: 1.2, gain: 2.0),
         ]),
         // The lamps fail: their hum gutters and sputters out, a glass tink, and the dark.
-        make("lamps.fail", .alert, gain: 0.9, priority: 10, cooldown: 1, maxVoices: 1, echo: cave(0.2, feedback: 0.35, mix: 0.25), [
+        make("lamps.fail", .alert, gain: 0.9, priority: 10, cooldown: 0, maxVoices: 2, echo: cave(0.2, feedback: 0.35, mix: 0.25), [
             SoundLayer(.square, 440, to: 110, tremolo: (17, 0.95),
                        envelope: Envelope(attack: 0.005, decay: 1.2, sustain: 0.1, release: 0.3),
                        filter: FilterSpec(.lowPass, cutoff: 2400, to: 200), duration: 1.5),
@@ -431,7 +431,7 @@ extension RiftCaves {
         ]),
         // The Rift is about to breathe: a deep breath drawn in under a rising, pulsing alarm.
         // The loudest warning in the game; it comes 3 s before the gas, so it says "climb".
-        make("rift.warning", .alert, gain: 0.9, priority: 10, cooldown: 1, maxVoices: 1, echo: cave(0.15, feedback: 0.3, mix: 0.22), [
+        make("rift.warning", .alert, gain: 0.9, priority: 10, cooldown: 0, maxVoices: 2, echo: cave(0.15, feedback: 0.3, mix: 0.22), [
             SoundLayer(.noise, 0, envelope: Envelope(attack: 0.7, decay: 0.2, sustain: 0.6, release: 0.3),
                        filter: FilterSpec(.bandPass, cutoff: 200, to: 900, resonance: 2), duration: 1.3, gain: 3.5),
             SoundLayer(.saw, e2, to: e3, detune: 25, envelope: Envelope(attack: 0.6, decay: 0.2, sustain: 0.6, release: 0.3),
@@ -439,6 +439,22 @@ extension RiftCaves {
             SoundLayer(.square, e5, steps: [0, 0, 1, 1, 2, 2], stepTime: 0.18, tremolo: (1 / 0.18, 0.9),
                        envelope: Envelope(attack: 0.005, decay: 0.05, sustain: 0.85, release: 0.15),
                        filter: FilterSpec(.lowPass, cutoff: 2500), delay: 0.3, duration: 1.08, gain: 0.55),
+        ]),
+        // The Rift erupts (the breath's last step, which fills the gallery): worse than any
+        // breath. A rumble from far below that builds for two seconds, a siren in two tones
+        // a tritone apart, falling, and the deep breath of the warning drawn in under it all.
+        // As loud as anything in the game and twice as long, so it cannot be taken for an
+        // ordinary breath.
+        make("rift.erupt", .alert, gain: 0.92, priority: 10, cooldown: 0, maxVoices: 2, echo: cave(0.2, feedback: 0.4, mix: 0.3), [
+            SoundLayer(.sine, 55, to: 41, envelope: Envelope(attack: 1.2, decay: 0.4, sustain: 0.8, release: 0.5),
+                       duration: 2.4, gain: 0.45),
+            SoundLayer(.noise, 0, envelope: Envelope(attack: 1.4, decay: 0.3, sustain: 0.7, release: 0.5),
+                       filter: FilterSpec(.bandPass, cutoff: 220, to: 1100, resonance: 1.5), duration: 2.4, gain: 3),
+            SoundLayer(.saw, e2, to: b2, detune: 30, envelope: Envelope(attack: 1.0, decay: 0.3, sustain: 0.6, release: 0.4),
+                       filter: FilterSpec(.lowPass, cutoff: 300, to: 1600, resonance: 2), duration: 2.2, gain: 0.7),
+            SoundLayer(.square, b4, steps: [0, -6, 0, -6, 0, -6, -1, -7], stepTime: 0.24, tremolo: (1 / 0.12, 0.7),
+                       envelope: Envelope(attack: 0.005, decay: 0.05, sustain: 0.85, release: 0.25),
+                       filter: FilterSpec(.lowPass, cutoff: 2600, to: 1600), delay: 0.2, duration: 1.95, gain: 1.1),
         ]),
         // The gas rises: a long hiss swelling up out of the Rift, lasting its 1 s climb.
         make("rift.rise", .alert, gain: 0.5, priority: 8, cooldown: 1, maxVoices: 1, [
@@ -463,7 +479,7 @@ extension RiftCaves {
             SoundLayer(.sine, 2 * e6, envelope: .pluck(0.4), delay: 0.45, duration: 0.42, gain: 0.35),
         ]),
         // Game over: a slow line falling through the scale to the low E, over a darkening drone.
-        make("game.over", .alert, gain: 0.72, priority: 10, cooldown: 2, maxVoices: 1, echo: cave(0.22, feedback: 0.4, mix: 0.3), [
+        make("game.over", .alert, gain: 0.72, priority: 10, cooldown: 0, maxVoices: 2, echo: cave(0.22, feedback: 0.4, mix: 0.3), [
             SoundLayer(.triangle, b4, steps: [0, -1, -3, -5, -7, -12], stepTime: 0.28,
                        envelope: Envelope(attack: 0.01, decay: 0.3, sustain: 0.7, release: 0.5), duration: 1.9),
             SoundLayer(.square, b3, steps: [0, -1, -3, -5, -7, -12], stepTime: 0.28,
@@ -536,7 +552,8 @@ extension RiftCaves {
         case .allColonistsLost: "colonists.gone"
         case .lampsFailed: "lamps.fail"
         case .lampsRestored: "lamps.restore"
-        case .riftWarning, .riftFillWarning: "rift.warning"
+        case .riftWarning: "rift.warning"
+        case .riftFillWarning: "rift.erupt"
         case .riftBreathed: "rift.rise"
         case .riftSettled: "rift.settle"
         case .flapped(_, let fromLedge): fromLedge ? "flap.ledge" : "flap.\(wrap(variant, flapVariants) + 1)"

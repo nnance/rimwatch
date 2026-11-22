@@ -185,7 +185,8 @@ enum RiftwingEventCatalog {
         var events: [RiftwingEvent] = [
             .waveStarted(wave: 1, layout: 0), .waveCleared(wave: 1, freed: 2, bonus: 500),
             .cavernShifting(from: 0, to: 1), .cavernShifted(layout: 1), .allColonistsLost(wave: 2),
-            .lampsFailed, .lampsRestored, .riftWarning(level: 180), .riftBreathed(level: 180), .riftSettled,
+            .lampsFailed, .lampsRestored, .riftWarning(level: 180), .riftFillWarning(level: 600),
+            .riftBreathed(level: 180), .riftSettled, .bumpedRoof(at: p),
             .flapped(at: p, fromLedge: false), .flapped(at: p, fromLedge: true), .landed(at: p, ledge: 1),
             .bumpedLedge(at: p), .diveBegan(at: p), .wingsOpening(at: p), .wingsOpened(at: p),
             .ventEntered(vent: 0, at: p), .gleanerBumped(opponent: 3, at: p),
@@ -228,13 +229,86 @@ enum RiftwingEventCatalog {
         return events
     }()
 
-    /// Events that make no sound of their own, on purpose (see `RiftCaves.soundName`).
+    /// Events that make no sound of their own, on purpose (see `RiftCaves.soundName`). No
+    /// `default`: an event added to the game does not compile here until it is decided.
     static func isSilent(_ event: RiftwingEvent) -> Bool {
         switch event {
         case .clashWon, .wingsOpened, .opponentArrived, .opponentWithdrew: true
         case .mineCleared(_, _, let reason): reason == .waveEnded || reason == .struck
-        default: false
+        case .waveStarted, .waveCleared, .cavernShifting, .cavernShifted, .allColonistsLost, .lampsFailed,
+             .lampsRestored, .riftWarning, .riftFillWarning, .riftBreathed, .riftSettled, .flapped, .landed,
+             .bumpedLedge, .bumpedRoof, .diveBegan,
+             .wingsOpening, .ventEntered, .clashBounced, .clashLost, .gleanerBumped, .riderLost, .riderRespawned,
+             .extraLife, .arrivalTelegraphed, .opponentDived, .opponentHit, .opponentDestroyed, .opponentFell,
+             .mineLaid, .podDropped, .podLanded, .podFreed, .podCaught, .podSeized, .podCarried, .podLost,
+             .hatchWarning, .podHatched, .gameOver:
+            false
         }
+    }
+
+    /// A number for each case of `RiftwingEvent`, 0 ..< `caseCount`. The switch has no
+    /// `default`, so a new event fails to compile here; give it the next number, raise
+    /// `caseCount` and add an example to `every`, or `theCatalogHoldsEveryKindOfEvent` fails.
+    static func caseIndex(_ event: RiftwingEvent) -> Int {
+        switch event {
+        case .waveStarted: 0
+        case .waveCleared: 1
+        case .cavernShifting: 2
+        case .cavernShifted: 3
+        case .allColonistsLost: 4
+        case .lampsFailed: 5
+        case .lampsRestored: 6
+        case .riftWarning: 7
+        case .riftBreathed: 8
+        case .riftSettled: 9
+        case .flapped: 10
+        case .landed: 11
+        case .bumpedLedge: 12
+        case .diveBegan: 13
+        case .wingsOpening: 14
+        case .wingsOpened: 15
+        case .ventEntered: 16
+        case .clashWon: 17
+        case .clashBounced: 18
+        case .clashLost: 19
+        case .gleanerBumped: 20
+        case .riderLost: 21
+        case .riderRespawned: 22
+        case .extraLife: 23
+        case .arrivalTelegraphed: 24
+        case .opponentArrived: 25
+        case .opponentDived: 26
+        case .opponentHit: 27
+        case .opponentDestroyed: 28
+        case .opponentFell: 29
+        case .opponentWithdrew: 30
+        case .mineLaid: 31
+        case .mineCleared: 32
+        case .podDropped: 33
+        case .podLanded: 34
+        case .podFreed: 35
+        case .podCaught: 36
+        case .podSeized: 37
+        case .podCarried: 38
+        case .podLost: 39
+        case .hatchWarning: 40
+        case .podHatched: 41
+        case .gameOver: 42
+        case .riftFillWarning: 43
+        case .bumpedRoof: 44
+        }
+    }
+
+    static let caseCount = 45
+}
+
+@Suite struct RiftwingEventCatalogTests {
+    /// The lists the sound, kind and haptic tests walk cannot miss an event.
+    @Test func theCatalogHoldsEveryKindOfEvent() {
+        let indices = RiftwingEventCatalog.every.map(RiftwingEventCatalog.caseIndex)
+        #expect(indices.allSatisfy { (0..<RiftwingEventCatalog.caseCount).contains($0) })
+        #expect(Set(indices) == Set(0..<RiftwingEventCatalog.caseCount),
+                "missing: \(Set(0..<RiftwingEventCatalog.caseCount).subtracting(indices).sorted())")
     }
 }
 
@@ -339,7 +413,8 @@ enum RiftwingEventCatalog {
             #expect(m.clickiness() < 0.35, "\(name) clicks at an end: \(m.clickiness())")
             #expect(abs(m.mean) < 0.01, "\(name) has a DC offset of \(m.mean)")
             #expect(patch.duration > 0.03 && patch.duration < 3.5, "\(name) lasts \(patch.duration)")
-            #expect(patch.maxVoices >= 1 && patch.cooldown > 0, "\(name)")
+            // Urgent cues have no cooldown at all (see `urgentPatchesCannotBeRefusedByTheSynth`).
+            #expect(patch.maxVoices >= 1 && (patch.cooldown > 0 || patch.priority == 10), "\(name)")
         }
     }
 
@@ -429,7 +504,8 @@ enum RiftwingEventCatalog {
         // flight, so it is never lost under them.
         let flight = ["flap.1", "flap.2", "flap.3", "flap.ledge", "land", "bump", "vent"].map(Self.small).max()!
         let urgent = ["clash.lost": 5.0, "rider.lost": 4.0, "hatch.warning": 5.0, "rift.warning": 4.0,
-                      "pod.lost": 4.0, "pod.seized": 5.0, "lamps.fail": 4.0, "colonists.gone": 2.5, "game.over": 4.0]
+                      "pod.lost": 4.0, "pod.seized": 5.0, "lamps.fail": 4.0, "colonists.gone": 2.5, "game.over": 4.0,
+                      "rift.erupt": 4.0]
         for (name, factor) in urgent {
             #expect(Self.small(name) >= factor * flight, "\(name) \(Self.small(name)) vs flight \(flight)")
         }
@@ -447,6 +523,19 @@ enum RiftwingEventCatalog {
         // The wings' opening lasts exactly as long as they take to open.
         let opening = Self.theme.sound(for: .wingsOpening(at: .zero))!
         #expect(abs(opening.duration - RiftwingTuning().wingReopen) < 0.001)
+    }
+
+    /// The Rift about to fill the gallery sounds worse than an ordinary breath: at least as loud,
+    /// longer, lower, and unlike it.
+    @Test func theEruptionIsWorseThanABreath() {
+        let erupt = Self.measure("rift.erupt"), breath = Self.measure("rift.warning")
+        #expect(erupt.duration >= breath.duration * 1.5)
+        #expect(erupt.loudness >= breath.loudness * 0.95, "\(erupt.loudness) vs \(breath.loudness)")
+        #expect(Self.small("rift.erupt") >= Self.small("rift.warning") * 0.8)
+        #expect(erupt.peak >= 0.7)
+        let a = Self.features["caves.rift.erupt"]!, b = Self.features["caves.rift.warning"]!
+        #expect(Self.featureScores(a, b).map(\.score).max()! >= 1)
+        #expect(RiftwingSoundDirector.kind(of: .riftFillWarning(level: 600)) != RiftwingSoundDirector.kind(of: .riftWarning(level: 200)))
     }
 
     @Test func loudnessFollowsImportance() {

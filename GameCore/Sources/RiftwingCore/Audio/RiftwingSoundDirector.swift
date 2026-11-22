@@ -26,6 +26,10 @@ import GameCore
 ///   `smallBudget`, leaving room for what follows in the same frame.
 /// - **Versions:** a flap in the air takes one of the theme's pitches at random, never the same
 ///   twice running, so six a second never sound like a machine.
+/// - **The synth never refuses an urgent cue either.** Every patch an urgent cue plays has no
+///   cooldown of its own, two copies and the top priority (`RiftCaves`), so two pods lost a
+///   frame apart are two sounds. Only a second cue of the same kind in the very same frame is
+///   merged into the first (two pods lost at once are one sound, at once).
 /// - **Anything unknown is silent:** an event added to the game after this was written makes no
 ///   sound until it is given a kind here.
 ///
@@ -159,7 +163,8 @@ public struct RiftwingSoundDirector: Sendable {
         case .allColonistsLost: 5
         case .lampsFailed: 6
         case .lampsRestored: 7
-        case .riftWarning, .riftFillWarning: 8
+        case .riftWarning: 8
+        case .riftFillWarning: 40
         case .riftBreathed: 9
         case .riftSettled: 10
         case .flapped(_, let fromLedge): fromLedge ? 12 : 11

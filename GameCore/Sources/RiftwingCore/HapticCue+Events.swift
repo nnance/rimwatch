@@ -10,10 +10,11 @@ extension HapticCue {
     /// - a double tap for a reward: a pod freed or caught, a wave cleared, an extra life, the
     ///   lamps coming back;
     /// - a warning knock for danger coming: a pod seized by a Gleaner, the hatch warning, the
-    ///   Rift's warning;
+    ///   Rift's warning (an ordinary breath);
     /// - an impact for a colonist lost;
     /// - a rumble for a clash lost (the life it costs is not felt twice), any other life lost,
-    ///   the cavern shifting, the lamps failing and game over.
+    ///   the cavern shifting, the lamps failing, game over, and the Rift about to fill the gallery
+    ///   (its last breath, which nowhere escapes: felt as a blow, not a knock).
     /// An event added to the game later is not felt until it is listed here.
     public static func cue(for event: RiftwingEvent) -> HapticCue? {
         switch event {
@@ -23,11 +24,11 @@ extension HapticCue {
             .tap
         case .podFreed, .podCaught, .waveCleared, .extraLife, .lampsRestored:
             .doubleTap
-        case .podSeized, .hatchWarning, .riftWarning, .riftFillWarning:
+        case .podSeized, .hatchWarning, .riftWarning:
             .warning
         case .podLost:
             .impact
-        case .clashLost, .cavernShifting, .lampsFailed, .gameOver:
+        case .clashLost, .cavernShifting, .lampsFailed, .gameOver, .riftFillWarning:
             .rumble
         case .riderLost(_, _, let cause):
             if case .clash = cause { nil } else { .rumble }

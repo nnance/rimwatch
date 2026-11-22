@@ -61,13 +61,14 @@ extension RiftwingMode {
         if looks.riders.isEmpty { looks = makeLooks() }
         syncDarkness(run, dt: dt)
         syncLedges(run, dt: dt)
-        syncMotes(run, dt: dt)
-        syncRift(run)
+        syncMotes(run.vents, dt: dt)
+        syncRift(RiftState(run, tuning: tuning), dt: dt)
+        syncCamping(run)
 
         wrapCandidates.removeAll(keepingCapacity: true)
         syncRider(run)
         var links = syncOpponents(run, links: 0)
-        links = syncPods(run, links: links)
+        links = syncPods(run, links: links, dt: dt)
         links = syncMines(run, links: links)
         var i = links
         while i < shownLinks {
@@ -79,8 +80,10 @@ extension RiftwingMode {
         mirrorAcrossJoin()
 
         effects.update(elapsed: dt)
-        controls.setStatus(diving: run.rider.isAlive && run.rider.body.isDiving, time: clock)
+        controls.setStatus(diving: run.rider.isAlive && run.rider.body.isDiving, alive: run.rider.isAlive, time: clock)
 
+        // Frozen (paused, game over, a menu): the shake holds still where it was.
+        guard dt > 0 else { return }
         // Shake moves only the gallery, never the HUD, and settles in about a third of a second.
         shake *= CGFloat(exp(-9 * dt))
         if shake < 0.2 { shake = 0 }
@@ -103,6 +106,20 @@ extension RiftwingMode {
         return CGFloat(pitch * body.facing)
     }
 
+    /// The cavern has noticed a rider staying put (`RiftwingRun.isRiderCamping`): a red ring
+    /// closes on it and a word says so when it starts (at most once in eight seconds).
+    private func syncCamping(_ run: RiftwingRun) {
+        let camping = run.isRiderCamping && run.rider.isAlive
+        // At most once in eight seconds, so it stays a hint and never a nag.
+        if camping, !wasCamping, clock - campingCueAt > 8 {
+            campingCueAt = clock
+            let at = run.rider.pos
+            effects.ring(at: at, color: theme.palette.warning, from: 60, to: 18, duration: 0.5, width: 0.8)
+            popup(.hunted, at: at)
+        }
+        wasCamping = camping
+    }
+
     // MARK: The rider
 
     private func syncRider(_ run: RiftwingRun) {
@@ -117,8 +134,11 @@ extension RiftwingMode {
             riderSprite.look = look
         }
         riderSprite.position = CGPoint(x: body.pos.x, y: body.pos.y)
-        riderSprite.xScale = CGFloat(body.facing)
-        riderSprite.yScale = 1
+        // A recoil after a clash: squashed for a moment, then springing back.
+        let since = clock - riderKickAt
+        let squash: CGFloat = since < 0.22 ? riderKick * CGFloat(1 - since / 0.22) : 0
+        riderSprite.xScale = CGFloat(body.facing) * (1 + squash)
+        riderSprite.yScale = 1 - squash
         riderSprite.zRotation = tilt(of: body)
         // Protected after returning: it strobes inside a pulsing ring.
         riderSprite.alpha = rider.isInvulnerable ? (sin(clock * 30) > 0 ? 1 : 0.35) : 1
@@ -186,6 +206,8 @@ extension RiftwingMode {
             let depth = Self.depth(of: opponent.role)
             if sprite.zPosition != depth { sprite.zPosition = depth }
             if checkHits, let hit = hitAt[opponent.id] { scale *= hitPulse(since: hit) }
+            // In the dark: a faint outline outside the pool of light, glinting now and then.
+            alpha *= darkVisibility(at: body.pos, seed: opponent.id)
             sprite.isHidden = false
             sprite.position = CGPoint(x: body.pos.x, y: body.pos.y)
             sprite.xScale = scale * CGFloat(body.facing)
@@ -215,6 +237,13 @@ extension RiftwingMode {
         return linkIndex
     }
 
+    /// A falling pod leaves a faint mint trail, so its line down is easy to follow.
+    private func podTrail(_ pod: RiftwingPod) {
+        guard trailDue <= 0 else { return }
+        effects.spray(at: pod.pos + Vec2(0, tuning.podRadius * 0.8), angle: Double.pi / 2, spread: 0.4,
+                      color: theme.color(of: .pod).scaled(0.7), count: 1, speed: 20, life: 0.35, size: 0.6, drag: 3)
+    }
+
     /// Grows briefly when hit, then settles.
     private func hitPulse(since hit: TimeInterval) -> CGFloat {
         let t = clock - hit
@@ -228,8 +257,9 @@ extension RiftwingMode {
     /// A falling pod wobbles; a resting one breathes, and in its last seconds flashes red, faster
     /// and faster, and trembles (it shows through the dark then); one in a Gleaner's grip
     /// flashes red. Freed and lost pods are gone.
-    private func syncPods(_ run: RiftwingRun, links: Int) -> Int {
+    private func syncPods(_ run: RiftwingRun, links: Int, dt: Double) -> Int {
         let pods = run.pods
+        trailDue -= dt
         let warning = tuning.hatchWarning
         var shown = 0
         for pod in pods {
@@ -243,11 +273,36 @@ extension RiftwingMode {
             var rotation: CGFloat = 0
             var offset = 0.0
             var depth = Depth.pod
+            var squash: CGFloat = 0
+            if pod.isCatchable, uncatchablePods.remove(pod.id) != nil {
+                // It can be taken now: a mint pop says so.
+                effects.pop(at: pod.pos, color: theme.color(of: .pod), radius: 16 * tuning.figureScale, life: 0.3)
+                scale = 1.25
+            }
             switch pod.state {
             case .freed, .lost:
                 continue
             case .falling:
                 rotation = CGFloat(0.3 * sin(clock * 7 + Double(pod.id)))
+                if !pod.isCatchable {
+                    uncatchablePods.insert(pod.id)
+                    // Just knocked loose and thrown clear: dim and spinning until it can be taken,
+                    // when it brightens with a pop (`podBecameCatchable`).
+                    alpha = 0.45
+                    rotation = CGFloat(clock * 16)
+                } else if pod.hoverLeft > 0, pod.pos.y < tuning.riftLevel + 60 {
+                    // Held up over the Rift by its heat: it shimmers, and in its last two seconds
+                    // it shudders and flashes red, about to drop in.
+                    offset = 0
+                    rotation = 0
+                    scale = 1 + 0.08 * CGFloat(sin(clock * 8 + Double(pod.id)))
+                    if pod.hoverLeft < 2 {
+                        look = sin(clock * (10 + 16 * (2 - pod.hoverLeft))) > 0 ? 1 : 0
+                        offset = 1.4 * sin(clock * 55)
+                        depth = Depth.litPod
+                    }
+                }
+                if dt > 0 { podTrail(pod) }
             case .resting:
                 if pod.hatchIn <= warning {
                     let urgency = 1 - max(pod.hatchIn, 0) / warning
@@ -258,6 +313,15 @@ extension RiftwingMode {
                     depth = Depth.litPod
                 } else {
                     scale = 1 + 0.05 * CGFloat(sin(clock * 3 + Double(pod.id)))
+                }
+                if let landed = podLandedAt[pod.id] {
+                    // A squash as it lands, then a bounce back.
+                    let t = clock - landed
+                    if t < 0.3 {
+                        squash = CGFloat(0.28 * sin(t / 0.3 * Double.pi) * (1 - t / 0.3))
+                    } else {
+                        podLandedAt[pod.id] = nil
+                    }
                 }
             case .seized:
                 look = sin(clock * 16) > 0 ? 1 : 0
@@ -270,13 +334,15 @@ extension RiftwingMode {
             }
             if sprite.zPosition != depth { sprite.zPosition = depth }
             sprite.isHidden = false
-            sprite.position = CGPoint(x: pod.pos.x + offset, y: pod.pos.y)
-            sprite.setScale(scale)
+            sprite.position = CGPoint(x: pod.pos.x + offset, y: pod.pos.y - Double(squash) * tuning.podRadius * 0.6)
+            sprite.xScale = scale * (1 + squash)
+            sprite.yScale = scale * (1 - squash)
             sprite.zRotation = rotation
             sprite.alpha = alpha
             wrapCandidates.append(sprite)
             shown += 1
         }
+        if trailDue <= 0 { trailDue = 0.06 }
         var i = shown
         while i < shownPods {
             podSprites[i].isHidden = true
@@ -308,6 +374,7 @@ extension RiftwingMode {
             sprite.position = CGPoint(x: mine.pos.x, y: mine.pos.y)
             sprite.zRotation = CGFloat(clock * 1.4 + Double(mine.id))
             sprite.setScale(1 + 0.06 * CGFloat(sin(clock * 5 + Double(mine.id))))
+            sprite.alpha = darkVisibility(at: mine.pos, seed: mine.id + 50)
             wrapCandidates.append(sprite)
             if linkIndex < linkSprites.count {
                 setLink(linkIndex, from: mine.anchor, to: mine.pos, run: run, color: tether, alpha: 0.7, width: 1.2)
@@ -345,7 +412,6 @@ extension RiftwingMode {
         let arrivals = run.arrivals
         let count = min(arrivals.count, arrivalSprites.count)
         notePoolOverflow("arrivals", needed: arrivals.count, pool: arrivalSprites.count)
-        let telegraph = tuning.telegraphTime
         var i = 0
         while i < count {
             let arrival = arrivals[i]
@@ -358,7 +424,8 @@ extension RiftwingMode {
                 glow.color = color
                 sprite.look = roleIndex
             }
-            let t = min(max(1 - arrival.remaining / telegraph, 0), 1)
+            // The glow runs its whole time (longer for a forced arrival).
+            let t = min(max(1 - arrival.remaining / max(arrival.glowTime, 0.01), 0), 1)
             let strobe = arrival.remaining < 0.25 && sin(clock * 50) <= 0
             let inward: CGFloat = arrival.side == .left ? 1 : -1
             let edge = arrival.side == .left ? 0.0 : tuning.width

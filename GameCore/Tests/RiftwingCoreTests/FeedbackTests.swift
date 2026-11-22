@@ -127,6 +127,43 @@ struct CavesVoiceModel {
         #expect(Self.frame(&director, [Self.flap], tick: 50 + hush) != [nil])
     }
 
+    /// Every patch an urgent cue plays.
+    static let urgentPatchNames: Set<String> = Set(RiftwingEventCatalog.every
+        .filter { RiftwingSoundDirector.tier(of: $0) == .urgent }
+        .compactMap { theme.sound(for: $0)?.name })
+
+    /// The synth refuses nothing urgent: no cooldown of its own, a second copy, the top priority.
+    @Test func urgentPatchesCannotBeRefusedByTheSynth() {
+        #expect(Self.urgentPatchNames.count >= 9)
+        for name in Self.urgentPatchNames {
+            let patch = Self.theme.allSounds.first { $0.name == name }!
+            #expect(patch.cooldown == 0, "\(name) cooldown \(patch.cooldown)")
+            #expect(patch.maxVoices >= 2, "\(name)")
+            #expect(patch.priority == 10, "\(name)")
+        }
+        // Two pods lost two frames apart, two clashes lost a tenth of a second apart and so on
+        // are each two sounds, through the director and the voices.
+        var director = RiftwingSoundDirector()
+        var model = CavesVoiceModel()
+        let cues: [(RiftwingEvent, Int)] = [
+            (.podLost(id: 1, at: Self.p, cause: .rift), 100), (.podLost(id: 2, at: Self.p, cause: .rift), 104),
+            (.clashLost(opponent: 1, role: .striker, at: Self.p), 200),
+            (.clashLost(opponent: 2, role: .warden, at: Self.p), 212),
+            (.hatchWarning(id: 3, at: Self.p, becomes: .striker), 300),
+            (.hatchWarning(id: 4, at: Self.p, becomes: .striker), 302),
+            (.podSeized(id: 5, by: 6, at: Self.p), 400), (.podSeized(id: 7, by: 8, at: Self.p), 404),
+        ]
+        for (event, tick) in cues {
+            let variant = director.variant(for: event, tick: tick)
+            #expect(variant != nil, "\(event)")
+            if let variant, let patch = Self.theme.sound(for: event, variant: variant) {
+                model.play(patch, at: Double(tick) / 120)
+            }
+        }
+        #expect(model.rateLimited.isEmpty, "\(model.rateLimited)")
+        #expect(model.started.values.allSatisfy { $0 == 2 }, "\(model.started)")
+    }
+
     @Test func repeatsAreSpaced() {
         var director = RiftwingSoundDirector()
         let land = RiftwingEvent.landed(at: Self.p, ledge: 0)
@@ -164,6 +201,8 @@ struct CavesVoiceModel {
     @Test(arguments: [RiftwingPilot.Skill.novice, .competent])
     func aRealGameNeverDrownsTheUrgentCues(skill: RiftwingPilot.Skill) {
         var urgentAsked = 0, urgentVoiced = 0
+        // Urgent cues by frame and kind: a second of the same kind in the same frame is merged.
+        var urgentMoments = 0
         var flapsVoiced = 0, flapEvents = 0
         var busiestFrame = 0
         var perSecond: [Int] = []
@@ -182,7 +221,12 @@ struct CavesVoiceModel {
                 guard step % 2 == 0 else { continue }
                 let now = seconds + Double(step) / 120
                 var voiced = 0
+                var urgentKinds: Set<Int> = []
                 for event in frameEvents {
+                    if RiftwingSoundDirector.tier(of: event) == .urgent, let kind = RiftwingSoundDirector.kind(of: event),
+                       urgentKinds.insert(kind).inserted {
+                        urgentMoments += 1
+                    }
                     if case .flapped(_, false) = event { flapEvents += 1 }
                     let urgent = RiftwingSoundDirector.tier(of: event) == .urgent
                     if urgent { urgentAsked += 1 }
@@ -206,19 +250,21 @@ struct CavesVoiceModel {
             waves += game.wave
         }
         let played = Double(perSecond.reduce(0, +)) / Double(max(perSecond.count, 1))
-        let urgentNames = Set(Self.theme.allSounds.filter { $0.priority >= 9 }.map(\.name))
+        let urgentNames = Self.urgentPatchNames
         print("VOICED riftwing \(skill): 3 games, waves \(waves), \(Int(seconds)) s, flaps \(flapEvents) -> \(flapsVoiced) voiced, "
               + "busiest frame \(busiestFrame), average \(String(format: "%.1f", played))/s, busiest second \(perSecond.max() ?? 0), "
               + "urgent \(urgentAsked) asked \(urgentVoiced) voiced")
         print("VOICED by patch: " + byName.sorted { $0.value > $1.value }.map { "\($0.key) \($0.value)" }.joined(separator: ", "))
         print("VOICES crowded out: \(model.crowdedOut), rate-limited: \(model.rateLimited), cut short: \(model.cutShort)")
-        // Every urgent cue the game produced was voiced, except a second one of the same kind in
-        // the same frame (two pods lost at once are one sound).
-        #expect(urgentVoiced >= urgentAsked * 9 / 10, "urgent \(urgentVoiced) of \(urgentAsked)")
-        // ...and none of them lost a voice or was rate-limited by the synth.
+        // Every urgent cue the game produced was voiced: one for each kind in each frame (two pods
+        // lost in the same frame are one sound, at once).
+        #expect(urgentAsked > 0)
+        #expect(urgentVoiced == urgentMoments, "urgent \(urgentVoiced) voiced of \(urgentMoments) (\(urgentAsked) events)")
+        // ...and none of them lost a voice, was cut short or was refused by a patch's cooldown.
         for name in urgentNames {
             #expect(model.crowdedOut[name] == nil, "\(name) crowded out")
             #expect(model.cutShort[name] == nil, "\(name) cut short")
+            #expect(model.rateLimited[name] == nil, "\(name) rate-limited \(model.rateLimited[name] ?? 0) times")
         }
         #expect(model.crowdedOut.isEmpty, "\(model.crowdedOut)")
         #expect(busiestFrame <= RiftwingSoundDirector.frameBudget + 4)
@@ -334,6 +380,32 @@ struct CavesVoiceModel {
         }
         for event in silent {
             #expect(HapticCue.cue(for: event) == nil, "\(event)")
+        }
+    }
+
+    /// What every kind of event is felt as. No `default`: an event added to the game does not
+    /// compile here until its feel is decided.
+    static func expectedCue(_ event: RiftwingEvent) -> HapticCue? {
+        switch event {
+        case .clashWon(_, _, _, let stoop): stoop ? .impact : .tap
+        case .waveStarted: .tap
+        case .podFreed, .podCaught, .waveCleared, .extraLife, .lampsRestored: .doubleTap
+        case .podSeized, .hatchWarning, .riftWarning: .warning
+        case .podLost: .impact
+        case .clashLost, .cavernShifting, .lampsFailed, .gameOver, .riftFillWarning: .rumble
+        case .riderLost(_, _, let cause):
+            if case .clash = cause { nil } else { .rumble }
+        case .cavernShifted, .allColonistsLost, .riftBreathed, .riftSettled, .flapped, .landed, .bumpedLedge, .bumpedRoof,
+             .diveBegan, .wingsOpening, .wingsOpened, .ventEntered, .clashBounced, .gleanerBumped, .riderRespawned,
+             .arrivalTelegraphed, .opponentArrived, .opponentDived, .opponentHit, .opponentDestroyed, .opponentFell,
+             .opponentWithdrew, .mineLaid, .mineCleared, .podDropped, .podLanded, .podCarried, .podHatched:
+            nil
+        }
+    }
+
+    @Test func everyEventIsDecidedForTouch() {
+        for event in RiftwingEventCatalog.every {
+            #expect(HapticCue.cue(for: event) == Self.expectedCue(event), "\(event)")
         }
     }
 
