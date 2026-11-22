@@ -453,7 +453,11 @@ step is pushed so you can install it.
         breath is fairer, no place is safe to camp, and the game is tuned to a novice bot
         remade to fly like a person, which reaches wave 5.5 to 5.6 (median 6) over 600 games.
         602 tests. Pushed before its independent check; see "Fixes and tuning (15d)".
-  - [ ] 15e. Polish
+  - [x] 15e. Polish (2026-11-22): crisper figures with a shape of their own for each kind,
+        fairer lamps out, effects for flaps, clashes, stoops and pods, the cavern crumbling
+        into its new shape, the Rift's last breath shown and heard as its own thing, and the
+        faults the screen-and-sound check found. 606 tests. Pushed before any independent
+        check. See "Polish (15e)".
 - [ ] Gate: Riftwing played and refined
 - [ ] 16. Campaign design and planning, approved
 - [ ] 17. Campaign build
@@ -2095,3 +2099,57 @@ generous in early waves, not counted in the break or while protected); being pin
 never changes the clash rule against you, it only draws opponents and removes the beginner's
 leniency; "pinned" means pressed against rock, not flying near it; a kind may win a little in
 its first wave so that its threat ramps.
+
+### Polish (15e)
+
+Built 2026-11-22. All mine. Commit `542e92b`.
+
+**The faults the check found, fixed**
+
+- The title behind a finished run always shows a clean first cavern: no gas, no darkness.
+- An urgent sound can no longer be dropped by the synthesiser: two pods lost almost together
+  give two sounds. Two of the same kind in the very same frame still give one, on purpose.
+- Sparks, rings and flashes cross the side join, and so does the pool of light.
+- Everything freezes on the pause screen.
+- A touch the system cancels takes back its flap if it has not been used yet. A tap made
+  while the rider is down is dropped, not carried over: the rider returns standing on a
+  ledge, and a carried tap would lift it off before you had seen where it was.
+- Tests: a new event now fails the sound and haptic tests until it is given a cue; colours
+  must differ clearly, not merely differ.
+
+**Look**
+
+- **Figures** are drawn sharper, with a tight halo and a faint fill, at the same size. Each
+  kind has a shape of its own: the Glider broad and ragged with a streamer; the Striker a
+  swept dart with a spike and split tail; the Warden squared wings, a plate and a tall crest;
+  the Sower a seed sac and a tendril; the Gleaner a lozenge with blades and an open pincer;
+  pods a capsule; mines thorned with a red core.
+- **Colours changed for clearness:** the Striker is now azure (its red was too close to the
+  warning red), mines pale pink, the rider's shield pale cyan.
+- **Lamps out:** the pool of light is larger (lit to 115 units, dark from 250; it was 70 and
+  160), and opponents and mines never fade below a faint outline, with a glint now and then.
+- **The Rift's last breath** has its own look (a red glow climbing to the roof, red bars up
+  both walls, the notice "THE RIFT ERUPTS. NOWHERE IS SAFE: FINISH THE FIGHT!"), its own
+  2.4 s sound, and a rumble.
+- **Pods:** a knocked pod is dim and spinning until it can be caught, then pops; a pod hanging
+  over the Rift shimmers, then flashes red before it falls; a freed colonist is seen climbing
+  away.
+- **Camping:** a "HUNTED" popup and a closing red ring when the cavern turns on a rider who
+  has stayed put.
+- **Effects:** a downwash on each flap; sparks and a recoil on a clash won; a ring, streaks
+  and shake that grow with a stoop; pieces and feathers of light when a rig is knocked off.
+- **Banners:** a debut banner shows the newcomer's figure; banners move down when the rider
+  is in the top of the gallery, and any text over the rider fades.
+- **The cavern shift:** the old ledges crack and fall one by one; the new ones rise into
+  place.
+- **Cost:** 60 frames a second held over five minutes; about 30 more nodes (5%), a fixed
+  number that does not grow.
+
+**Not done or not seen**
+
+- **The touch controls still rest inside the gallery.** The builder made them rest in the side
+  margins where there are any, but the shell gives a mode a scene with no margins (the black
+  bands on a wide phone are outside it), so nothing changed on screen. Moving them needs a
+  shell change, which I have left for you to ask for.
+- Only reasoned, never seen: the camping cue, a pod hanging over the Rift, the stoop growing,
+  the freed colonist, text fading over the rider, a cancelled touch. Nothing has been heard.
