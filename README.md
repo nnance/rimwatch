@@ -5,7 +5,8 @@ vast crater, whose wall is the Rim. Rimwatch is the game; it is made of modes, e
 about saving colonists. The first mode, **Ridgeline**, is a side-scrolling rescue shooter inspired
 by the classic arcade game Defender (Williams Electronics, 1981). The second, **Redoubt**, is a
 twin-stick arena shooter in the spirit of Robotron: 2084 (Williams Electronics, 1982). A third,
-Riftwing (flap-to-fly combat), is planned.
+**Riftwing**, is a flap-to-fly duel of height in the caves of the crater wall; its game logic is
+built and it is not yet in the app.
 
 Native iOS, written in Swift with SpriteKit. It has no third-party dependencies and no asset files:
 the art is drawn in code and the sound is synthesised. The one image in the app, its icon, is drawn
@@ -142,6 +143,46 @@ Each stick appears wherever a thumb lands in its half of the screen. The Stick s
 the two sticks (the Shockwave button goes with the aim stick). Redoubt has no gamepad layout
 option.
 
+## Riftwing
+
+Not yet playable: its game logic, bots and tuning harness are built (`GameCore/Sources/RiftwingCore/`),
+and the app, sound and effects come next. It takes the flap-to-fly genre's mechanic (flap to
+climb, the higher fighter wins) and nothing else: its cavern, cast, names and layouts are its own.
+
+- **The place:** one fixed screen, seen from the side: a gallery in the caves of the crater wall,
+  900 by 600 units. The left and right edges are tunnel mouths that join. Four to six rock ledges
+  at uneven heights, in three layouts that change every three waves with a rumble and a longer
+  break. The bottom is the Rift, a glowing fissure with no floor over it: falling in costs a
+  life. Two or three vents send up columns of rising air that carry anything in them upward.
+  The roof stops you and does no harm.
+- **Flying:** gravity pulls all the time; each tap of flap is one push up and a little along the
+  steer. Speed carries: you glide, and turn by leaning against your momentum. You can land on a
+  ledge and run along it. Holding dive folds the wings and drops you fast; the wings take a
+  quarter of a second to reopen, so a dive begun too low ends in the Rift.
+- **The clash:** when you touch an opponent, the higher wins; within 8 units of level you both
+  bounce apart. Pressed against the roof beside an opponent you are level with it. A strike made
+  while diving is a stoop: it scores more the farther you fell and knocks a Warden off in one
+  blow (it otherwise takes two). In each kind's first appearances it must be clearly higher to
+  beat you, so an opening clash is more often a bounce than a loss.
+- **Rescue:** every opponent on a rig is a turned colonist; knock one off and its colonist drops
+  in a pod. Reach the pod to free them (500, 1,000, 1,500 and so on in a wave), catch it in the
+  air for double, and each freed scores 250 more when the wave ends. A pod lost in the Rift is
+  gone. A pod left on a ledge hatches into a rig one grade tougher: after 15 seconds in wave 1,
+  0.8 seconds less each wave, never under 7. Lose every colonist of a wave and the next is flown
+  in the dark until you free one.
+- **Opponents:** Glider (slow, lazy, wanders), Striker (climbs above you, then commits to a strike
+  and has to recover), Warden (keeps height, dives, two blows), Gleaner (not on a rig: it carries
+  a resting pod off to a tunnel mouth, late in a wave, one at a time, and a carry always takes
+  several seconds), Sower (drifts laying mines on tethers; strike it from above and they all go).
+  Arrivals glow in a tunnel mouth for a second and never come out within 220 units of you. Each
+  kind is gentler in its first appearances, counted in its own appearances, fading to full
+  strength by its seventh.
+- **A wave that drags on:** after 50 seconds gas rises from the Rift part of the way up for a few
+  seconds, with a warning first; each later breath of the same wave rises higher, up to the roof.
+  Anything caught under it is lost.
+- **Lives:** three, at most five, an extra one every 35,000 points; you come back on the ledge
+  farthest from the fight with a moment of protection.
+
 ## Fold behaviour
 
 Gameplay only runs on the open inner display.
@@ -189,6 +230,7 @@ cd Tools/Harness
 swift build -c release -Xswiftc -DDEBUG
 .build/release/Harness 80 20 idle novice competent shooter          # Ridgeline
 .build/release/Harness redoubt 80 20 idle novice competent wallCircler   # Redoubt
+.build/release/Harness riftwing 200 25 novice competent             # Riftwing
 ```
 
 The arguments are the number of seeds, a cap in minutes per game, and the bots to run. A leading
@@ -206,6 +248,21 @@ many were freed.
 `MAP=1000,8919 .build/release/Harness redoubt` instead prints, for each seed, a text map of where
 each of the first five waves' opening crowd lands (the novice bot plays in between, so the orb is
 where a player might leave it); `MAPWAVES` and `MAPBOT` change the waves shown and the bot.
+
+A leading `riftwing` runs Riftwing's bots: `idle`, `novice` (the stand-in for a first-time
+player: it flaps to stay up, goes for the nearest opponent from above as it judges it, misjudges
+some heights, picks up pods that are close or flashing, flees only some of the time and reacts
+late) and `competent` (manages height, stoops, rides vents, catches pods, avoids mines), plus five
+exploit bots kept to check that stalling never pays: `topLedgeSitter`, `roofHoverer`,
+`ventRider`, `lowHider` and `levelBouncer`. Without bot names it runs all eight. For each bot it
+prints the wave reached (median, and mean with its standard error), survival, score a minute,
+clashes, what lives were lost to, how close arrivals came, and per wave: lives lost per game that
+reached it, the share of games ending there, wave length, pods dropped, freed and caught in the
+air, pods lost to the Rift, hatching, Gleaners and the breath, how long pods lay before being
+freed, the time to the first pod lost, the shortest Gleaner carry and how often the Rift breathed.
+`SEEDBASE` moves the seed set; the main tuning numbers have environment overrides (listed at the
+top of `Tools/Harness/Sources/Harness/Riftwing.swift`). `TRACE=<seed>` prints one game step by
+step, and `GOLDEN=1` prints the replay fingerprint the determinism test pins, from a release build.
 
 ## App icon
 
@@ -225,7 +282,7 @@ swift run --package-path Tools/Icon Icon Rimwatch/Assets.xcassets/AppIcon.appico
 
 | Path | What it holds |
 |---|---|
-| `GameCore/` | The game logic as a Swift package, with no UIKit or SpriteKit, and its tests. Its `RidgelineCore` target is the Ridgeline mode: world, simulation, enemies, waves, scoring and the theme, plugged into the shared session in `RidgelineMode.swift`. Its `RedoubtCore` target is Redoubt's: the run (`RedoubtRun`), enemies, colonist line, waves, bots, its theme (`Theme.swift`, `Themes/CalderDome.swift`, with sounds and music in `Themes/CalderDomeSounds.swift`), and in `Audio/` the rules for which events are voiced (`RedoubtSoundDirector`) and the music mood (`RedoubtMoodDirector`). Its `GameCore` target is what any game mode can share: maths, shapes, the emblem, sound rendering and music, menus, options, saved settings (one high-score table per mode and the mode played last), gamepad logic, the list of modes the title offers (`ModeCatalog`), and in `Session/` the title, pause, countdown and screen flow around a run (`ModeSession`, `ModeFrontEnd`), written against the `ModeRun` protocol each mode's simulation conforms to. The game logic knows what each entity does, never how it looks; appearance and sound come from a `Theme`. |
+| `GameCore/` | The game logic as a Swift package, with no UIKit or SpriteKit, and its tests. Its `RidgelineCore` target is the Ridgeline mode: world, simulation, enemies, waves, scoring and the theme, plugged into the shared session in `RidgelineMode.swift`. Its `RedoubtCore` target is Redoubt's: the run (`RedoubtRun`), enemies, colonist line, waves, bots, its theme (`Theme.swift`, `Themes/CalderDome.swift`, with sounds and music in `Themes/CalderDomeSounds.swift`), and in `Audio/` the rules for which events are voiced (`RedoubtSoundDirector`) and the music mood (`RedoubtMoodDirector`). Its `RiftwingCore` target is Riftwing's logic: the run (`RiftwingRun`), flight, the clash, pods, the five opponents, the cavern's layouts (`Cavern.swift`), waves and bots. Its `GameCore` target is what any game mode can share: maths, shapes, the emblem, sound rendering and music, menus, options, saved settings (one high-score table per mode and the mode played last), gamepad logic, the list of modes the title offers (`ModeCatalog`), and in `Session/` the title, pause, countdown and screen flow around a run (`ModeSession`, `ModeFrontEnd`), written against the `ModeRun` protocol each mode's simulation conforms to. The game logic knows what each entity does, never how it looks; appearance and sound come from a `Theme`. |
 | `Rimwatch/` | The app. |
 | `Rimwatch/Shell/` | The parts of the app any mode shares, with no Ridgeline in them. `ShellScene` is the one SpriteKit scene: it owns the devices every mode shares (`ShellDevices`: the synth, the game controller, haptics) and loads one mode at a time, swapping modes when the title asks. `ModeHost` runs the loaded mode inside it (screen flow, menus, pause, countdown, sound, settings, touches) through the `GameMode` protocol in `GameMode.swift`. Also fold handling, the glow renderer, the emblem, and the menu screens and play overlays, whose look comes from a `ShellStyle`. |
 | `Rimwatch/Modes/` | `ModeRegistry.swift` lists the modes and is the only shell-level file that names one. |

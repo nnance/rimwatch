@@ -2,10 +2,15 @@ import Foundation
 import GameCore
 import RidgelineCore
 
-// Usage: Harness [seeds] [maxMinutes] [skill...]           (Ridgeline)
-//        Harness redoubt [seeds] [maxMinutes] [skill...]   (Redoubt, see Redoubt.swift)
+// Usage: Harness [seeds] [maxMinutes] [skill...]            (Ridgeline)
+//        Harness redoubt [seeds] [maxMinutes] [skill...]    (Redoubt, see Redoubt.swift)
+//        Harness riftwing [seeds] [maxMinutes] [skill...]   (Riftwing, see Riftwing.swift)
 if CommandLine.arguments.count > 1, CommandLine.arguments[1] == "redoubt" {
     runRedoubt(Array(CommandLine.arguments.dropFirst(2)))
+    exit(0)
+}
+if CommandLine.arguments.count > 1, CommandLine.arguments[1] == "riftwing" {
+    runRiftwing(Array(CommandLine.arguments.dropFirst(2)))
     exit(0)
 }
 
