@@ -1319,7 +1319,7 @@ better off).
 - The Spitter smoothness test's bound is a little looser than before (1.45 an appearance, and
   1.81 allowed for wave 4 to 7).
 
-**The corrections** (commit `c891738` on its branch, pushed the same day; not separately
+**The corrections** (commit `63fcbca`, pushed the same day; not separately
 checked, since each has a test that failed before it and passes after):
 
 - **A least gap of 4 s between Gleaners** in a wave (`RedoubtWaves.gleanerLeastGap`). It is
