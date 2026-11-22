@@ -1292,6 +1292,31 @@ chose to have that fixed before moving on. Commit `cfcbd8c`.
 - Nothing here has been judged on screen: how the slow creep beside a wall reads, and the
   slower first shots.
 
+**What the independent check found** (2026-11-21, a separate checker with its own
+measurements): **pass with notes.** Nothing is broken. The least time is never beaten by any
+route, waves neither end early nor stall, the undo switch replays the earlier game exactly,
+and no difficulty or feel test was loosened. Its numbers agree with the builder's (novice 5.32
+against 5.21 before, median 5; competent 10.22 against 9.96; none of the four exploit bots
+better off).
+
+- Gleaners still landed together in waves 2 and 4: the first waits for its clock, and by then
+  a quick player has already let in the others. Being corrected with a least gap between
+  Gleaners.
+- The 8 s fallback was counted from the wave's first Gleaner, not the one before, so a gap of
+  10 s was possible. Being corrected.
+- One to three in a hundred seizures happen so close to the wall that the drag creeps at
+  about 1 unit a second and looks held. Being corrected with a least drag speed and a longer
+  path.
+- For the novice, colonists are lost later in a wave but not fewer by its end (wave 7: 39%
+  before and after). For the competent bot they are fewer (wave 9: 36% to 30%).
+- Lives lost in wave 2 rose slightly (0.13 to 0.17), probably because Gleaners still to come
+  no longer hold places on the floor.
+- Novice Spitter shots rise 5.6 times from wave 4 to wave 7 (2.4 to 13.5): the count goes
+  from 2 Spitters to 6 after two waves without any. This is the steepest step left in Redoubt
+  after the wave 2 to 3 step in lives lost (0.54).
+- The Spitter smoothness test's bound is a little looser than before (1.45 an appearance, and
+  1.81 allowed for wave 4 to 7).
+
 ### What the independent check of sound, polish and balance found
 
 It passed with notes (before the easier early waves above, which were checked separately).
