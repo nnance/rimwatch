@@ -435,9 +435,9 @@ step is pushed so you can install it.
 - [x] 14. Riftwing design written here (2026-11-21). You chose the one-screen cavern and
       flap plus a dive with no weapon, and told me to build while you were away; I took that
       as approval. My other choices are marked "mine" in "Riftwing design" for you to overrule.
-- [x] 15. Riftwing build (2026-11-22): all five stages are in and pushed, with two rounds of
-      corrections after independent checks. 622 tests. The last round of corrections is being
-      checked independently now.
+- [x] 15. Riftwing build (2026-11-22): all five stages are in and pushed, with three rounds of
+      corrections after independent checks. 629 tests. The third round is the last tuned
+      against bots; it is being checked for defects only.
   - [x] 15a. Game logic (2026-11-21): the `RiftwingCore` target, its tests, eight scripted
         bots and the `riftwing` harness. 521 tests. The novice bot reaches wave 5.5 to 5.6 on
         three sets of 200 games; the competent bot wave 10.3; no exploit bot outlasts or
@@ -461,7 +461,7 @@ step is pushed so you can install it.
         faults the screen-and-sound check found. 606 tests. Pushed before any independent
         check. See "Polish (15e)".
 - [ ] Gate: Riftwing played and refined (yours: play it, and we refine it until you are happy
-      to move on. What to look at first is listed at the end of "The second round of
+      to move on. What to look at first is listed at the end of "The third round of
       corrections" and "Polish (15e)" in the Riftwing design.)
 - [ ] 16. Campaign design and planning, approved
 - [ ] 17. Campaign build
