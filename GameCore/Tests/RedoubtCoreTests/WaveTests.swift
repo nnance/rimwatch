@@ -409,9 +409,10 @@ import GameCore
     @Test func spittersFireSlowlyInTheirFirstWaves() throws {
         let waves = RedoubtWaves()
         let tuning = RedoubtTuning()
-        // 3.8 times the interval in their debut wave (3; twice before the figures grew), easing
-        // back to normal by wave 7.
-        #expect(abs(waves.spitterFireScale(forWave: 3, tuning: tuning) - 3.8) < 1e-9)
+        // Twice the interval in their debut wave (3; 3.8 times before the Burrows' ease, twice
+        // before the figures grew), easing back to normal by wave 7.
+        #expect(abs(waves.spitterFireScale(forWave: 3, tuning: tuning) - 2.0) < 1e-9)
+        #expect(abs(RedoubtWaves.beforeBurrowEase.spitterFireScale(forWave: 3, tuning: tuning) - 3.8) < 1e-9)
         #expect(abs(RedoubtWaves.beforeFiguresGrew.spitterFireScale(forWave: 3, tuning: tuning) - 2.0) < 1e-9)
         let scales = (3...7).map { waves.spitterFireScale(forWave: $0, tuning: tuning) }
         #expect(zip(scales, scales.dropFirst()).allSatisfy { $0 > $1 })
@@ -419,6 +420,53 @@ import GameCore
         flat.spitterDebutSlowdown = 1
         #expect(abs(waves.spitterFireScale(forWave: 7, tuning: tuning) - flat.spitterFireScale(forWave: 7, tuning: tuning)) < 1e-9)
         #expect(abs(flat.spitterFireScale(forWave: 3, tuning: tuning) - 1) < 1e-9)
+    }
+
+    /// The Spitters' fire never jumps from one wave to the next: their interval shortens by at
+    /// most 1.4 times a wave (it jumped 1.8 times from wave 6 to 7 before the Burrows' ease).
+    @Test func spitterFireRisesSmoothlyByWave() throws {
+        let waves = RedoubtWaves()
+        let tuning = RedoubtTuning()
+        let expected: [Int: Double] = [3: 2.0, 4: 0.94 * 1.75, 5: 0.88 * 1.5, 6: 0.82 * 1.25, 7: 0.76]
+        for (wave, scale) in expected {
+            #expect(abs(waves.spitterFireScale(forWave: wave, tuning: tuning) - scale) < 1e-9, "wave \(wave)")
+        }
+        for wave in 3..<20 {
+            let ratio = waves.spitterFireScale(forWave: wave, tuning: tuning) / waves.spitterFireScale(forWave: wave + 1, tuning: tuning)
+            #expect(ratio >= 1 && ratio <= 1.4, "wave \(wave) to \(wave + 1): \(ratio)")
+        }
+        let before = RedoubtWaves.beforeBurrowEase
+        #expect(before.spitterFireScale(forWave: 6, tuning: tuning) / before.spitterFireScale(forWave: 7, tuning: tuning) > 1.8)
+    }
+
+    /// The Burrows' ease: their debut wave (5) sends one Burrow, not two, and it pours twice as
+    /// slowly, easing back to the normal rate by wave 8. `beforeBurrowEase` turns it off.
+    @Test func burrowsDebutAloneAndPourSlowlyAtFirst() throws {
+        let waves = RedoubtWaves()
+        let tuning = RedoubtTuning()
+        let burrows = { (w: RedoubtWaves, wave: Int) in w.composition(forWave: wave).first { $0.role == .burrow }?.count ?? 0 }
+        #expect(burrows(waves, 5) == 1)
+        #expect(waves.composition(forWave: 5).map(\.role) == [.skitter, .burrow])
+        #expect(burrows(waves, 7) == 1)
+        #expect(burrows(waves, 9) == 2)
+        #expect(burrows(RedoubtWaves.beforeBurrowEase, 5) == 2)
+        // The crowd keeps its size: the missing Burrow is a Skitter.
+        let crowd = { (w: RedoubtWaves) in w.composition(forWave: 5).reduce(0) { $0 + $1.count } }
+        #expect(crowd(waves) == crowd(RedoubtWaves.beforeBurrowEase))
+        let expected: [Int: Double] = [5: 2.0, 6: 0.95 * (1 + 2.0 / 3), 7: 0.9 * (1 + 1.0 / 3), 8: 0.85, 9: 0.8]
+        for (wave, scale) in expected {
+            #expect(abs(waves.burrowSpawnScale(forWave: wave, tuning: tuning) - scale) < 1e-9, "wave \(wave)")
+        }
+        for wave in 5..<20 {
+            #expect(waves.burrowSpawnScale(forWave: wave + 1, tuning: tuning) <= waves.burrowSpawnScale(forWave: wave, tuning: tuning))
+        }
+        let before = RedoubtWaves.beforeBurrowEase
+        for wave in 5...20 {
+            let plain = max(1 - tuning.burrowSpawnGrowth * Double(wave - 5), tuning.burrowMinScale)
+            #expect(before.burrowSpawnScale(forWave: wave, tuning: tuning) == plain)
+        }
+        #expect(RedoubtWaves.beforeGleanerEase.burrowsAtDebut == 2)
+        #expect(RedoubtWaves.beforeFiguresGrew.burrowDebutSlowdown == 1)
     }
 
     /// The Gleaners' ease (after the owner's third play): in their debut wave the opening

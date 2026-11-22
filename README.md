@@ -94,8 +94,9 @@ colonists still to save.
   while the rest is scattered thinly over the floor away from you; the scattered share grows
   each wave until, from wave 8, the crowd lands anywhere. So the opening waves can be read and
   met, and there is room to back away. The crowd starts a little smaller and grows to its full
-  size by wave 7, and Spitters fire at about a quarter of their rate in the wave they first
-  appear, back to full rate by wave 7. In the Gleaners' first waves they land several seconds
+  size by wave 7, and Spitters fire at half their rate in the wave they first appear, back to
+  full rate by wave 7; a single Burrow opens in their first wave, pouring Skitters at half
+  their rate, back to full rate by wave 8. In the Gleaners' first waves they land several seconds
   after the rest of the crowd (7 in wave 2) and drag a seized colonist slowly, so there is time
   to see the alarm and shoot them; by wave 7 they come with the crowd at full pace. Laps hugging the wall are no refuge: while the orb runs along a wall, new
   groups land on the path ahead of it.

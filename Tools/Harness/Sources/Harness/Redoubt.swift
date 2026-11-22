@@ -11,7 +11,8 @@ import RedoubtCore
 // 13d entry exactly); SCATTER=0.2,0.25,... PUSHDEPTH FALLOFF ALONG SCATCLEAR WALLW GDRAWS tune it.
 // FIGURE=1 CROWD=1 QUOTA0=90 QUOTASTEP=25 EASE0=0.9 EASESTEP=0.015 SPITEASE=2 together restore
 // the game before the figures grew. GLDELAY GLDRAG GLEASE tune the Gleaners' ease; GLDELAY=0
-// GLDRAG=1 restore the game before it. SEEDBASE moves the seed set (default 1000) to check a result is not luck of the seeds.
+// GLDRAG=1 restore the game before it. BURSLOW BUREASE tune the Burrows' ease and BURKIDS their
+// Skitter limit; SPITEASE=3.8 BURSLOW=1 restore the game before the Burrows' ease. SEEDBASE moves the seed set (default 1000) to check a result is not luck of the seeds.
 
 private func redoubtTuning() -> RedoubtTuning {
     var t = RedoubtTuning()
@@ -45,6 +46,7 @@ private func redoubtTuning() -> RedoubtTuning {
     if let v = env["WALLW"].flatMap(Double.init) { t.mainWallWeighting = v }
     if let v = env["ALONG"].flatMap(Int.init) { t.pushAlongDraws = v }
     if let v = env["GDRAWS"].flatMap(Int.init) { t.groupSpotDraws = v }
+    if let v = env["BURKIDS"].flatMap(Int.init) { t.burrowMaxChildren = v }
     return t
 }
 
@@ -64,6 +66,9 @@ private func redoubtWaves() -> RedoubtWaves {
     if let v = env["GLDELAY"].flatMap(Double.init) { w.gleanerDebutDelay = v }
     if let v = env["GLDRAG"].flatMap(Double.init) { w.gleanerDebutDragSlowdown = v }
     if let v = env["GLEASE"].flatMap(Double.init) { w.gleanerEaseWaves = v }
+    if let v = env["BURSLOW"].flatMap(Double.init) { w.burrowDebutSlowdown = v }
+    if let v = env["BUREASE"].flatMap(Double.init) { w.burrowEaseWaves = v }
+    if let v = env["BURN"].flatMap(Int.init) { w.burrowsAtDebut = v }
     return w
 }
 
@@ -82,6 +87,9 @@ private struct RedoubtStats {
     var waveStarts: [Int: Double] = [:]
     var colonistsByWave: [Int: Int] = [:]
     var savedByWave: [Int: Int] = [:]
+    var spitterShotsByWave: [Int: Int] = [:]
+    var livesAtStart: [Int: Int] = [:]
+    var burrowSpawnsByWave: [Int: Int] = [:]
     var powerCuts = 0
     var powerCutWaves: [Int] = []
     var causes: [String: Int] = [:]
@@ -223,6 +231,7 @@ private func playRedoubt(skill: RedoubtPilot.Skill, seed: UInt64, maxMinutes: Do
             case .waveStarted(let w, let colonists):
                 stats.waveStarts[w] = t
                 stats.colonistsByWave[w] = colonists
+                stats.livesAtStart[w] = run.orb.lives
             case .waveCleared(let w, let safe, _):
                 stats.savedByWave[w, default: 0] += safe
                 stats.waveSeconds[w] = t - (stats.waveStarts[w] ?? t)
@@ -271,6 +280,8 @@ private func playRedoubt(skill: RedoubtPilot.Skill, seed: UInt64, maxMinutes: Do
             case .powerCutBegan:
                 stats.powerCuts += 1
                 stats.powerCutWaves.append(run.wave)
+            case .enemyFired: stats.spitterShotsByWave[run.wave, default: 0] += 1
+            case .burrowSpawned: stats.burrowSpawnsByWave[run.wave, default: 0] += 1
             case .shockwave: stats.shockwaves += 1
             case .orbFired: stats.shotsFired += 1
             case .enemyDestroyed: stats.kills += 1
@@ -413,6 +424,25 @@ func runRedoubt(_ args: [String]) {
             if !s.isEmpty { starts += String(format: " w%d:%.0f", w, s[s.count / 2]) }
         }
         print(deaths)
+        // Spitter shots and Burrow spawns per game in each wave (over the games that reached it),
+        // the share of those games with no Spitter shot in the wave, and the share of all games
+        // ending in it.
+        var lives = "lives at wave start", spits = "spitter shots/game ", none = "no spitter shot    ", pours = "burrow spawns/game ", ends = "games ending in    "
+        for w in 1...max(min(maxWave, 16), 1) {
+            let reached = all.filter { $0.wave >= w }
+            guard !reached.isEmpty else { continue }
+            let n = Double(reached.count)
+            lives += String(format: " w%d:%.2f", w, Double(reached.reduce(0) { $0 + ($1.livesAtStart[w] ?? 0) }) / n)
+            spits += String(format: " w%d:%.1f", w, Double(reached.reduce(0) { $0 + ($1.spitterShotsByWave[w] ?? 0) }) / n)
+            if w >= 3 { none += String(format: " w%d:%.0f%%", w, 100 * Double(reached.count { ($0.spitterShotsByWave[w] ?? 0) == 0 }) / n) }
+            pours += String(format: " w%d:%.1f", w, Double(reached.reduce(0) { $0 + ($1.burrowSpawnsByWave[w] ?? 0) }) / n)
+            ends += String(format: " w%d:%.0f%%", w, 100 * Double(all.count { $0.wave == w }) / Double(all.count))
+        }
+        print(lives)
+        print(spits)
+        print(none)
+        print(pours)
+        print(ends)
         print(saved)
         print(starts)
         // The feel: share of fighting time with fewer than 5 / no shootable enemies alive, the

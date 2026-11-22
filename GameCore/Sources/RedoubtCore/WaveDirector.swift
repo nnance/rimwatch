@@ -41,10 +41,22 @@ public struct RedoubtWaves: Sendable {
         return waves
     }
 
+    /// The waves as they were before the Burrows' ease: debut Spitters 3.8 times slower, easing
+    /// over four waves, and two Burrows pouring at the full rate from their debut. With this the
+    /// game is exactly the one before.
+    public static var beforeBurrowEase: RedoubtWaves {
+        var waves = RedoubtWaves()
+        waves.spitterDebutSlowdown = 3.8
+        waves.spitterEaseWaves = 4
+        waves.burrowDebutSlowdown = 1
+        waves.burrowsAtDebut = 2
+        return waves
+    }
+
     /// The waves as they were before the Gleaners' ease: every Gleaner of the opening crowd lands
     /// with the rest of it and drags at the full speed from its debut.
     public static var beforeGleanerEase: RedoubtWaves {
-        var waves = RedoubtWaves()
+        var waves = RedoubtWaves.beforeBurrowEase
         waves.gleanerDebutDelay = 0
         waves.gleanerDebutDragSlowdown = 1
         return waves
@@ -79,9 +91,19 @@ public struct RedoubtWaves: Sendable {
     public var crowdEaseGrowth = 0.03
     /// Spitters fire this many times more slowly in their debut wave, easing back to the normal
     /// rate over `spitterEaseWaves` waves. Before 13d: 1 (no slowdown); before the figures
-    /// grew: 2.
-    public var spitterDebutSlowdown = 3.8
+    /// grew: 2; before the Burrows' ease: 3.8 (which left debut Spitters nearly silent and a
+    /// jump in their fire from wave 6 to 7).
+    public var spitterDebutSlowdown = 2.0
     public var spitterEaseWaves = 4.0
+    /// Burrows pour Skitters this many times more slowly in their debut wave (5), easing back to
+    /// the normal rate over `burrowEaseWaves` waves, so wave 5 is no cliff for a first-time
+    /// player. `beforeBurrowEase` sets it to 1, the game before.
+    public var burrowDebutSlowdown = 2.0
+    public var burrowEaseWaves = 3.0
+    /// Burrows the Burrows' debut wave sends (2 before the Burrows' ease). With two, slowing
+    /// their pour alone (even three times) still left wave 5 at about 1.3 lives lost for the
+    /// novice pilot; with one it is about 0.9.
+    public var burrowsAtDebut = 1
 
     /// The main push and the scatter (after the owner's second play: the whole crowd along one
     /// wall, the same wall wave after wave, looked artificial). While a wave has entry walls, its
@@ -193,7 +215,8 @@ public struct RedoubtWaves: Sendable {
         var others: [(role: RedoubtRole, count: Int)] = []
         if let debut = Self.debut.first(where: { $0.wave == wave }) {
             // A debut: the new role and Skitters, nothing else.
-            others = [(debut.role, Self.count(of: debut.role, wave: wave, first: wave))]
+            let count = debut.role == .burrow ? burrowsAtDebut : Self.count(of: debut.role, wave: wave, first: wave)
+            others = [(debut.role, count)]
         } else {
             for (role, first) in Self.debut where first < wave {
                 others.append((role, Self.count(of: role, wave: wave, first: first)))
@@ -245,6 +268,9 @@ public struct RedoubtWaves: Sendable {
 
     /// Burrow spawn interval in a wave, as a multiple of the base.
     public func burrowSpawnScale(forWave wave: Int, tuning: RedoubtTuning) -> Double {
-        max(1 - tuning.burrowSpawnGrowth * Double(max(wave - 5, 0)), tuning.burrowMinScale)
+        let first = Self.debut.first { $0.role == .burrow }?.wave ?? 5
+        let since = Double(max(wave - first, 0))
+        let slowdown = 1 + (max(burrowDebutSlowdown, 1) - 1) * max(0, 1 - since / max(burrowEaseWaves, 1e-9))
+        return max(1 - tuning.burrowSpawnGrowth * since, tuning.burrowMinScale) * slowdown
     }
 }
