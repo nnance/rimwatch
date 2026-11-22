@@ -42,9 +42,8 @@ import GameCore
         var r = quietRun()
         let colonist = r.addColonist(at: Vec2(450, 80))
         let gleaner = r.addEnemy(.gleaner, at: Vec2(450, 150))
-        // A quiet run is in wave 0, before the Gleaners' debut, so it drags at the debut's slow
-        // pace (`RedoubtWaves.gleanerDebutDragSlowdown`): about 9 s to the wall.
-        let events = run(&r, steps: seconds(12)) { $0.isHuskFormed }
+        // A quiet run is in wave 0, which sends no Gleaners, so it drags at the full speed.
+        let events = run(&r, steps: seconds(6)) { $0.isHuskFormed }
         let kinds = events.map(\.kind)
         // Seized, dragged to the south wall, lost, and the Gleaner turns.
         #expect(kinds.contains("colonistSeized"))
@@ -70,11 +69,21 @@ import GameCore
         #expect(try distance(r.req(enemy: gleaner).pos, r.orb.pos) < distance(held, r.orb.pos) - 40)
     }
 
-    /// The Gleaners' ease: a seized colonist is dragged six times more slowly in wave 2, four
-    /// times in wave 4, and at the full `gleanerDragSpeed` from wave 7.
+    /// The Gleaners' ramp: a seized colonist is dragged six times more slowly in wave 2 (their
+    /// first wave), 4.5 times in wave 4, 3.75 in wave 7, 3 in wave 9, twice in wave 10, and at the
+    /// full `gleanerDragSpeed` from wave 11; and at the full speed in a wave without Gleaners
+    /// (a quiet run's wave 0, wave 5). Before the ramp, wave 0 crawled like wave 2.
     @Test func gleanersDragSlowlyInTheirFirstWaves() throws {
-        for (wave, scale) in [(2, 1.0 / 6), (4, 0.25), (7, 1.0), (9, 1.0)] {
-            var r = quietRun()
+        let cases: [(RedoubtWaves, Int, Double)] = [
+            (RedoubtWaves(), 0, 1), (RedoubtWaves(), 2, 1.0 / 6), (RedoubtWaves(), 4, 1 / 4.5),
+            (RedoubtWaves(), 5, 1), (RedoubtWaves(), 7, 1 / 3.75), (RedoubtWaves(), 9, 1.0 / 3),
+            (RedoubtWaves(), 10, 0.5), (RedoubtWaves(), 11, 1), (RedoubtWaves(), 14, 1),
+            (RedoubtWaves.beforeGleanerRamp, 0, 1.0 / 6), (RedoubtWaves.beforeGleanerRamp, 7, 1),
+        ]
+        for (waves, wave, scale) in cases {
+            var r = RedoubtRun(seed: 7, waves: waves)
+            r.wavesEnabled = false
+            r.phase = .fighting
             r.wave = wave
             let colonist = r.addColonist(at: Vec2(450, 250))
             let gleaner = r.addEnemy(.gleaner, at: Vec2(450, 290))

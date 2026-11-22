@@ -4,6 +4,9 @@ import GameCore
 public struct RedoubtSpawn: Sendable, Equatable {
     public var delay: Double
     public var role: RedoubtRole
+    /// For a late arrival held back in `RedoubtRun.pending`: whether the opening-crowd spawn it
+    /// came from is scattered (`RedoubtWaves.isScattered`), so it lands where that spawn would.
+    public var scattered = false
 }
 
 /// Decides what each Redoubt wave contains.
@@ -41,11 +44,21 @@ public struct RedoubtWaves: Sendable {
         return waves
     }
 
+    /// The waves as they were before the Gleaners' ramp: their ease counted in waves (gone by
+    /// wave 7, a cliff, since Gleaners come only in waves 2, 4, 7, 9 and on), Gleaners landing
+    /// late always with the main push, and quiet runs (wave 0) dragging at the debut crawl. With
+    /// this the game is exactly the one before.
+    public static var beforeGleanerRamp: RedoubtWaves {
+        var waves = RedoubtWaves()
+        waves.gleanerRamp = false
+        return waves
+    }
+
     /// The waves as they were before the Burrows' ease: debut Spitters 3.8 times slower, easing
     /// over four waves, and two Burrows pouring at the full rate from their debut. With this the
     /// game is exactly the one before.
     public static var beforeBurrowEase: RedoubtWaves {
-        var waves = RedoubtWaves()
+        var waves = RedoubtWaves.beforeGleanerRamp
         waves.spitterDebutSlowdown = 3.8
         waves.spitterEaseWaves = 4
         waves.burrowDebutSlowdown = 1
@@ -122,18 +135,57 @@ public struct RedoubtWaves: Sendable {
     /// taken in its first few seconds, where Ridgeline takes them late and slowly in its early
     /// stages). In the Gleaners' debut wave the opening crowd's Gleaners land
     /// `gleanerDebutDelay` seconds after the rest of it (their telegraphs start that much later),
-    /// and a seized colonist is dragged `gleanerDebutDragSlowdown` times more slowly; both ease
-    /// back to nothing over `gleanerEaseWaves` waves (by wave 8). `beforeGleanerEase` sets the
-    /// first two to 0 and 1, the game before.
+    /// and a seized colonist is dragged `gleanerDebutDragSlowdown` times more slowly. Both ease
+    /// back to nothing over the Gleaners' next appearances by `gleanerRampEase`.
+    /// `beforeGleanerEase` sets the first two to 0 and 1, the game before.
     public var gleanerDebutDelay = 7.0
     public var gleanerDebutDragSlowdown = 6.0
+    /// How much of the ease is left in each of the Gleaners' waves (`gleanerWave(_:)`: the waves
+    /// that send Gleaners, 2, 4, 7, 9, 10 and on), first to last; 0 after the last entry, and in
+    /// a wave without Gleaners (and a quiet run's wave 0). So the player meets them a little
+    /// sooner and a little faster each time, the full speed from their sixth wave (11): late by
+    /// 7, 4.9, 3.85, 2.8 and 1.4 s and dragging at 10, 13, 16, 20 and 30 units a second in waves
+    /// 2, 4, 7, 9 and 10, then on time at 60. (Counted in waves, as before the ramp, the ease
+    /// was gone by wave 7: a cliff.)
+    public var gleanerRampEase: [Double] = [1, 0.7, 0.55, 0.4, 0.2]
+    /// True: the ease follows `gleanerRampEase`. False (`beforeGleanerRamp`): it is counted in
+    /// waves from the debut over `gleanerEaseWaves` (gone by wave 7, a cliff, since waves 5 and 6
+    /// send no Gleaners; at its fullest in wave 0 too).
+    public var gleanerRamp = true
+    /// Whether an opening-crowd spawn landing late (the early waves' Gleaners) follows the
+    /// scatter rule of the spawn it came from (`isScattered`). False, deliberately: late arrivals
+    /// always land with the main push along the entry walls. Letting them scatter was measured
+    /// (novice pilot, 160 seeds on two seed sets) to cost a first-time player about a sixth of a
+    /// wave, and it puts Gleaners beside colonists: the first seizure came earlier and some drags
+    /// took no time at all, against the owner's wish that colonists go later and more slowly.
+    public var lateArrivalsScatter = false
+    /// Waves from the debut the ease lasts with `gleanerRamp` off.
     public var gleanerEaseWaves = 5.0
 
-    /// How far a wave is into the Gleaners' ease: 1 in their debut wave (and before), easing to
-    /// 0 over `gleanerEaseWaves` waves.
+    /// The wave the Gleaners first come in.
+    private static let gleanerDebut = debut.first { $0.role == .gleaner }?.wave ?? 2
+
+    /// True when a wave's opening crowd has Gleaners: their debut, and every later wave that is
+    /// not another role's debut.
+    public func sendsGleaners(_ wave: Int) -> Bool {
+        wave == Self.gleanerDebut || (wave > Self.gleanerDebut && !Self.debut.contains { $0.wave == wave })
+    }
+
+    /// Which of the Gleaners' waves a wave is: 0 for their debut (wave 2), 1 for the next wave
+    /// that sends them (4), then 2 (7), 3 (9), 4 (10) and so on; nil for a wave without them.
+    public func gleanerWave(_ wave: Int) -> Int? {
+        guard sendsGleaners(wave) else { return nil }
+        return (Self.gleanerDebut..<wave).count { sendsGleaners($0) }
+    }
+
+    /// How much of the Gleaners' ease is left in a wave: 1 in their first wave, 0 once it is
+    /// over and in a wave without Gleaners.
     private func gleanerEase(forWave wave: Int) -> Double {
-        let first = Self.debut.first { $0.role == .gleaner }?.wave ?? 1
-        return max(0, 1 - Double(max(wave - first, 0)) / max(gleanerEaseWaves, 1e-9))
+        guard gleanerRamp else {
+            return max(0, 1 - Double(max(wave - Self.gleanerDebut, 0)) / max(gleanerEaseWaves, 1e-9))
+        }
+        guard let index = gleanerWave(wave), index < gleanerRampEase.count else { return 0 }
+        return min(max(gleanerRampEase[index], 0), 1)
     }
 
     /// Seconds after the rest of the opening crowd that its Gleaners land in a wave.

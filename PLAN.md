@@ -419,6 +419,10 @@ step is pushed so you can install it.
   - [x] Refinement 4 (2026-11-21): Spitters fire in their first wave again and the Burrows'
         first wave is eased instead. 428 tests. Pushed before its independent check; see
         "Spitters back, Burrows eased" in the Redoubt design.
+  - [x] Refinement 5 (2026-11-21): the Gleaners' ease ramps across their appearances, so
+        wave 7 is no longer a cliff for colonists. 432 tests. Pushed before its independent
+        check; see "The Gleaners' ease as a ramp" in the Redoubt design. You played refinement
+        3 and said stage 2 was improved.
 - [ ] 14. Riftwing design written here and approved
 - [ ] 15. Riftwing build
 - [ ] Gate: Riftwing played and refined
@@ -1100,6 +1104,54 @@ slowly in the early stages. Until now the bots measured only how the orb fared.
     Gleaner's marker appears.
   - No test covers where delayed Gleaners land, or the orb being lost while they are still to
     come (seen four times in its runs with nothing going wrong).
+
+### The Gleaners' ease as a ramp (2026-11-21)
+
+The check of the first Gleaner ease found that it ended abruptly: Gleaners come in waves 2, 4,
+7, 9, 10 and on, and the ease was counted in wave numbers, so wave 7 had none of it.
+
+- **The ease now steps down across the Gleaners' own appearances** and applies only in waves
+  that send Gleaners:
+
+  | Wave | Gleaners land after the crowd by | Drag speed |
+  |---|---|---|
+  | 2 | 7 s | 10 units a second (6 times slower) |
+  | 4 | 4.9 s | 13 (4.5 times) |
+  | 7 | 3.9 s | 16 (3.75 times) |
+  | 9 | 2.8 s | 20 (3 times) |
+  | 10 | 1.4 s | 30 (twice) |
+  | 11 on | none | 60 |
+
+  `RedoubtWaves.gleanerRampEase` is `[1, 0.7, 0.55, 0.4, 0.2]`, the share of the ease left in
+  each Gleaner wave. `RedoubtWaves.beforeGleanerRamp` gives exactly the previous game.
+- **Late Gleaners always land with the main push, never in the scatter**, as a deliberate rule
+  (`lateArrivalsScatter` false). I first asked for them to follow the scatter rule like the
+  rest of the crowd; measured, that landed some beside colonists, moved the first seizure
+  earlier, allowed an instant loss and cost the novice about a sixth of a wave.
+- **Result for the novice in wave 7** (before to after; two seed sets):
+  first seizure 1.1 s to 4.6 s; colonists lost about 30% to between 6% and 12%; games losing
+  three or more in the first 20 seconds about 60% to between 11% and 33%. Few novice games
+  reach wave 7 (12 of 80 and 35 of 160), so these are rough. Wave 2 is unchanged. Wave 4 is
+  slightly softer than before the ramp (11% lost against 13%, first seizure 6.9 s against 6.0).
+- **The balance** over 80 seeds: novice wave 5 (mean 5.14; it was 6 and 5.36); competent 10
+  (9.93); wall circler 3 (3.44); corner camper 7 (7.42; it was 7.16). On a second set of 160
+  seeds the novice is level (6, mean 5.32 against 5.33). The 80-seed set is noisy for the
+  novice, but across the last three changes its mean there has gone 5.53, 5.36, 5.14, so the
+  next check measures it on more seeds.
+- **What it leaves:**
+  - **With unlimited lives the bot still loses colonists steeply from wave 7** (measured
+    before the last correction: 38% in wave 7, 49% in wave 9, 61% in wave 10). That comes from
+    the waves themselves, not the delay or drag speed. Gleaners arriving through the wave in
+    ones and twos would be the answer; it is a design change and waits for you.
+  - **The corner camper does a little better.**
+  - A second ramp value of 0.6 keeps wave 4 exactly as it was, but the reversing circler then
+    survives 300.5 s against the 300 s limit of `circlingTheWallIsNoSaferThanFighting`, so 0.7
+    was kept.
+  - A colonist standing right beside the wall the Gleaners come from can still be lost at
+    once.
+- Also fixed: a run with no waves (used only by tests) dragged at the debut crawl, and the
+  test of a full-speed drag ending in a Husk had been stretched to fit; both are put right.
+  New tests cover the orb being lost and the game ending while Gleaners are still to come.
 
 ### Spitters back, Burrows eased (2026-11-21)
 

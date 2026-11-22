@@ -98,7 +98,8 @@ colonists still to save.
   full rate by wave 7; a single Burrow opens in their first wave, pouring Skitters at half
   their rate, back to full rate by wave 8. In the Gleaners' first waves they land several seconds
   after the rest of the crowd (7 in wave 2) and drag a seized colonist slowly, so there is time
-  to see the alarm and shoot them; by wave 7 they come with the crowd at full pace. Laps hugging the wall are no refuge: while the orb runs along a wall, new
+  to see the alarm and shoot them; each wave that sends them, they come a little sooner and
+  drag a little faster, until from their sixth (wave 11) they come with the crowd at full pace. Laps hugging the wall are no refuge: while the orb runs along a wall, new
   groups land on the path ahead of it.
 - **The loop:** colonists shelter around the floor. Touch one and they follow you in a line; lead
   the line to the airlock to deliver them all at once. Each colonist in the line is worth more than

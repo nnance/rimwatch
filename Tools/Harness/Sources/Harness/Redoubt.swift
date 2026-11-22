@@ -10,8 +10,11 @@ import RedoubtCore
 // were before it (see `redoubtWaves`). PUSH=0 turns off the main push and the scatter (the first
 // 13d entry exactly); SCATTER=0.2,0.25,... PUSHDEPTH FALLOFF ALONG SCATCLEAR WALLW GDRAWS tune it.
 // FIGURE=1 CROWD=1 QUOTA0=90 QUOTASTEP=25 EASE0=0.9 EASESTEP=0.015 SPITEASE=2 together restore
-// the game before the figures grew. GLDELAY GLDRAG GLEASE tune the Gleaners' ease; GLDELAY=0
-// GLDRAG=1 restore the game before it. BURSLOW BUREASE tune the Burrows' ease and BURKIDS their
+// the game before the figures grew. GLDELAY GLDRAG GLSTEPS tune the Gleaners' ease; GLDELAY=0
+// GLDRAG=1 restore the game before it. GLSTEPS=1,0.6,... sets the ease left in each Gleaner
+// wave; GLRAMP=0 restores the game before the Gleaners' ramp (the ease counted in waves over
+// GLEASE, not Gleaner waves). LATESCATTER=1 lets late Gleaners scatter. LIVES0=99 starts with that many lives, so
+// a weak bot plays on into later waves (for their colonist numbers). BURSLOW BUREASE tune the Burrows' ease and BURKIDS their
 // Skitter limit; SPITEASE=3.8 BURSLOW=1 restore the game before the Burrows' ease. SEEDBASE moves the seed set (default 1000) to check a result is not luck of the seeds.
 
 private func redoubtTuning() -> RedoubtTuning {
@@ -47,6 +50,9 @@ private func redoubtTuning() -> RedoubtTuning {
     if let v = env["ALONG"].flatMap(Int.init) { t.pushAlongDraws = v }
     if let v = env["GDRAWS"].flatMap(Int.init) { t.groupSpotDraws = v }
     if let v = env["BURKIDS"].flatMap(Int.init) { t.burrowMaxChildren = v }
+    // Lives to start with (and the most the orb can hold): a large number lets a weak bot play
+    // on into waves it would not reach, to measure them.
+    if let v = env["LIVES0"].flatMap(Int.init) { t.startingLives = v; t.maxLives = max(t.maxLives, v) }
     return t
 }
 
@@ -66,6 +72,9 @@ private func redoubtWaves() -> RedoubtWaves {
     if let v = env["GLDELAY"].flatMap(Double.init) { w.gleanerDebutDelay = v }
     if let v = env["GLDRAG"].flatMap(Double.init) { w.gleanerDebutDragSlowdown = v }
     if let v = env["GLEASE"].flatMap(Double.init) { w.gleanerEaseWaves = v }
+    if let v = env["GLRAMP"].flatMap(Int.init) { w.gleanerRamp = v != 0 }
+    if let v = env["LATESCATTER"].flatMap(Int.init) { w.lateArrivalsScatter = v != 0 }
+    if let v = env["GLSTEPS"] { w.gleanerRampEase = v.split(separator: ",").compactMap { Double($0) } }
     if let v = env["BURSLOW"].flatMap(Double.init) { w.burrowDebutSlowdown = v }
     if let v = env["BUREASE"].flatMap(Double.init) { w.burrowEaseWaves = v }
     if let v = env["BURN"].flatMap(Int.init) { w.burrowsAtDebut = v }
@@ -521,7 +530,7 @@ func runRedoubt(_ args: [String]) {
         // more in its first 20 s, seize-to-lost seconds for unbroken drags (median, min), freed
         // per game.
         print("colonists by wave: first seize med/p10 | seized 10s/20s/end | lost 10s/20s/end (gleaner) | games lost>=3 in 20s | drag med/min s | freed/game | crushed/game")
-        for w in 1...min(lastWave, 10) {
+        for w in 1...min(lastWave, 12) {
             let reached = all.filter { $0.wave >= w && $0.colonistsByWave[w] != nil }
             guard !reached.isEmpty else { continue }
             let total = Double(reached.reduce(0) { $0 + ($1.colonistsByWave[w] ?? 0) })

@@ -45,7 +45,8 @@ import GameCore
     /// top-up groups, deliveries, Shockwaves, an extra life and the airlock moving. Debug and
     /// Release builds give the same values. If a deliberate change to the rules, the
     /// tuning, the wave makeup or the pilot breaks it, capture the new values from the printed
-    /// line and say so in the commit. Last captured for the Burrows' ease (one Burrow pouring
+    /// line and say so in the commit. Last captured for the Gleaners' ramp (their ease counted
+    /// in the waves that send them: `RedoubtWaves.gleanerRampEase`); before that for the Burrows' ease (one Burrow pouring
     /// slowly in its debut wave, and debut Spitters back to twice the interval:
     /// `RedoubtWaves.burrowDebutSlowdown`); before that for the Gleaners' ease (late-landing,
     /// slow-dragging Gleaners in their first waves: `RedoubtWaves.gleanerDebutDelay`); before
@@ -58,6 +59,21 @@ import GameCore
     @Test func aScriptedRunReplaysExactly() throws {
         let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180)
         print("REDOUBT GOLDEN hash \(hash) events \(events) score \(r.score) wave \(r.wave) saved \(r.colonistsSaved) delivered \(r.colonistsDelivered) lives \(r.orb.lives) tick \(r.tick)")
+        #expect(hash == 11_798_742_744_692_382_655)
+        #expect(events == 7351)
+        #expect(r.score == 110_200)
+        #expect(r.wave == 6)
+        #expect(r.colonistsSaved == 41)
+        #expect(r.colonistsDelivered == 41)
+        #expect(r.orb.lives == 4)
+        #expect(r.tick == 21_600)
+    }
+
+    /// With `RedoubtWaves.beforeGleanerRamp` the run is exactly the game before the Gleaners'
+    /// ramp: the golden values captured for the Burrows' ease.
+    @Test func turningOffTheGleanersRampReplaysTheGameBeforeIt() throws {
+        let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180,
+                                                 waves: RedoubtWaves.beforeGleanerRamp)
         #expect(hash == 15_979_148_527_682_004_257)
         #expect(events == 7354)
         #expect(r.score == 106_950)

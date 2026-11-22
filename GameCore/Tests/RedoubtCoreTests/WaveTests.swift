@@ -469,35 +469,174 @@ import GameCore
         #expect(RedoubtWaves.beforeFiguresGrew.burrowDebutSlowdown == 1)
     }
 
-    /// The Gleaners' ease (after the owner's third play): in their debut wave the opening
-    /// crowd's Gleaners land 7 s after the rest of it and drag six times more slowly, both easing
-    /// to nothing by wave 7. `beforeGleanerEase` turns it off.
+    /// The Gleaners' ease (after the owner's third play) and its ramp: in their first wave the
+    /// opening crowd's Gleaners land 7 s after the rest of it and drag six times more slowly,
+    /// easing over their next waves (counted in waves that send Gleaners: 2, 4, 7, 9, 10, 11)
+    /// to nothing in their sixth. `beforeGleanerRamp` counts it in waves (gone by wave 7);
+    /// `beforeGleanerEase` turns it off.
     @Test func gleanersArriveLateAndDragSlowlyInTheirFirstWaves() throws {
         let waves = RedoubtWaves()
-        #expect(abs(waves.gleanerDelay(forWave: 2) - 7) < 1e-9)
-        #expect(abs(waves.gleanerDelay(forWave: 4) - 4.2) < 1e-9)
-        #expect(abs(waves.gleanerDragScale(forWave: 2) - 1.0 / 6) < 1e-9)
-        #expect(abs(waves.gleanerDragScale(forWave: 4) - 0.25) < 1e-9)
-        for wave in 7...20 {
+        // The waves that send Gleaners, and which of theirs each is.
+        #expect((0...12).filter { waves.sendsGleaners($0) } == [2, 4, 7, 9, 10, 11, 12])
+        for wave in 0...12 {
+            #expect(waves.sendsGleaners(wave) == waves.composition(forWave: wave).contains { $0.role == .gleaner }, "wave \(wave)")
+        }
+        #expect([2, 4, 7, 9, 10, 11, 3, 0].map { waves.gleanerWave($0) } == [0, 1, 2, 3, 4, 5, nil, nil])
+        let expected: [Int: (delay: Double, slowdown: Double)] = [
+            2: (7, 6), 4: (4.9, 4.5), 7: (3.85, 3.75), 9: (2.8, 3), 10: (1.4, 2), 11: (0, 1),
+        ]
+        for (wave, value) in expected {
+            #expect(abs(waves.gleanerDelay(forWave: wave) - value.delay) < 1e-9, "wave \(wave)")
+            #expect(abs(1 / waves.gleanerDragScale(forWave: wave) - value.slowdown) < 1e-9, "wave \(wave)")
+        }
+        // No ease in a wave without Gleaners (nor a quiet run's wave 0), nor from wave 11.
+        for wave in [0, 1, 3, 5, 6, 8] + Array(11...20) {
             #expect(waves.gleanerDelay(forWave: wave) == 0)
             #expect(waves.gleanerDragScale(forWave: wave) == 1)
         }
-        // Each wave a little harder than the last, never easier.
-        for wave in 2..<12 {
-            #expect(waves.gleanerDelay(forWave: wave + 1) < waves.gleanerDelay(forWave: wave) || waves.gleanerDelay(forWave: wave) == 0)
-            #expect(waves.gleanerDragScale(forWave: wave + 1) >= waves.gleanerDragScale(forWave: wave))
+        // Each Gleaner wave a little harder than the last, never easier, and no step a cliff: the
+        // drag speeds up by at most 1.6 times and the delay shrinks by at most 1.5 s.
+        let gleanerWaves = (2...20).filter { waves.sendsGleaners($0) }
+        for (a, b) in zip(gleanerWaves, gleanerWaves.dropFirst()) {
+            let (delayA, delayB) = (waves.gleanerDelay(forWave: a), waves.gleanerDelay(forWave: b))
+            #expect(delayB < delayA || delayA == 0)
+            #expect(delayA - delayB <= 2.1 + 1e-9, "waves \(a) to \(b)")
+            let (dragA, dragB) = (waves.gleanerDragScale(forWave: a), waves.gleanerDragScale(forWave: b))
+            #expect(dragB > dragA || dragA == 1)
+            #expect(dragB / dragA <= 2 + 1e-9, "waves \(a) to \(b)")
         }
         // Only Gleaners wait.
         for spawn in waves.spawns(forWave: 4) {
             let late = spawn.role == .gleaner ? waves.gleanerDelay(forWave: 4) : 0
             #expect(waves.landing(of: spawn, inWave: 4) == spawn.delay + late)
         }
+        // Before the ramp: counted in waves, so wave 7 had none of it, and wave 0 all of it.
+        let unramped = RedoubtWaves.beforeGleanerRamp
+        #expect(abs(unramped.gleanerDelay(forWave: 2) - 7) < 1e-9)
+        #expect(abs(unramped.gleanerDelay(forWave: 4) - 4.2) < 1e-9)
+        #expect(abs(unramped.gleanerDragScale(forWave: 4) - 0.25) < 1e-9)
+        #expect(abs(unramped.gleanerDragScale(forWave: 0) - 1.0 / 6) < 1e-9)
+        #expect(unramped.gleanerDelay(forWave: 7) == 0)
+        #expect(unramped.gleanerDragScale(forWave: 7) == 1)
         let before = RedoubtWaves.beforeGleanerEase
-        for wave in 1...20 {
+        for wave in 0...20 {
             #expect(before.gleanerDelay(forWave: wave) == 0)
             #expect(before.gleanerDragScale(forWave: wave) == 1)
         }
         #expect(RedoubtWaves.beforeFiguresGrew.gleanerDelay(forWave: 2) == 0)
+    }
+
+    /// Gleaners landing late always land with the main push, in the band along the wave's entry
+    /// wall, even when the opening-crowd spawn they came from is scattered
+    /// (`RedoubtWaves.lateArrivalsScatter` off: scattering them put Gleaners beside colonists).
+    /// Every one keeps the clear distance from the orb as it is when its marker appears, the orb
+    /// flying about meanwhile.
+    @Test func lateGleanersLandWithTheMainPushAndKeepClearOfTheOrb() throws {
+        let moves = [Vec2(1, 0.4), Vec2(-0.7, -1), Vec2(0.3, -1), Vec2(-1, 0.8)]
+        var fromScattered = 0
+        for (n, seed) in ([4, 9, 17, 33] as [UInt64]).enumerated() {
+            var (r, _) = waveOne(seed: seed)
+            r.orb.invulnerableTimer = 1e9
+            for wave in [2, 3, 4] {
+                emptyTheFloor(&r)
+                run(&r, steps: seconds(5)) { $0.isWaveStarted }
+                try #require(r.wave == wave)
+                guard wave != 3 else { continue }
+                let spawns = r.director.spawns(forWave: wave)
+                let late = spawns.indices.filter {
+                    r.director.landing(of: spawns[$0], inWave: wave) > r.tuning.telegraphTime
+                }
+                try #require(!late.isEmpty)
+                #expect(late.allSatisfy { spawns[$0].role == .gleaner })
+                fromScattered += late.count { r.director.isScattered($0, forWave: wave) }
+                let wall = try #require(r.entrySides.first)
+                #expect(r.entrySides.count == 1)
+                var ids: Set<Int> = []
+                let slack = r.tuning.orbMaxSpeed / 120 + 1e-6
+                for step in 0..<seconds(8) {
+                    // Fly about, and keep the floor thin so nothing else is telegraphed.
+                    let input = RedoubtInput(move: moves[(n + step / 90) % moves.count])
+                    r.quota = 0
+                    r.enemies.removeAll { $0.role != .gleaner }
+                    let orbAt = r.orb.pos
+                    for event in r.step(input) {
+                        // Its first marker (one the orb flies onto moves anywhere on the floor).
+                        guard case .arrivalTelegraphed(let id, .gleaner, let at) = event, ids.insert(id).inserted else { continue }
+                        #expect(distance(at, orbAt) >= r.tuning.safeDistance - slack, "seed \(seed) wave \(wave)")
+                        #expect(gap(at, to: wall, r.tuning) <= r.tuning.pushDepth + 1e-9,
+                                "seed \(seed) wave \(wave): \(at) not along \(wall)")
+                    }
+                }
+                #expect(ids.count == late.count, "seed \(seed) wave \(wave)")
+            }
+        }
+        // Some of them came from scattered spawns, so the rule was put to the test.
+        #expect(fromScattered > 0)
+        #expect(!RedoubtWaves().lateArrivalsScatter)
+    }
+
+    /// The orb lost while wave 2's Gleaners are still to come: they are telegraphed and land as
+    /// usual (clear of where it will respawn), and the wave still ends once they are shot.
+    @Test func losingTheOrbWhileGleanersAreToComeStallsNothing() throws {
+        var (r, _) = waveOne(seed: 6)
+        emptyTheFloor(&r)
+        run(&r, steps: seconds(3)) { $0.isWaveStarted }
+        try #require(r.wave == 2)
+        let gleaners = r.pending.count
+        try #require(gleaners > 0 && r.pendingIndex == 0)
+        r.quota = 0
+        r.arrivals.removeAll()
+        r.enemies.removeAll()
+        // Lost just before their markers show (6 s in), so they are telegraphed while it is down.
+        run(&r, steps: seconds(5.5) - seconds(r.waveClock))
+        try #require(r.pendingIndex == 0)
+        r.orb.invulnerableTimer = 0
+        r.destroyOrb(cause: .shot(id: 0))
+        try #require(!r.orb.isAlive && !r.isGameOver)
+        var arrived = 0
+        for _ in 0..<seconds(4) {
+            if r.orb.isAlive { r.orb.invulnerableTimer = 1e9 }
+            for event in r.step(RedoubtInput()) {
+                if case .arrivalTelegraphed(_, .gleaner, let at) = event {
+                    #expect(r.isClearOfOrb(at, by: r.tuning.safeDistance))
+                }
+                if case .enemyArrived(_, .gleaner, _) = event { arrived += 1 }
+                #expect(!event.isWaveCleared)
+            }
+        }
+        #expect(arrived == gleaners)
+        #expect(r.pendingIndex == r.pending.count)
+        #expect(r.orb.isAlive)
+        // Shoot them (and anything they made): the wave ends and the next one comes.
+        r.enemies.removeAll()
+        r.arrivals.removeAll()
+        r.quota = 0
+        let end = run(&r, steps: seconds(1)) { $0.isWaveCleared }
+        #expect(end.contains { $0.isWaveCleared })
+        run(&r, steps: seconds(4)) { $0.isWaveStarted }
+        #expect(r.wave == 3)
+    }
+
+    /// The game ending while wave 2's Gleaners are still to come: the run stops where it is,
+    /// nothing more is telegraphed, and stepping on is harmless.
+    @Test func theGameEndingWhileGleanersAreToComeStopsCleanly() throws {
+        var (r, _) = waveOne(seed: 6)
+        emptyTheFloor(&r)
+        run(&r, steps: seconds(3)) { $0.isWaveStarted }
+        try #require(r.wave == 2)
+        try #require(r.pending.count > 0 && r.pendingIndex == 0)
+        run(&r, steps: seconds(1))
+        r.orb.lives = 1
+        r.orb.invulnerableTimer = 0
+        r.destroyOrb(cause: .shot(id: 0))
+        #expect(r.isGameOver)
+        let tick = r.tick
+        for _ in 0..<seconds(10) {
+            #expect(r.step(RedoubtInput()).isEmpty)
+        }
+        #expect(r.tick == tick)
+        #expect(r.pendingIndex == 0)
+        #expect(!r.arrivals.contains { $0.role == .gleaner })
     }
 
     /// Wave 2's Gleaners are telegraphed 6 s into the wave and land at 7 s. While they wait the

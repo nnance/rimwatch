@@ -168,7 +168,7 @@ public struct RedoubtRun: Sendable {
             updateArrivals(dt)
             waveClock += dt
             while pendingIndex < pending.count, pending[pendingIndex].delay <= waveClock {
-                telegraph(pending[pendingIndex].role)
+                telegraph(pending[pendingIndex].role, scattered: pending[pendingIndex].scattered)
                 pendingIndex += 1
             }
             topUpFloor(dt)
@@ -200,12 +200,15 @@ public struct RedoubtRun: Sendable {
             // Gleaners: `RedoubtWaves.gleanerDebutDelay`) is telegraphed from `pending` when the
             // wave clock reaches it, so its marker shows for the usual time. It holds the wave
             // and counts toward the floor target while it waits.
+            // It lands with the main push, even if the spawn it came from is scattered
+            // (`RedoubtWaves.lateArrivalsScatter`).
             let lands = director.landing(of: spawn, inWave: next)
+            let scattered = !entrySides.isEmpty && director.isScattered(index, forWave: next)
             if lands > tuning.telegraphTime {
-                pending.append(RedoubtSpawn(delay: lands - tuning.telegraphTime, role: spawn.role))
+                pending.append(RedoubtSpawn(delay: lands - tuning.telegraphTime, role: spawn.role,
+                                            scattered: director.lateArrivalsScatter && scattered))
                 continue
             }
-            let scattered = !entrySides.isEmpty && director.isScattered(index, forWave: next)
             telegraph(spawn.role, showingFor: lead + lands, scattered: scattered)
         }
     }
