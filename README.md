@@ -186,8 +186,8 @@ higher fighter wins) and nothing else: its cavern, cast, names and layouts are i
   a resting pod off to a tunnel mouth, late in a wave, one at a time, and a carry always takes
   several seconds), Sower (drifts laying mines on tethers; strike it from above and they all go).
   Arrivals glow in a tunnel mouth for a second and never come out within 220 units of you (180
-  if you camp the mouths themselves). Each kind is gentler in its first appearances, counted in
-  its own appearances.
+  if you camp the mouths themselves). Every kind flies at full strength from its first appearance; only
+  the pods are gentler early on (they fall and drift more slowly).
 - **Resting and hiding:** standing on a ledge is safe for a good while (45 seconds in wave 1,
   less each wave, never under 15), not counting the break between waves; after that the Gliders
   come for you. Pressing against rock to hide draws the hunters to you.

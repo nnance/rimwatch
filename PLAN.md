@@ -462,7 +462,8 @@ step is pushed so you can install it.
         check. See "Polish (15e)".
 - [ ] Gate: Riftwing played and refined (yours: play it, and we refine it until you are happy
       to move on. First play 2026-11-22: rigs grown by half, sides opened, forgiveness removed;
-      see "The owner's first play" in the Riftwing design. Waiting for your next play.)
+      see "The owner's first play". Second play: wave 8 with little practice, so made harder
+      (target wave 5 to 6 for you); see "The owner's second play". Waiting for your next play.)
 - [ ] 16. Campaign design and planning, approved
 - [ ] 17. Campaign build
 
@@ -2383,3 +2384,37 @@ Not independently checked: neither commit has had a separate verifier. Still unc
 screen after the size change: lamps out, a breath and the fill warning; the fill warning still
 shows vertical red bars at the two sides; in the Shelves layout the touch stick sits over part
 of the bottom-left ledge.
+
+### The owner's second play (2026-11-22)
+
+On the build with no forgiveness the owner "was able to get to stage 8 with little practice"
+and asked for a typical game to end at wave 5 to 6. Also from this session: the app now shows
+its version and build number on the title and pause menus (`80afb29`), and builds reach the
+phone through Xcode Cloud and TestFlight on every push.
+
+The novice bot (wave 3.5) is far below the owner and the competent bot (12.6) above, so the
+target was set on the competent bot (mine): the owner reached about 0.63 of its wave, so wave
+5 to 6 for the owner is the competent bot at 8.5 to 9. One data point; adjust after play.
+
+Changed (undo switch `RiftwingWaves.withGentleDebuts`; `withBeginnerForgiveness` chains from it):
+
+- The extra height an opponent needs to win a clash: 16.1 → 12 units at figure scale 1. Fully
+  even clashes (0) overshot: competent bot about wave 7.6.
+- Every kind flies at full strength from its first appearance (the per-kind flight eases are 0).
+  The ease ramp itself stays, because pods' early slow fall, drift and hover use it.
+- Early Wardens no longer miss (`wardenMissEase` 55 → 0).
+- Not changed: debut waves. A Striker in wave 2 ended 72% of novice games in wave 2 for little
+  effect on the competent bot.
+
+Bots (three sets of 200 seeds, 25-minute cap): competent 8.69, 8.71, 8.69, losing about 0.1
+lives in each of waves 1 and 2, 0.4 in wave 3, 1.0 by wave 6, 2.3 by wave 10. Novice 2.5 (was
+3.5), losing about a life a wave from wave 1; sharpNovice 4.2; levelBouncer 4.6. 637 tests.
+
+Open (`// OPEN:` in `DifficultyTests`), all measured against the novice bot, which no longer
+stands for anyone: the level bouncer and several hiding bots outlast or outscore it. Every
+exploit still clears at most half the competent bot's waves and scores at most a quarter of its
+rate; the level bouncer is closest (3.6 waves cleared against 7.7). The competent bot's wave 6
+(Wardens arrive) costs 1.9 to 2.5 times wave 5.
+
+Not independently checked. A true beginner would now find Riftwing very hard; the forgiving
+game is one switch away if a difficulty setting is ever wanted.
