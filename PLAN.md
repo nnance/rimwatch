@@ -1926,3 +1926,30 @@ the app's log was read to confirm each cue fires on its event. How it sounds is 
   carried, hatching, mines and game over (the bots free pods too fast for these to come up).
 - Events added after this stage (such as a separate warning for the breath's last step) are
   silent and unfelt until given a cue; that is for the polish stage (15e).
+
+### What the independent check of screen and sound found (15b and 15c)
+
+Checked 2026-11-21 by a separate checker given the code and this design. Verdict: **pass with
+notes.** Nothing blocks the stage. It confirmed, by doing it, that adding the third mode loses
+nothing saved: high scores and options saved by the build before Riftwing were all still there
+afterwards. Two runs of the same seed gave identical logs, the node count stayed flat over a
+five-minute run, and a simulated gamepad flew, dived and paused correctly. Touch was checked by
+reading the code only: one tap is exactly one flap in every case it could think of. Found,
+and being fixed in the polish stage (15e):
+
+- **Gas from a finished run stays on the title screen** if the game ended while it was up
+  (seen); the lamps-out darkness has the same fault by the code.
+- **The synthesiser can still drop an urgent cue** if two of the same kind come within a
+  quarter to half a second (two pods lost almost together give one sound). It did not happen
+  in bot games.
+- **Bursts and the lamps-out light do not cross the side join,** though figures do.
+- Small: effects keep moving on the pause screen; a touch the system cancels still flaps; a
+  tap while the rider is down is used up.
+- Weak tests: the list of events the sound tests walk is written by hand; the colour test only
+  requires colours to differ at all (the Striker's red is close to the warning red and the
+  mines' pink).
+
+Its opinions on the look, also given to the polish stage: figures are the right size but read
+small next to their glow; with the lamps out, threats outside the pool of light are nearly
+invisible; the touch controls at rest sit over the lowest ledges although the screen has wide
+black margins beside the gallery.
