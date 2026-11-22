@@ -167,12 +167,11 @@ higher fighter wins) and nothing else: its cavern, cast, names and layouts are i
   steer. Speed carries: you glide, and turn by leaning against your momentum. You can land on a
   ledge and run along it. Holding dive folds the wings and drops you fast; the wings take a
   quarter of a second to reopen, so a dive begun too low ends in the Rift.
-- **The clash:** when you touch an opponent, the higher wins; within 11 units of level you both
-  bounce apart, and an opponent has to be almost squarely on top of you to win. A strike made
-  while diving is a stoop: it scores more the farther you fell and knocks a Warden off in one
-  blow (it otherwise takes two). In each kind's first appearances an opponent that would have
-  beaten you often misjudges it and you bounce instead; that fades to nothing by its eighth
-  appearance.
+- **The clash:** when you touch an opponent, the higher wins; within about a third of a rig's height
+  of level you both bounce apart, and an opponent has to be almost squarely on top of you to
+  win. A strike made while diving is a stoop: it scores more the farther you fell and knocks a
+  Warden off in one blow (it otherwise takes two). A clash you lose costs a life, from the
+  first wave on; there is no beginner's forgiveness.
 - **Rescue:** every opponent on a rig is a turned colonist; knock one off and its colonist drops
   in a pod, thrown clear of you. Reach the pod to free them (500, 1,000, 1,500 and so on in a
   wave), go after it and catch it in the air for double, and each freed scores 250 more when the

@@ -461,8 +461,8 @@ step is pushed so you can install it.
         faults the screen-and-sound check found. 606 tests. Pushed before any independent
         check. See "Polish (15e)".
 - [ ] Gate: Riftwing played and refined (yours: play it, and we refine it until you are happy
-      to move on. What to look at first is listed at the end of "The third round of
-      corrections" and "Polish (15e)" in the Riftwing design.)
+      to move on. First play 2026-11-22: rigs grown by half, sides opened, forgiveness removed;
+      see "The owner's first play" in the Riftwing design. Waiting for your next play.)
 - [ ] 16. Campaign design and planning, approved
 - [ ] 17. Campaign build
 
@@ -2342,3 +2342,44 @@ median 6; lives lost rising steadily).
 
 With this, the bot work on Riftwing stops. Everything left is listed under "Not met" in the
 sections above, and is yours to judge by playing.
+
+### The owner's first play (2026-11-22)
+
+The owner played Riftwing on the phone: it "went pretty well", with three things to change.
+
+1. **Rigs too small.** "Riftwing could benefit by upsizing the player and enemies by 50% similar
+   to what we did with Redoubt." Done (`b17badb`): `RiftwingTuning.figureScale` 1 → 1.5. The
+   rider, every opponent, pods, mines, the clash margin and height leniency, the Warden's early
+   miss and the mine tether follow it; the gallery, ledges, speeds, times and the Rift's levels
+   do not. No ledge layout needed changing (tightest ledge-over-ledge gap 136 units against a
+   rig about 31.5 tall in flight). At scale 1 the game is exactly the one before (tested).
+2. **The drawn sides read as walls.** "Having edges that are drawn in the cave doesn't make
+   sense. It gives the impression that you can't fly that direction but you can." Done (same
+   commit): the tunnel-mouth frames are gone; the roof, the Rift's edge and glow run on past
+   each side and fade, with faint receding lines and nothing closing them.
+3. **Never lost a life.** "I played for a while and never died, not even a single time." Asked
+   how hard it should be, the owner chose "No forgiveness at all" (every lost clash costs a life
+   in every wave). Done: `clashMercy` 0.85 → 0 and `standingGraceWaves` 1 → 0; undo switch
+   `RiftwingWaves.withBeginnerForgiveness`. Nothing else was retuned (mine): the height an
+   opponent needs to win (`clashLeniencyBase`), the early opponents' slower flying and the
+   Warden's early misses are the next levers if it is still too easy.
+
+Bots after both changes (three sets of 200 seeds): novice wave 3.4 to 3.6 (was 5.6), competent
+12.6 (12.8 with a 25-minute cap), slowNovice 3.3. The novice bot is no longer the stand-in for
+the owner in this mode; the tests' honest reference for exploits is now the competent bot (no
+exploit clears more than half its waves or scores more than a quarter of its rate). 635 tests.
+
+Open, held in the tests at what the game does now (`// OPEN:` in `DifficultyTests`):
+
+- The level bouncer outlasts the novice bot (wave 5.9 against 3.5 from wave 1; 6.1 against 4.55
+  from wave 4) at under a third of its score a minute. It stays far below the competent bot.
+- From wave 7 the ambusher bots outscore the novice bot (about 4,800 and 5,600 a minute against
+  3,700).
+- Steps a little over the "no wave more than about double the one before" bar: the novice's
+  wave 3 (Strikers arrive, 2.2 to 2.4 times wave 2) and the competent bot's wave 10 (2.1 to
+  2.25 times wave 9).
+
+Not independently checked: neither commit has had a separate verifier. Still unchecked on
+screen after the size change: lamps out, a breath and the fill warning; the fill warning still
+shows vertical red bars at the two sides; in the Shelves layout the touch stick sits over part
+of the bottom-left ledge.
