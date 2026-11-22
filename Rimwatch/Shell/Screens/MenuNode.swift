@@ -148,6 +148,8 @@ final class MenuNode: SKNode {
                              height: size.height - safeArea.top - safeArea.bottom - 2 * m.margin)
         guard content.width > 0, content.height > 0 else { return }
 
+        if menu.kind == .title || menu.kind == .pause { placeVersion(size: size, safeArea: safeArea, m: m) }
+
         // High scores put their table beside the items; every other menu puts its lines under the heading.
         let tableBesideItems = menu.kind == .highScores
         let headingLines = tableBesideItems ? [] : menu.lines
@@ -178,6 +180,27 @@ final class MenuNode: SKNode {
                               height: max(top - used - m.gap * 2 - content.minY, 60))
             placeItems(menu, lines: listLines, in: rest, m: m)
         }
+    }
+
+    /// The app's version and build number, such as "1.0 (57)", read from the main bundle (Xcode
+    /// Cloud sets the build number), so a tester can tell which build is running.
+    private static let versionText: String = {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info["CFBundleVersion"] as? String ?? "?"
+        return "\(version) (\(build))"
+    }()
+
+    /// Draws the version small and dim in the bottom-left corner, inside the margin band that the
+    /// rest of the menu keeps clear of.
+    private func placeVersion(size: CGSize, safeArea: UIEdgeInsets, m: Metrics) {
+        let style = GlowText.Style.body(min(max(m.body * 0.7, 10), 12))
+        let label = GlowText.sprite(Self.versionText, style: style, color: accent.scaled(0.6))
+        label.alpha = 0.7
+        label.anchorPoint = CGPoint(x: 0, y: 0.5)
+        label.position = CGPoint(x: safeArea.left + m.margin - GlowText.padding,
+                                 y: safeArea.bottom + max(m.margin * 0.5, style.size * 0.7))
+        addChild(label)
     }
 
     private func blockHeight(lines: Int, m: Metrics, withHeading: Bool, menu: Menu, emblem: CGFloat) -> CGFloat {
