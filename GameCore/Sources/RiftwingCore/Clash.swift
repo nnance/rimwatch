@@ -109,7 +109,7 @@ extension RiftwingRun {
     /// Near level: both are thrown apart, sideways, the higher a little up and the lower a
     /// little down. Neither stays on a ledge, except a rider standing on one in the waves where
     /// standing is never beaten (`RiftwingWaves.standingGraceWaves`): it keeps its footing, and
-    /// the opponent alone is thrown away.
+    /// the opponent alone is thrown up and away.
     private mutating func bounce(_ index: Int, at: Vec2) {
         let o = opponents[index]
         let side: Double = dxWrap(o.pos.x, rider.body.pos.x) >= 0 ? 1 : -1
@@ -124,6 +124,13 @@ extension RiftwingRun {
         opponents[index].body.vel.y += riderHigher ? -tuning.bounceLift : tuning.bounceLift
         opponents[index].body.ledge = nil
         opponents[index].body.isDiving = false
+        if keepsFooting {
+            // The opponent alone is thrown: up as well as away, so one standing on the same ledge
+            // does not land straight back on it and walk into the rider again, and it cannot
+            // meet the rider again until it has had time to get clear.
+            opponents[index].body.vel.y = max(opponents[index].body.vel.y, tuning.winLift)
+            opponents[index].clashCooldown = max(opponents[index].clashCooldown, tuning.footingCooldown)
+        }
         events.append(.clashBounced(opponent: o.id, role: o.role, at: at))
     }
 

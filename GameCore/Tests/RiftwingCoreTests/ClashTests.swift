@@ -234,6 +234,32 @@ import GameCore
         #expect(abs(r.rider.vel.x) >= r.tuning.bounceSpeed - 1)
     }
 
+    /// The opponent that bounces off a standing rider in wave 1 is thrown up and away, off the
+    /// ledge, and does not meet the rider again at once. (It once landed straight back on the
+    /// same ledge, walked into the rider and bounced off it every 0.35 s: 8 bounces in 4 s.)
+    @Test func theOpponentThatBouncesOffAStandingRiderInWaveOneIsThrownClear() throws {
+        var r = quietRun()
+        r.wave = 1
+        let p = r.rider.body.pos
+        let id = r.place(.glider, at: Vec2(p.x + 10, p.y), ease: 1)
+        var bounces = 0
+        var liftedOff = false
+        for _ in 0..<Int(4 / RiftwingRun.timeStep) {
+            let events = r.step(still)
+            if has(events, "clashBounced") {
+                bounces += 1
+                if bounces == 1, let o = r.opponents.first(where: { $0.id == id }) {
+                    liftedOff = o.body.ledge == nil && o.vel.y > 0
+                }
+            }
+        }
+        #expect(bounces >= 1)
+        #expect(liftedOff)
+        #expect(bounces <= 2, "\(bounces) bounces in 4 s")
+        #expect(r.rider.isAlive)
+        #expect(r.rider.body.ledge == r.layout.startLedge)
+    }
+
     @Test func aBounceThrowsBothApartAcrossOnly() throws {
         let (r, id, _) = meet(.glider, riderAt: Vec2(440, 300), at: Vec2(460, 303))
         let o = try r.req(opponent: id)

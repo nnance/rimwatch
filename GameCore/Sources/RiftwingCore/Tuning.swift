@@ -133,6 +133,9 @@ public struct RiftwingTuning: Sendable {
     public var rammingMemory = 3.0
     /// After any clash an opponent cannot clash with the rider again for this long.
     public var clashCooldown = 0.35
+    /// After bouncing off a rider who keeps its footing (standing on a ledge in wave 1), an
+    /// opponent cannot meet the rider again for this long.
+    public var footingCooldown = 1.2
     /// The winner of a clash springs up at least this fast.
     public var winLift = 140.0
     /// An opponent that takes a blow but stays on its rig tumbles out of control this long.

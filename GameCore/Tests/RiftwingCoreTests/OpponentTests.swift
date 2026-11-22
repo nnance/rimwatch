@@ -288,6 +288,9 @@ import GameCore
             var total = 0, reaching = 0
             for seed: UInt64 in 1...10 {
                 var r = quietRun(seed: seed)
+                // The Wardens' debut wave: past wave 1, where a standing rider keeps its footing
+                // and the opponent that bounces off it is thrown clear for longer.
+                r.wave = 6
                 let spot = Vec2(450, 250)
                 let id = r.place(.warden, at: Vec2(150, 300), ease: ease)
                 var inDive = false
