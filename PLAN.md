@@ -423,7 +423,9 @@ step is pushed so you can install it.
         wave 7 is no longer a cliff for colonists. 432 tests. Pushed before its independent
         check; see "The Gleaners' ease as a ramp" in the Redoubt design. You played refinement
         3 and said stage 2 was improved.
-- [ ] 14. Riftwing design written here and approved
+- [x] 14. Riftwing design written here (2026-11-21). You chose the one-screen cavern and
+      flap plus a dive with no weapon, and told me to build while you were away; I took that
+      as approval. My other choices are marked "mine" in "Riftwing design" for you to overrule.
 - [ ] 15. Riftwing build
 - [ ] Gate: Riftwing played and refined
 - [ ] 16. Campaign design and planning, approved
@@ -1380,3 +1382,153 @@ whose tint flickers during a hit pulse for about a tenth of a second
 (`RidgelineMode+Sync.swift`), and a held touch button on relayout. Ridgeline's look as you
 approved it includes this, so fixing it changes the particle sizes you have seen; it is not
 fixed.
+
+## Riftwing design
+
+Written 2026-11-21. You chose the two things that shape it most (a one-screen cavern; flap
+plus a dive, no weapon) and told me to build while you were away, so I have taken that as
+approval of the design below. Everything else here is my decision, marked "mine", for you to
+overrule when you play. Every number is a starting value, to be tuned with bots and then by you.
+
+### The feel
+
+- **A duel of height and momentum.** Where Redoubt is a flood, Riftwing is a handful of
+  opponents, each one a duel: four to ten on screen, never ninety. You win a clash by being
+  above your opponent when you meet. Every flap spends effort to buy height, and height is
+  what you fight with. The pilot skill it trains is altitude and energy.
+- Riftwing is an original game in the flap-to-fly genre. It takes that genre's mechanic (flap
+  to climb, the higher fighter wins) and nothing else: its cavern, cast, names, art, sounds
+  and layouts are its own, and no layout is modelled on another game's.
+
+### The place and the player
+
+- **Arena (yours):** one fixed screen, seen from the side: a gallery in the caves of the crater
+  wall. The left and right edges are tunnel mouths that join, so flying off one side brings
+  you in on the other. A thin strip at the top holds the HUD (score, wave, lives, colonists).
+- **Ledges (mine):** four to six rock shelves at uneven heights, never symmetrical. There are
+  three layouts; the cavern shifts to the next every three waves, with a rumble and a short
+  pause while the rock settles. You can land on a ledge and run along it.
+- **The Rift (mine):** the bottom of the screen is the Rift, a glowing fissure with no floor
+  over it. Falling into it costs a life. Two or three vents in the Rift send up columns of
+  rising air: fly into one and it carries you up without flapping, so there are routes that
+  save effort. Enemies use them too.
+- **The roof (mine):** the cavern roof stops you; it does no harm. An opponent pressed against
+  the roof beside you is level with you, so sitting at the top wins nothing.
+- **You** fly a flap-wing rig: a one-person frame with two wings, small enough for caves a
+  ship cannot enter. Gravity pulls you down all the time. Each flap gives a push upward and a
+  little along the way you are steering. Speed carries: you glide, and you turn by leaning
+  against your own momentum, not instantly.
+- **Size (mine, from what you said about Redoubt):** the rig is about 5% of the screen's
+  height across, and opponents are similar, so nothing is a dot.
+
+### Controls
+
+| Action | Touch | Gamepad |
+|---|---|---|
+| Steer left and right | Floating stick, left thumb | Left stick or D-pad |
+| Flap | Tap anywhere on the right half; each tap is one flap | A, or either shoulder button |
+| Dive | Pull the stick down and hold | Stick or D-pad down, or B |
+| Pause | Pause button | Menu |
+
+The handedness option swaps the sides. There is no weapon and no fire button (yours).
+
+### The clash
+
+- When you and an opponent touch, the higher one wins. If you are within a small margin of
+  level, you both bounce apart and nobody is hurt.
+- Win, and the opponent is knocked off its rig. Lose, and it costs you a life; you return on
+  a ledge away from the fight with a moment of invulnerability.
+- **The dive (yours):** hold dive to fold the wings and drop fast. A strike made while diving
+  is a stoop: it scores more the farther you fell, and it beats in one blow the tougher
+  opponents that otherwise take two. The risk is the commitment: the wings take a moment to
+  open again, and a dive begun too low ends in the Rift.
+
+### Rescue
+
+- Every opponent on a rig is a Husk: a colonist the invaders have turned. Knock one off and it
+  drops a pod holding that colonist.
+- **Reach the pod to free the colonist.** A pod falls and comes to rest on a ledge. Catching
+  it in the air, before it lands, scores double: the same skill as Ridgeline's mid-air catch.
+- **A pod that falls into the Rift is lost**, so where you make the strike matters: over a
+  ledge is safe, over the Rift means you must dive after it.
+- **A pod left too long hatches** into a Husk one grade tougher, and that colonist is gone for
+  good. Pods last a long time in the early waves and less as the waves go on (mine, from what
+  you said about how fast Redoubt's colonists were taken: about 15 seconds at first, never
+  under about 7).
+- Freeing several in a wave scores more each time (500, 1,000, 1,500 and so on), and colonists
+  freed in a wave score a bonus at its end.
+- **Lamps out (mine):** lose every colonist in a wave (to the Rift, to hatching or carried
+  off) and the gallery's lamps fail. The next wave is flown in the dark with a pool of light
+  round you, until you free a colonist. This is Riftwing's answer to Blackout and the power
+  cut.
+
+### Opponents
+
+Five kinds (mine), in the same cast as the other modes where it fits. Each new kind first
+appears in a wave of its own, and each one's early appearances are gentler, counted in its own
+appearances so that no wave is a cliff.
+
+| Name | What it does |
+|---|---|
+| Glider | The first Husk rig. Slow, flaps lazily, holds height badly and wanders. One blow. |
+| Striker | Hunts you: climbs to get above you, then comes down. One blow. A hatched Glider pod becomes a Striker. |
+| Warden | Fast and patient. It keeps height and uses the dive as you do. Two blows, or one stoop. A hatched Striker pod becomes a Warden. |
+| Gleaner | Not on a rig, and it ignores you: it flies to a pod on a ledge and carries it off into a tunnel mouth. It comes late in a wave, singly, and slowly at first. Any touch from above or level destroys it; from below it bumps you away. |
+| Sower | Drifts across the gallery leaving mines that hang in the air on tethers and block the good lines. Touching a mine costs a life. Strike the Sower from above to destroy it and all its mines. |
+
+Opponents fly in from the tunnel mouths at the sides, at a height shown by a glow in the
+mouth for about a second beforehand. None arrives within a safe distance of you.
+
+**If a wave drags on, the Rift breathes (mine):** after a long wave, gas rises from the Rift
+part of the way up the gallery for a few seconds, with a warning first, and anything caught
+low in it is lost. It rewards finishing the fight over hiding on a low ledge.
+
+### Structure and scoring
+
+- A wave ends when every opponent on a rig is down and every pod is settled (freed, lost or
+  hatched and beaten). There is a short break between waves.
+- Three lives, at most five, an extra one at a score threshold.
+- Points for a blow by grade, a stoop bonus by the height fallen, the rising rescue score
+  above, a mid-air catch doubling it, and the end-of-wave bonus for colonists freed.
+- The high-score table records score, wave and colonists saved, like the other two.
+
+### Look and sound
+
+- The same neon vector lines on black. A side-on cavern: rock ledges in outline, the Rift
+  glowing along the bottom, drifting motes showing the vents' rising air. Rigs with wings
+  drawn in several poses so a flap reads as a beat. All drawn in code from a Riftwing theme.
+- Its own sound patches and music on the shared synthesiser (a different key and tempo from
+  the other two), and its own haptic cues: none for a flap, since it is constant; a clear cue
+  for a clash won, a clash lost, a pod freed and a pod lost.
+
+### What I will measure from the start
+
+What Redoubt taught, applied before you play, not after:
+
+- **A first game usually reaches wave 5 to 6.** The novice bot stands in for you; its level is
+  judged on at least 600 games, because 80 proved too few to trust.
+- **Rescue pacing as well as survival:** per wave, how long pods last, the share lost and how
+  (the Rift, hatching, carried off), and how long you have once a Gleaner picks one up. Early
+  waves lose few and slowly, and the pressure ramps.
+- **No cliffs:** lives lost per wave, and each kind's threat by its own appearances, rise
+  steadily.
+- **Exploits tried by bots:** sitting on the top ledge, sitting under the roof, riding one
+  vent forever, hiding low, and bouncing level without ever committing.
+
+### How it is built (step 15)
+
+The same order as Redoubt. Each stage is pushed as soon as it builds and passes its tests, and
+checked independently afterwards (agreed 2026-11-21):
+
+- **15a. Game logic:** a `RiftwingCore` target in the package (cavern and ledges, flight,
+  clashes, the dive, pods, the five opponents, vents, the Rift, waves, scoring, lamps out),
+  conforming to the shared run contract, with tests, scripted bots and a `riftwing` harness.
+- **15b. On screen:** the Riftwing mode in the app (cavern, sprites, HUD, controls), listed on
+  the title screen, with DEBUG `-mode riftwing`.
+- **15c. Feedback:** sounds, music moods and haptics for every event.
+- **15d. Waves and tuning:** the measurements above, tuned with the harness and pinned by
+  tests.
+- **15e. Polish:** particles, wing and clash effects, wave banners, the cavern shifting, the
+  lamps-out lighting.
+
+Then the gate: you play Riftwing and we refine it until you are happy to move on.
