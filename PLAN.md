@@ -2153,3 +2153,64 @@ Built 2026-11-22. All mine. Commit `542e92b`.
   shell change, which I have left for you to ask for.
 - Only reasoned, never seen: the camping cue, a pod hanging over the Rift, the stoop growing,
   the freed colonist, text fading over the rider, a cancelled touch. Nothing has been heard.
+
+### The second round of corrections (2026-11-22)
+
+Commit `5d84217`. 622 tests. Pushed before any independent check. It answers "What the
+independent check of the fixes and tuning found (15d)" above. All mine.
+
+- **Pods never enter rock.** They land on a ledge met from above and are stopped by its side
+  or underside. An early pod drifts only toward a ledge its fall will really reach, and hangs
+  over open Rift at a height clear of rock. Pods found inside rock: about 0.55 a novice game
+  before, none after.
+- **Pinned means pressed against rock:** three head bumps within 2 s. Flying near the roof is
+  no longer camping. Clinging or staying put never changes the clash rule against you; it
+  draws opponents and removes the early misjudgement. The competent bot's time counted as
+  camping fell from 20% to 0.3%.
+- **Resting is safe:** 45 s in wave 1, 4 s less each wave, never under 15 s, counted only
+  while fighting and unprotected. After that the Gliders are drawn to you, nothing more. In
+  wave 1, an opponent never wins a clash against a rider standing on a ledge. A bot that does
+  nothing now lasts about 200 s (43 s before). A novice that rests on ledges reaches 5.36
+  against the plain novice's 5.53: the cost of the time resting, not of any rule.
+- **A new kind can win a little at its debut.** The share of would-be wins an early opponent
+  misjudges is 85% at its first appearance, then 72%, 64%, 55%, 46%, 36%, 24%, and none from
+  its eighth. Lives lost per Striker sent now run 0.23, 0.25, 0.33, 0.37, 0.40 by appearance
+  (0.01 then 0.20 before).
+- **Rules the builder added to keep hiding from paying,** once camping no longer changed the
+  clash: rock knocks you down harder for each bump in quick succession; after two bounces off
+  the same opponent within about 3 s, that opponent wins from the ordinary bounce margin; and a
+  rig that hatches from a pod flies at full strength, with none of its kind's early ease.
+- **Forced arrivals** (when the mouths are camped) keep at least 180 units away.
+- **An extra life every 25,000 points** (was 35,000).
+- **The novice bot** no longer has lapses over the Rift after wave 1 and keeps clear of mines
+  it has had time to see.
+- **Exploit bots** now do what they are named for, with three added (standing on, pacing, and
+  pacing and stooping from the top ledge). The best of all eleven reaches wave 3.2 and 1,325
+  points a minute, against the novice's 5.5 and 6,450. None survives without limit.
+- **Tests:** the novice is measured inside the difficulty test on 120 seeds; the four loosened
+  bounds are back. Riftwing's tests now take about 200 s (93 s before).
+
+**Measured by the builder** (novice on 3 x 200 games; not yet independently checked)
+
+| | Novice | Competent |
+|---|---|---|
+| Mean wave | 5.50, 5.50, 5.59 | 14.6 |
+| Median | 6 | 14 |
+| Lives lost in waves 1 and 2 together | 0.40 to 0.45 | 0 |
+| Colonists lost in waves 1 and 2 | 5 to 6% | 0.8% |
+| Lives lost per wave, waves 1 to 7 | 0.23, 0.22, 0.63, 1.08, 1.20, 1.86, 1.87 | none before wave 8 |
+
+**Weak points left, for you to judge at the gate**
+
+- **Two steps remain in lives lost:** wave 3 (Strikers arrive: 0.22 to 0.63) and wave 6
+  (Wardens arrive: 1.20 to 1.86). A Warden at its debut costs about 0.4 lives each, which is
+  not gentle; pods hatching into full-strength rigs add to it.
+- **A rig hatched from a pod is at full strength,** even in wave 1. This guards against one
+  exploit but may be hard on a beginner who is slow to reach pods. It is the first rule I
+  would soften if early waves feel unfair.
+- **The competent bot now reaches wave 14.6** and loses nothing before wave 8, so a skilled
+  player may find the first half slow.
+- **Rules nobody has felt:** the knock from rock, the hunted camper, misjudged clashes, the
+  ramming rule, pods hanging over the Rift.
+- The novice bot is still only a model of you. The checker's last estimate for a person's
+  first game was wave 4.5 to 5.5.

@@ -5,8 +5,8 @@ vast crater, whose wall is the Rim. Rimwatch is the game; it is made of modes, e
 about saving colonists. The first mode, **Ridgeline**, is a side-scrolling rescue shooter inspired
 by the classic arcade game Defender (Williams Electronics, 1981). The second, **Redoubt**, is a
 twin-stick arena shooter in the spirit of Robotron: 2084 (Williams Electronics, 1982). A third,
-**Riftwing**, is a flap-to-fly duel of height in the caves of the crater wall; it is playable
-and still being built (no sound yet, and its balance is being tuned).
+**Riftwing**, is a flap-to-fly duel of height in the caves of the crater wall; it is built and
+waiting to be played and refined.
 
 Native iOS, written in Swift with SpriteKit. It has no third-party dependencies and no asset files:
 the art is drawn in code and the sound is synthesised. The one image in the app, its icon, is drawn
@@ -151,43 +151,49 @@ option.
 
 ## Riftwing
 
-Playable, and still being built: its game logic, bots and tuning harness
-(`GameCore/Sources/RiftwingCore/`) and its screen (`Rimwatch/Modes/Riftwing/`) are in; sound,
-tuning and polish come next. DEBUG `-mode riftwing` starts in it. It takes the flap-to-fly genre's mechanic (flap to
-climb, the higher fighter wins) and nothing else: its cavern, cast, names and layouts are its own.
+Playable in full: its game logic, bots and tuning harness (`GameCore/Sources/RiftwingCore/`), its
+screen (`Rimwatch/Modes/Riftwing/`), and its sounds, music and haptics are in. DEBUG
+`-mode riftwing` starts in it. It takes the flap-to-fly genre's mechanic (flap to climb, the
+higher fighter wins) and nothing else: its cavern, cast, names and layouts are its own.
 
 - **The place:** one fixed screen, seen from the side: a gallery in the caves of the crater wall,
   900 by 600 units. The left and right edges are tunnel mouths that join. Four to six rock ledges
   at uneven heights, in three layouts that change every three waves with a rumble and a longer
-  break. The bottom is the Rift, a glowing fissure with no floor over it: falling in costs a
-  life. Two or three vents send up columns of rising air that carry anything in them upward.
-  The roof stops you and does no harm.
+  break; the change never costs a life. The bottom is the Rift, a glowing fissure with no floor
+  over it: falling in costs a life. Two or three vents send up columns of rising air that carry
+  anything in them upward. The roof does no harm, but nothing can cling to it or to the underside
+  of a ledge: flying up into rock knocks a rig back down.
 - **Flying:** gravity pulls all the time; each tap of flap is one push up and a little along the
   steer. Speed carries: you glide, and turn by leaning against your momentum. You can land on a
   ledge and run along it. Holding dive folds the wings and drops you fast; the wings take a
   quarter of a second to reopen, so a dive begun too low ends in the Rift.
-- **The clash:** when you touch an opponent, the higher wins; within 8 units of level you both
-  bounce apart. Pressed against the roof beside an opponent you are level with it. A strike made
+- **The clash:** when you touch an opponent, the higher wins; within 11 units of level you both
+  bounce apart, and an opponent has to be almost squarely on top of you to win. A strike made
   while diving is a stoop: it scores more the farther you fell and knocks a Warden off in one
-  blow (it otherwise takes two). In each kind's first appearances it must be clearly higher to
-  beat you, so an opening clash is more often a bounce than a loss.
+  blow (it otherwise takes two). In each kind's first appearances an opponent that would have
+  beaten you often misjudges it and you bounce instead; that fades to nothing by its eighth
+  appearance. Bouncing off the same opponent again and again stops being safe.
 - **Rescue:** every opponent on a rig is a turned colonist; knock one off and its colonist drops
-  in a pod. Reach the pod to free them (500, 1,000, 1,500 and so on in a wave), catch it in the
-  air for double, and each freed scores 250 more when the wave ends. A pod lost in the Rift is
-  gone. A pod left on a ledge hatches into a rig one grade tougher: after 15 seconds in wave 1,
-  0.8 seconds less each wave, never under 7. Lose every colonist of a wave and the next is flown
-  in the dark until you free one.
+  in a pod, thrown clear of you. Reach the pod to free them (500, 1,000, 1,500 and so on in a
+  wave), go after it and catch it in the air for double, and each freed scores 250 more when the
+  wave ends. A pod lost in the Rift is gone; early pods fall slowly, drift toward a ledge and
+  hang over the Rift for a few seconds first. A pod left on a ledge hatches into a rig one grade
+  tougher: after 20 seconds in wave 1, 1.2 seconds less each wave, never under 7. Lose every
+  colonist of a wave and the next is flown in the dark until you free one.
 - **Opponents:** Glider (slow, lazy, wanders), Striker (climbs above you, then commits to a strike
   and has to recover), Warden (keeps height, dives, two blows), Gleaner (not on a rig: it carries
   a resting pod off to a tunnel mouth, late in a wave, one at a time, and a carry always takes
   several seconds), Sower (drifts laying mines on tethers; strike it from above and they all go).
-  Arrivals glow in a tunnel mouth for a second and never come out within 220 units of you. Each
-  kind is gentler in its first appearances, counted in its own appearances, fading to full
-  strength by its seventh.
-- **A wave that drags on:** after 50 seconds gas rises from the Rift part of the way up for a few
-  seconds, with a warning first; each later breath of the same wave rises higher, up to the roof.
-  Anything caught under it is lost.
-- **Lives:** three, at most five, an extra one every 35,000 points; you come back on the ledge
+  Arrivals glow in a tunnel mouth for a second and never come out within 220 units of you (180
+  if you camp the mouths themselves). Each kind is gentler in its first appearances, counted in
+  its own appearances.
+- **Resting and hiding:** standing on a ledge is safe for a good while (45 seconds in wave 1,
+  less each wave, never under 15), not counting the break between waves; after that the Gliders
+  come for you. Pressing against rock to hide draws the hunters to you.
+- **A wave that drags on:** the Rift breathes. The first warning comes 90 seconds into the first
+  waves (50 by wave 7), and gas rises in four low steps that can each be flown above. The fifth
+  fills the whole gallery, after its own warning; then it starts again.
+- **Lives:** three, at most five, an extra one every 25,000 points; you come back on the ledge
   farthest from the fight with a moment of protection.
 
 ## Fold behaviour
