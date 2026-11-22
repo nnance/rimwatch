@@ -9,6 +9,9 @@ extension RiftwingRun {
             defer { index += 1 }
             guard !opponents[index].isDead else { continue }
             opponents[index].clashCooldown = max(0, opponents[index].clashCooldown - dt)
+            if opponents[index].rammed > 0 {
+                opponents[index].rammed = max(0, opponents[index].rammed - dt / max(tuning.rammingMemory, 1e-9))
+            }
             opponents[index].flapCooldown -= dt
             if opponents[index].role == .gleaner {
                 updateGleaner(index, dt)
@@ -86,20 +89,36 @@ extension RiftwingRun {
         return cap
     }
 
-    /// The rider is up against rock (the roof or a ledge's underside), where it cannot climb.
+    /// The rider is pressed against rock (the roof or a ledge's underside): it has bumped its head
+    /// `RiftwingTuning.pinnedBumps` times within `pinnedWindow` seconds and is still just under
+    /// the rock. Flying near rock is not pinned.
     var isRiderPinned: Bool {
-        rider.isAlive && rider.body.pos.y
+        guard rider.isAlive, riderBumpTicks.count >= max(tuning.pinnedBumps, 1), let first = riderBumpTicks.first,
+              Double(tick - first) * Self.timeStep <= tuning.pinnedWindow + 1e-9 else { return false }
+        return rider.body.pos.y
             > ceilingHeight(at: rider.body.pos.x, above: rider.body.pos.y - 1, radius: rider.body.radius) - tuning.pinnedBand
     }
 
-    /// The rider has stayed up against rock for `RiftwingTuning.pinnedPatience`: hunters come up
-    /// under the same rock after it and hover there, gently, while it bobs from bumping the rock.
-    private var riderCamping: Bool { riderPinnedFor >= tuning.pinnedPatience }
+    /// The rider has stayed pressed against rock for `RiftwingTuning.pinnedPatience`: hunters come
+    /// up under the same rock after it and hover there, gently, while it bobs from bumping the rock.
+    private var riderCamping: Bool { isRiderClinging }
 
-    /// The rider is camping: pinned against rock for `pinnedPatience`, or staying within
-    /// `stillRadius` of one place for `gliderDrawAfter`. Opponents show it no leniency or mercy.
-    public var isRiderCamping: Bool {
-        rider.isAlive && (riderPinnedFor >= tuning.pinnedPatience || riderStillFor >= tuning.gliderDrawAfter)
+    /// The rider is clinging to a ceiling: it has stayed pressed against rock (`isRiderPinned`)
+    /// for `RiftwingTuning.pinnedPatience`. Hunters come up under the same rock after it, and early
+    /// opponents no longer misjudge their clashes with it (the clash rule itself is unchanged).
+    public var isRiderClinging: Bool { rider.isAlive && riderPinnedFor >= tuning.pinnedPatience }
+
+    /// The rider is camping: clinging to a ceiling (`isRiderClinging`), or resting within
+    /// `RiftwingTuning.stillRadius` of one place for longer than the wave allows
+    /// (`isRiderStill`). Opponents come for a camping rider; only clinging changes how a clash
+    /// is judged (`isRiderClinging`).
+    public var isRiderCamping: Bool { isRiderClinging || isRiderStill }
+
+    /// The rider has stayed within `RiftwingTuning.stillRadius` of one place for longer than this
+    /// wave allows (`RiftwingTuning.gliderDrawAfter(forWave:)`), counting only fighting time
+    /// while unprotected: the Gliders are drawn to it.
+    public var isRiderStill: Bool {
+        rider.isAlive && riderStillFor >= tuning.gliderDrawAfter(forWave: max(wave, 1))
     }
 
     /// The rider is pressed up near the roof (but not camping there): a hunter could at best
@@ -166,13 +185,13 @@ extension RiftwingRun {
 
     /// Glider: wanders to a new place every few seconds, flapping lazily and skipping some
     /// flaps, so it holds height badly. It pays the rider little attention: early on it will not
-    /// flap up into a rider just above it, and a rider that stays put for
-    /// `RiftwingTuning.gliderDrawAfter` draws its wandering to about the rider's height.
+    /// flap up into a rider just above it, and a rider that stays put for longer than the wave
+    /// allows (`isRiderStill`) draws its wandering to about the rider's height.
     private mutating func gliderBehaviour(_ index: Int, _ dt: Double) -> RigControl {
         opponents[index].timer -= dt
         let o = opponents[index]
         if o.timer <= 0 || wrapDistance(o.goal, o.pos) < 30 {
-            if rider.isAlive, riderStillFor >= tuning.gliderDrawAfter {
+            if isRiderStill {
                 // A rider that stays put draws it: it wanders about the rider's height nearby,
                 // so no perch is safe from clashes for long.
                 let y = min(rider.body.pos.y + rng.range(-10...35), tuning.roof - o.body.radius)
@@ -544,6 +563,8 @@ extension RiftwingRun {
         for index in pods.indices where pods[index].state == .seized(by: o.id) {
             pods[index].state = .falling
             pods[index].vel = .zero
+            // It falls from here now: aimed afresh, at a ledge this fall reaches.
+            pods[index].driftLedge = pods[index].drift > 0 ? driftTarget(for: pods[index]) : nil
         }
     }
 

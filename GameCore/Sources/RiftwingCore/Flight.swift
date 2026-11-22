@@ -19,6 +19,9 @@ struct FlightParams: Sendable {
     var flapThrust: Double
     var maxRise: Double
     var runSpeed: Double
+    /// How much harder than usual rock knocks it down (the rider pressing against rock again and
+    /// again: `RiftwingTuning.pressedKnockGrowth`).
+    var knockScale = 1.0
 }
 
 /// What happened to a rig in one step of flight.
@@ -144,7 +147,7 @@ extension RiftwingRun {
         if b.pos.y > tuning.roof - b.radius {
             b.pos.y = tuning.roof - b.radius
             if b.vel.y > 0 {
-                b.vel.y = -max(tuning.ceilingKnock, b.vel.y * 0.25)
+                b.vel.y = -max(tuning.ceilingKnock * p.knockScale, b.vel.y * 0.25)
                 result.bumpedRoof = true
             } else {
                 b.vel.y = min(b.vel.y, 0)
@@ -171,7 +174,7 @@ extension RiftwingRun {
             } else {
                 // Its head strikes the underside: knocked down a little, as at the roof.
                 b.pos.y = bottom - head
-                b.vel.y = -max(tuning.ledgeKnock, abs(b.vel.y) * 0.25)
+                b.vel.y = -max(tuning.ledgeKnock * p.knockScale, abs(b.vel.y) * 0.25)
                 result.bumped = true
             }
         }

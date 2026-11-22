@@ -18,10 +18,12 @@ extension RiftwingRun {
                        min(vel.y * tuning.podInherit, 0) - tuning.podKnock)
         pod.catchableIn = tuning.podCatchDelay
         let eased = min(max(ease, 0), 1)
-        if eased > 0, director.podDriftEase > 0 {
-            pod.drift = director.podDriftEase * eased
-            pod.driftLedge = nearestLedge(below: pos, terminal: pod.terminal, drift: pod.drift)
+        if eased > 0 {
             pod.hoverLeft = director.podHoverEase * eased
+            if director.podDriftEase > 0 {
+                pod.drift = director.podDriftEase * eased
+                pod.driftLedge = driftTarget(for: pod)
+            }
         }
         pods.append(pod)
         waveDropped += 1
@@ -51,9 +53,32 @@ extension RiftwingRun {
         }
     }
 
-    /// A pod in the air: gravity, a gentle limit on its fall, landing on a ledge, or the Rift.
+    /// A pod in the air: it moves (`movePod`), lands on a ledge it meets from above, or is lost
+    /// to the Rift.
     private mutating func fall(_ index: Int, _ dt: Double) {
         var pod = pods[index]
+        if let ledgeIndex = movePod(&pod, dt) {
+            pod.vel = .zero
+            pod.state = .resting(ledge: ledgeIndex)
+            pod.hatchIn = director.podLife(forWave: max(wave, 1), tuning: tuning)
+            pod.warned = false
+            pods[index] = pod
+            events.append(.podLanded(id: pod.id, at: pod.pos, ledge: ledgeIndex))
+            return
+        }
+        pods[index] = pod
+        if pod.pos.y < tuning.riftLevel { losePod(at: index, cause: .rift) }
+    }
+
+    /// One step of a falling pod's flight: gravity and its gentle limit, its drift toward the
+    /// ledge it is aimed at (else its speed across dies away), the Rift's heat holding an early
+    /// pod up over open Rift, the roof, and the rock of the ledges. Rock stops a pod as it stops
+    /// a rig: it lands on a ledge it meets from above (its centre above the middle of the rock),
+    /// and is stopped by a ledge's underside and by its sides, so its centre is never inside
+    /// rock. Returns the ledge it landed on, standing on it; the caller makes it rest there.
+    /// Pure, so `driftTarget(for:)` can run a pod's whole fall ahead of time.
+    func movePod(_ pod: inout RiftwingPod, _ dt: Double) -> Int? {
+        let r = tuning.podRadius
         pod.vel.y = max(pod.vel.y - tuning.podGravity * dt, -pod.terminal)
         if let l = pod.driftLedge, l < ledges.count, !ledges[l].spans(pod.pos.x) || abs(pod.vel.x) > pod.drift {
             // Drifting toward the ledge below: across toward its nearer end, a little way in.
@@ -64,39 +89,99 @@ extension RiftwingRun {
         } else {
             pod.vel.x *= expo(-1.2 * dt)
         }
-        // Near the Rift its heat holds an early pod up for a while before it sinks in.
-        let hover = tuning.riftLevel + director.podHoverHeight
-        if pod.hoverLeft > 0, pod.pos.y <= hover, pod.vel.y < 0 {
-            pod.hoverLeft -= dt
-            pod.vel.y = 0
-            pod.pos.y = hover
-        }
         let previous = pod.pos
         pod.pos = pod.pos + pod.vel * dt
         pod.pos.x = wrapX(pod.pos.x)
-        let r = tuning.podRadius
+        // Over open Rift (no ledge below), its heat holds an early pod up for a while before it
+        // sinks in: at the hover height, or where it is if it is already lower. One aimed at a
+        // ledge drifts on toward it while it is held (its aim was chosen knowing this, so it
+        // reaches that ledge from above); one with nowhere to drift is held still.
+        if pod.hoverLeft > 0, pod.vel.y < 0,
+           !ledges.contains(where: { $0.spans(previous.x) && $0.top <= previous.y }) {
+            let hold = min(tuning.riftLevel + director.podHoverHeight, previous.y)
+            if pod.pos.y < hold {
+                pod.hoverLeft -= dt
+                pod.vel.y = 0
+                pod.pos.y = hold
+                if pod.driftLedge == nil {
+                    pod.vel.x = 0
+                    pod.pos.x = previous.x
+                    return nil
+                }
+            }
+        }
         if pod.pos.y > tuning.roof - r {
             pod.pos.y = tuning.roof - r
             pod.vel.y = min(pod.vel.y, 0)
         }
-        for (ledgeIndex, ledge) in ledges.enumerated() where ledge.spans(pod.pos.x) {
-            if pod.vel.y <= 0, previous.y - r >= ledge.top - 1, pod.pos.y - r < ledge.top {
-                pod.pos.y = ledge.top + r
-                pod.vel = .zero
-                pod.state = .resting(ledge: ledgeIndex)
-                pod.hatchIn = director.podLife(forWave: max(wave, 1), tuning: tuning)
-                pod.warned = false
-                pods[index] = pod
-                events.append(.podLanded(id: pod.id, at: pod.pos, ledge: ledgeIndex))
-                return
+        for (index, ledge) in ledges.enumerated() where ledge.spans(pod.pos.x) {
+            let top = ledge.top, bottom = ledge.top - tuning.ledgeThickness
+            guard pod.pos.y - r < top, pod.pos.y + r > bottom else { continue }
+            let fromAbove = previous.y - r >= top - 1
+            let fromBelow = previous.y + r <= bottom + 1
+            if fromAbove || (!fromBelow && pod.pos.y >= (top + bottom) / 2) {
+                if fromAbove, pod.vel.y > 0 { continue }
+                pod.pos.y = top + r
+                return index
+            } else if fromBelow {
+                // Its top meets the underside.
+                pod.pos.y = bottom - r
+                pod.vel.y = min(pod.vel.y, 0)
+            } else {
+                // It came in at the side: it stops against it, and falls on past.
+                pod.pos.x = dxWrap(ledge.midX, previous.x) < 0 ? ledge.minX - 0.01 : ledge.maxX + 0.01
+                pod.vel.x = 0
             }
         }
-        pods[index] = pod
-        if pod.pos.y < tuning.riftLevel { losePod(at: index, cause: .rift) }
+        return nil
+    }
+
+    /// The ledge an early pod should drift toward: the one nearest it across (round the join)
+    /// that its fall, drifting toward that ledge, actually brings it onto from above (its whole
+    /// fall is run ahead, with the same steps as `movePod`); nil if it reaches none, and then it
+    /// does not drift.
+    func driftTarget(for pod: RiftwingPod) -> Int? {
+        let r = tuning.podRadius
+        var candidates: [(index: Int, gap: Double)] = []
+        for (index, ledge) in ledges.enumerated() where ledge.top < pod.pos.y - r {
+            let x = clamp(pod.pos.x, ledge.minX + 20, ledge.maxX - 20)
+            candidates.append((index, abs(dxWrap(pod.pos.x, x))))
+        }
+        candidates.sort { $0.gap != $1.gap ? $0.gap < $1.gap : $0.index < $1.index }
+        for (index, _) in candidates {
+            var trial = pod
+            trial.driftLedge = index
+            if landing(of: trial, aimedAt: index) { return index }
+        }
+        return nil
+    }
+
+    /// True when `pod`, falling as it is, lands on ledge `target`.
+    private func landing(of start: RiftwingPod, aimedAt target: Int) -> Bool {
+        var pod = start
+        let ledge = ledges[target]
+        let dt = Self.timeStep
+        for _ in 0..<Int(90 / dt) {
+            if let landed = movePod(&pod, dt) { return landed == target }
+            if pod.pos.y - tuning.podRadius < ledge.top - 1 || pod.pos.y < tuning.riftLevel { return false }
+            // Over the ledge and slow enough across that it can no longer leave it, with no other
+            // rock between: it will land there.
+            let travel = abs(pod.vel.x) / 1.2
+            let lo = pod.pos.x - travel, hi = pod.pos.x + travel
+            guard ledge.spans(pod.pos.x), abs(pod.vel.x) <= pod.drift, lo >= ledge.minX, hi <= ledge.maxX else { continue }
+            var between = false
+            for (i, other) in ledges.enumerated() where i != target && other.top > ledge.top {
+                let reach: Double = pod.pos.y + tuning.podRadius
+                if other.top - tuning.ledgeThickness < reach, other.maxX >= lo, other.minX <= hi { between = true }
+            }
+            if !between { return true }
+        }
+        return false
     }
 
     /// The pod lay too long: its colonist is lost and a rig one grade tougher stands up where it
-    /// lay, taking off after a moment.
+    /// lay, taking off after a moment: of the tougher kind once that kind has had its debut (else
+    /// of its own kind), and at full strength.
     private mutating func hatch(_ index: Int, ledge: Int) {
         let pod = pods[index]
         losePod(at: index, cause: .hatched)
@@ -109,27 +194,11 @@ extension RiftwingRun {
         opponents[o].body.ledge = ledge
         opponents[o].state = .waking(remaining: tuning.hatchWake)
         opponents[o].hatched = true
+        // One grade tougher, and at full strength: none of its kind's early ease, even where it
+        // is still its own kind (before the tougher kind's debut).
+        opponents[o].ease = 0
+        opponents[o].speed = stats.maxSpeed * speedScale(role, ease: 0)
         events.append(.podHatched(id: pod.id, opponent: id, role: role, at: stand))
-    }
-
-    /// The ledge below `p` nearest it across (round the join) that a pod falling at most
-    /// `terminal` and drifting at `drift` can reach before it falls past; if none can be
-    /// reached, the nearest below.
-    func nearestLedge(below p: Vec2, terminal: Double, drift: Double) -> Int? {
-        var best: Int?
-        var bestGap = Double.infinity
-        var bestReachable = false
-        for (index, ledge) in ledges.enumerated() where ledge.top < p.y - tuning.podRadius {
-            let x = clamp(p.x, ledge.minX + 20, ledge.maxX - 20)
-            let gap = abs(dxWrap(p.x, x))
-            let reachable = gap / max(drift, 1e-9) < (p.y - tuning.podRadius - ledge.top) / max(terminal, 1e-9)
-            if (reachable && !bestReachable) || (reachable == bestReachable && gap < bestGap) {
-                bestGap = gap
-                best = index
-                bestReachable = reachable
-            }
-        }
-        return best
     }
 
     /// What a pod would hatch into now: one grade tougher, but its own kind until the tougher

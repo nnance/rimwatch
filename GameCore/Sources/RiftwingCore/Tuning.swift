@@ -69,6 +69,11 @@ public struct RiftwingTuning: Sendable {
     /// it. Low ledges are close to the Rift, so their knock is gentler.
     public var ceilingKnock = 150.0
     public var ledgeKnock = 60.0
+    /// A rider pressing against rock again and again is knocked harder: the knock grows by this
+    /// share of itself for each bump in the last `pinnedWindow` seconds (at most `pinnedBumps`
+    /// of them), so it bobs well below the rock, where a rig holding steady under the rock can
+    /// get above it. One bump now and then is knocked as usual.
+    public var pressedKnockGrowth = 0.5
     /// Running on a ledge.
     public var runSpeed = 150.0
     public var runAccel = 900.0
@@ -107,8 +112,10 @@ public struct RiftwingTuning: Sendable {
     // The clash
     /// Within this many units of level, both bounce apart and nobody is hurt.
     public var clashMargin = 11.0
-    /// A rider camping in one place (`RiftwingRun.isRiderCamping`) loses a clash to an opponent
-    /// more than this above it, instead of the clash margin and any leniency.
+    /// No longer used: camping once narrowed the clash to this many units, so a rider resting
+    /// or flying near the roof lost to anything a little above it. Camping now never changes
+    /// the clash rule; a rider clinging to a ceiling (`RiftwingRun.isRiderClinging`) only loses
+    /// the early opponents' misjudgement. Kept so code that sets it still builds.
     public var campingMargin = 2.0
     /// Heights closer to the roof than this count as the roof's level less the band: pressed
     /// against the roof beside an opponent, you are level with it, so sitting at the top wins
@@ -119,6 +126,13 @@ public struct RiftwingTuning: Sendable {
     /// next meeting, which a rider chasing level with opponents could repeat for ever.
     public var bounceSpeed = 210.0
     public var bounceLift = 0.0
+    /// Ramming the same opponent level again and again is not a near miss: once the rider has
+    /// bounced off one opponent `rammingBounces` times in quick succession (each bounce is
+    /// remembered for `rammingMemory` seconds), that opponent needs only `clashMargin` to win
+    /// its next meetings, without the lasting leniency, until the memory fades. A rider that
+    /// bounces level without ever committing gains nothing by it.
+    public var rammingBounces = 2
+    public var rammingMemory = 3.0
     /// After any clash an opponent cannot clash with the rider again for this long.
     public var clashCooldown = 0.35
     /// The winner of a clash springs up at least this fast.
@@ -131,7 +145,7 @@ public struct RiftwingTuning: Sendable {
     // Lives
     public var startingLives = 3
     public var maxLives = 5
-    public var extraLifeEvery = 35_000
+    public var extraLifeEvery = 25_000
     /// Seconds a lost rider is gone before it returns on a ledge away from the fight.
     public var respawnDelay = 1.5
     public var respawnInvulnerability = 2.5
@@ -146,6 +160,10 @@ public struct RiftwingTuning: Sendable {
     /// this long.
     public var arrivalPatience = 2.5
     public var forcedTelegraphTime = 2.0
+    /// A forced arrival never comes out closer than this to the rider: if the rider comes this
+    /// close to where it glows, the glow moves to the place in the mouths farthest from it (which
+    /// is always farther than this).
+    public var forcedClearance = 180.0
     /// Heights at which opponents fly in from the mouths.
     public var arrivalHeights = 140.0...540.0
     /// Speed an opponent flies out of a mouth at.
@@ -214,6 +232,10 @@ public struct RiftwingTuning: Sendable {
     /// own, so a wave stalled anywhere is ended in the end. Then the cycle starts again from the
     /// lowest step.
     public var breathFillWarning = 5.0
+    /// After the first fill in a wave, each later cycle has only this many of the low steps (the
+    /// highest ones) before the next fill, so a rider stalling a wave past one fill (hiding,
+    /// clinging, or bouncing level without ever committing) is ended sooner.
+    public var breathStepsAfterFill = 4
 
     /// Seconds into wave `wave` of its first breath's warning.
     public func breathAfter(forWave wave: Int) -> Double {
@@ -230,10 +252,21 @@ public struct RiftwingTuning: Sendable {
     public var gliderSkip = 0.3
     /// The heights a Glider wanders between.
     public var gliderBand = 250.0...520.0
-    /// A rider that has stayed within `stillRadius` of one place this long (on a perch, under
-    /// rock, anywhere) draws the Gliders' wandering to about its height.
-    public var gliderDrawAfter = 6.0
+    /// Resting is not camping. A rider that has stayed within `stillRadius` of one place (on a
+    /// perch, under rock, anywhere) for longer than its wave allows draws the Gliders' wandering
+    /// to about its height (`RiftwingRun.isRiderStill`); nothing else changes. The time allowed
+    /// is `gliderDrawAfter` in wave 1, `gliderDrawShrink` less each wave, never under
+    /// `gliderDrawFloor`. It counts only fighting time while the rider is unprotected: not the
+    /// break between waves, nor the protection after returning.
+    public var gliderDrawAfter = 45.0
+    public var gliderDrawShrink = 4.0
+    public var gliderDrawFloor = 15.0
     public var stillRadius = 70.0
+
+    /// Seconds a rider may stay in one place in wave `wave` before the Gliders are drawn to it.
+    public func gliderDrawAfter(forWave wave: Int) -> Double {
+        max(gliderDrawFloor, gliderDrawAfter - gliderDrawShrink * Double(max(wave - 1, 0)))
+    }
     /// Striker: the height above the rider it climbs to before coming down, and how close
     /// across it must be to come down.
     public var strikerClimb = 45.0
@@ -248,11 +281,16 @@ public struct RiftwingTuning: Sendable {
     public var strikerPatience = 3.5
     /// Seconds between a Striker's or Warden's decisions.
     public var hunterReplan = 0.25
-    /// A rider whose centre is within this of the highest it can be where it is (under the roof
-    /// or a ledge) is pinned against rock; once it has stayed pinned for `pinnedPatience`,
-    /// hunters come up under the same rock after it.
+    /// A rider is pinned against rock when it is pressed against it: it has bumped its head on
+    /// the roof or a ledge's underside `pinnedBumps` times within `pinnedWindow` seconds, and is
+    /// still within `pinnedBand` of the highest it can be there. Flying near rock, or touching it
+    /// now and then, is not pinned. Once it has stayed pinned for `pinnedPatience` it is clinging
+    /// (`RiftwingRun.isRiderClinging`): hunters come up under the same rock after it, and early
+    /// opponents no longer misjudge clashes with it.
     public var pinnedBand = 30.0
     public var pinnedPatience = 1.5
+    public var pinnedBumps = 3
+    public var pinnedWindow = 2.0
     /// Warden: the height above the rider it keeps, and the reach across within which it dives.
     public var wardenHeight = 80.0
     public var wardenDiveReach = 130.0

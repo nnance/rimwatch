@@ -135,6 +135,27 @@ import GameCore
         }
     }
 
+    /// A hatched rig is one grade tougher: of the tougher kind once that kind has had its debut
+    /// (before then of its own kind), and at full strength, with none of its kind's early ease
+    /// (so a pod left to hatch in the first waves is no gentle Glider).
+    @Test func aHatchedRigFliesAtFullStrength() throws {
+        var r = quietRun()
+        r.removeRider()
+        let ledge = r.ledges[1]
+        let id = r.dropPod(at: Vec2(ledge.midX, ledge.top + 20), vel: .zero, from: .glider, ease: 1)
+        var opponent: Int?
+        for _ in 0..<seconds(30) {
+            for event in r.step(still) {
+                if case .podHatched(id, let o, _, _) = event { opponent = o }
+            }
+            if opponent != nil { break }
+        }
+        let o = try r.req(opponent: try #require(opponent))
+        #expect(r.director.ease(of: .glider, inWave: 1) == 1)
+        #expect(o.ease == 0)
+        #expect(abs(o.speed - r.tuning.stats(for: o.role).maxSpeed) < 1e-9)
+    }
+
     @Test func aWaveEndsOnlyWhenEveryPodIsSettled() throws {
         var r = RiftwingRun(seed: 3)
         run(&r, steps: seconds(r.tuning.firstWaveDelay + 0.1))
@@ -171,5 +192,107 @@ import GameCore
         let events = r.step(still)
         #expect(events.contains { if case .waveCleared(1, 3, 750) = $0 { true } else { false } })
         #expect(r.score == before + 750)
+    }
+
+    // MARK: Pods and rock
+
+    /// True when `p` (a pod's centre) is inside a ledge's rock.
+    private func insideRock(_ r: RiftwingRun, _ p: Vec2) -> Bool {
+        r.ledges.contains { $0.spans(p.x) && p.y < $0.top && p.y > $0.top - r.tuning.ledgeThickness }
+    }
+
+    /// A pod moving across into a ledge below its top is stopped by the ledge's side, as a rig
+    /// is, and falls on past it: it never enters the rock.
+    @Test func aPodIsStoppedByALedgesSide() throws {
+        var r = quietRun()
+        r.removeRider()
+        // The first layout's low right shelf: 640...850, top 175.
+        let id = r.dropPod(at: Vec2(630, 166), vel: .zero, from: .glider)
+        r.pods[0].vel = Vec2(100, 0)
+        for _ in 0..<seconds(3) {
+            _ = r.step(still)
+            let pod = try r.req(pod: id)
+            #expect(!insideRock(r, pod.pos), "\(pod.pos)")
+            if !pod.isUnsettled { break }
+        }
+        let pod = try r.req(pod: id)
+        #expect(pod.pos.x <= 640)
+    }
+
+    /// A pod moving up into a ledge's underside is stopped by it.
+    @Test func aPodIsStoppedByALedgesUnderside() throws {
+        var r = quietRun()
+        r.removeRider()
+        let ledge = r.ledges[2]
+        let id = r.dropPod(at: Vec2(ledge.midX, ledge.top - r.tuning.ledgeThickness - 12), vel: .zero, from: .glider)
+        r.pods[0].vel = Vec2(0, 120)
+        for _ in 0..<seconds(1) {
+            _ = r.step(still)
+            #expect(!insideRock(r, try r.req(pod: id).pos))
+        }
+    }
+
+    /// Wherever an early pod (one that drifts and hovers) is dropped, in every layout, its
+    /// centre never enters rock; it drifts only toward a ledge it reaches from above, and lands
+    /// on that ledge when it does.
+    @Test func anEasedPodNeverEntersRockAndLandsWhereItDrifts() throws {
+        var inRock: [String] = []
+        var missed: [String] = []
+        for layout in RiftwingCavern.layouts.indices {
+            for x in stride(from: 5.0, to: 900, by: 35) {
+                for y in stride(from: 150.0, through: 560, by: 50) {
+                    var r = quietRun()
+                    r.removeRider()
+                    r.applyLayout(layout)
+                    let start = Vec2(x, y)
+                    guard !insideRock(r, start) else { continue }
+                    let id = r.dropPod(at: start, vel: .zero, from: .glider, ease: 1)
+                    let aim = r.pods[0].driftLedge
+                    var landed: Int?
+                    for _ in 0..<seconds(60) {
+                        for event in r.step(still) {
+                            if case .podLanded(id, _, let l) = event { landed = l }
+                        }
+                        let pod = try r.req(pod: id)
+                        if insideRock(r, pod.pos) { inRock.append("layout \(layout) from \(start) at \(pod.pos)") }
+                        if !pod.isUnsettled || landed != nil { break }
+                    }
+                    if let aim, landed != aim { missed.append("layout \(layout) from \(start): aimed \(aim), landed \(String(describing: landed))") }
+                }
+            }
+        }
+        #expect(inRock.isEmpty, "\(inRock.count): \(inRock.prefix(5))")
+        #expect(missed.isEmpty, "\(missed.count): \(missed.prefix(5))")
+    }
+
+    /// The height an early pod is held at above the Rift is clear of every ledge's rock in
+    /// every layout (with room for the pod), and the pod is held there without moving across.
+    @Test func anEasedPodHoversClearOfRock() throws {
+        let t = RiftwingTuning(), w = RiftwingWaves()
+        let hover = t.riftLevel + w.podHoverHeight
+        for layout in RiftwingCavern.layouts {
+            for ledge in layout.ledges {
+                let clear = hover > ledge.top + t.podRadius || hover < ledge.top - t.ledgeThickness - t.podRadius
+                #expect(clear, "\(layout.name) ledge \(ledge): hover \(hover)")
+            }
+        }
+        var r = quietRun()
+        r.removeRider()
+        // Over open Rift in the first layout.
+        let id = r.dropPod(at: Vec2(580, 215), vel: .zero, from: .glider, ease: 1)
+        r.pods[0].vel = Vec2(40, 0)
+        r.pods[0].driftLedge = nil
+        var held = 0
+        var heldX: Double?
+        for _ in 0..<seconds(4) {
+            _ = r.step(still)
+            let pod = try r.req(pod: id)
+            #expect(pod.pos.y >= hover - 1e-9)
+            if abs(pod.pos.y - hover) < 1e-9 {
+                held += 1
+                if let x = heldX { #expect(abs(pod.pos.x - x) < 1e-9) } else { heldX = pod.pos.x }
+            }
+        }
+        #expect(held > seconds(1))
     }
 }

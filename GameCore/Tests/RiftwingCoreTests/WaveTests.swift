@@ -122,6 +122,7 @@ import GameCore
 
     @Test func nothingArrivesWithinTheSafeDistanceOfTheRider() throws {
         var landings = 0
+        var forced = 0
         for skill in [RiftwingPilot.Skill.novice, .competent, .levelBouncer] {
             for seed: UInt64 in 1...4 {
                 var r = RiftwingRun(seed: seed)
@@ -130,17 +131,58 @@ import GameCore
                     let before = r
                     for event in r.step(pilot.input(for: before)) {
                         guard case .opponentArrived(let id, _, let at) = event, before.rider.isAlive else { continue }
-                        // A forced arrival (the rider camped where nothing was clear) comes out
-                        // at the farthest place instead (`campingTheSideSeamDoesNotStopArrivals`).
-                        if before.arrivals.first(where: { $0.id == id })?.isForced == true { continue }
                         landings += 1
                         let gap = r.wrapDistance(at, r.rider.pos)
-                        #expect(gap >= r.tuning.safeDistance - 2, "\(skill) seed \(seed): \(gap)")
+                        // A forced arrival (the rider camped where nothing was clear) comes out
+                        // at the farthest place instead (`campingTheSideSeamDoesNotStopArrivals`),
+                        // never closer than its own least distance.
+                        if before.arrivals.first(where: { $0.id == id })?.isForced == true {
+                            forced += 1
+                            #expect(gap >= r.tuning.forcedClearance - 2, "forced, \(skill) seed \(seed): \(gap)")
+                        } else {
+                            #expect(gap >= r.tuning.safeDistance - 2, "\(skill) seed \(seed): \(gap)")
+                        }
                     }
                 }
             }
         }
         #expect(landings > 100)
+        print("RIFTWING ARRIVALS \(landings), forced \(forced)")
+    }
+
+    /// The farthest place in the mouths is always at least `forcedClearance` from the rider, so a
+    /// forced arrival can always keep that far away: if the rider comes that close to where it
+    /// glows, the glow moves to the farthest place.
+    @Test func aForcedArrivalKeepsItsLeastDistance() throws {
+        var r = quietRun()
+        let t = r.tuning
+        for x in stride(from: 0.0, to: 900, by: 15) {
+            for y in stride(from: 40.0, to: 580, by: 15) {
+                r.placeRider(at: Vec2(x, y))
+                #expect(r.wrapDistance(r.farthestMouthPlace(for: .striker).pos, Vec2(x, y)) >= t.forcedClearance,
+                        "rider at \(x), \(y)")
+            }
+        }
+        // A rider camping the seam forces an arrival, then flies at its glow: it comes out away.
+        r = RiftwingRun(seed: 5)
+        var arrivedAt: Vec2?
+        var moved = 0
+        for _ in 0..<seconds(14) {
+            let glow = r.arrivals.first(where: \.isForced)
+            let spot = glow.map { Vec2($0.side == .left ? 30 : 870, $0.pos.y) } ?? Vec2(0, 340)
+            r.placeRider(at: spot)
+            r.rider.invulnerableTimer = .infinity
+            for event in r.step(still) {
+                if case .arrivalTelegraphed(let id, _, _, _) = event, glow?.id == id { moved += 1 }
+                if case .opponentArrived(let id, _, let at) = event, glow?.id == id {
+                    arrivedAt = at
+                    #expect(r.wrapDistance(at, r.rider.pos) >= t.forcedClearance - 2)
+                }
+            }
+            if arrivedAt != nil { break }
+        }
+        #expect(arrivedAt != nil)
+        #expect(moved >= 1)
     }
 
     @Test func anArrivalWhoseMouthTheRiderReachesGlowsAgainElsewhere() throws {

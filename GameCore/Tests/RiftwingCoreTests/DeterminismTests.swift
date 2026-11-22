@@ -46,16 +46,17 @@ import GameCore
     /// build). If a deliberate change to the rules, the tuning, the wave table or the pilot breaks
     /// it, capture the new values from the printed line and say so in the commit. First captured
     /// for 15a; re-captured after the check's fixes, and again (extended from 180 s) after the
-    /// breath, ceiling, clash and tuning changes.
+    /// breath, ceiling, clash and tuning changes, and again after the pod, pinned, resting and
+    /// mercy changes and the retuning that followed them.
     @Test func aScriptedRunReplaysExactly() throws {
         let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 330)
         print("RIFTWING GOLDEN hash \(hash) events \(events) score \(r.score) wave \(r.wave) saved \(r.colonistsSaved) lives \(r.rider.lives) tick \(r.tick)")
-        #expect(hash == 16_771_875_436_173_643_305)
-        #expect(events == 2014)
-        #expect(r.score == 141_900)
+        #expect(hash == 8_918_258_199_627_900_150)
+        #expect(events == 1504)
+        #expect(r.score == 139_550)
         #expect(r.wave == 9)
         #expect(r.colonistsSaved == 42)
-        #expect(r.rider.lives == 4)
+        #expect(r.rider.lives == 5)
         #expect(r.tick == 39_600)
     }
 }

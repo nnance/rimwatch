@@ -66,7 +66,11 @@ public struct RiftwingRun: Sendable {
     var gleanerNextAt = 0.0
     /// Seconds the rider has stayed pinned against rock (`isRiderPinned`).
     var riderPinnedFor = 0.0
-    /// Seconds the rider has stayed within `RiftwingTuning.stillRadius` of `stillAnchor`.
+    /// The ticks of the rider's latest bumps against rock (roof or a ledge's underside), oldest
+    /// first, at most `RiftwingTuning.pinnedBumps` of them.
+    var riderBumpTicks: [Int] = []
+    /// Seconds the rider has stayed within `RiftwingTuning.stillRadius` of `stillAnchor`, counting
+    /// only fighting time while unprotected.
     var riderStillFor = 0.0
     var stillAnchor = Vec2.zero
     /// The step since which no place in the mouths has been clear for a new arrival.
@@ -124,7 +128,13 @@ public struct RiftwingRun: Sendable {
     /// Which step of the breath's cycle the current (or next) breath is: 0 for the lowest, up to
     /// `RiftwingTuning.breathSteps`, the one that fills the gallery; then it starts again.
     public var breathStep: Int {
-        max(breathsThisWave - 1, 0) % (max(tuning.breathSteps, 0) + 1)
+        let steps = max(tuning.breathSteps, 0)
+        let n = max(breathsThisWave - 1, 0)
+        guard n > steps else { return n }
+        // After the first fill the cycle is shorter: only the last few low steps come before the
+        // next fill, so a wave stalled past one fill is ended sooner.
+        let later = min(max(tuning.breathStepsAfterFill, 0), steps)
+        return steps - later + (n - steps - 1) % (later + 1)
     }
 
     /// The current (or next) breath fills the gallery to the roof: nothing escapes it but a
@@ -260,6 +270,8 @@ public struct RiftwingRun: Sendable {
                 pods[i].state = .resting(ledge: ledge)
             case .falling:
                 pods[i].pos.y = outOfRock(pods[i].pos, feet: r, head: r)
+                // Aimed afresh at a ledge of the new layout that its fall reaches.
+                pods[i].driftLedge = pods[i].drift > 0 ? driftTarget(for: pods[i]) : nil
             case .seized, .freed, .lost:
                 break
             }
@@ -462,6 +474,17 @@ public struct RiftwingRun: Sendable {
     /// An arrival that waited too long for a clear place glows at the place in the mouths
     /// farthest from the rider, for `forcedTelegraphTime`, and comes out there whatever happens.
     private mutating func forceArrival(id: Int, role: RiftwingRole) {
+        let (side, best) = farthestMouthPlace(for: role)
+        arrivals.append(RiftwingArrival(id: id, role: role, side: side, pos: best,
+                                        remaining: tuning.forcedTelegraphTime, glowTime: tuning.forcedTelegraphTime,
+                                        isForced: true))
+        events.append(.arrivalTelegraphed(id: id, role: role, side: side, at: best))
+    }
+
+    /// The place in the tunnel mouths farthest from the rider (round the join) for an arrival of
+    /// `role`. Wherever the rider is, it is at least about 200 units away (the rider at the join,
+    /// halfway up the arrival heights), more than `RiftwingTuning.forcedClearance`.
+    func farthestMouthPlace(for role: RiftwingRole) -> (side: RiftwingSide, pos: Vec2) {
         let r = tuning.stats(for: role).radius
         let heights = tuning.arrivalHeights
         var best = Vec2(r, heights.lowerBound)
@@ -479,16 +502,22 @@ public struct RiftwingRun: Sendable {
                 }
             }
         }
-        arrivals.append(RiftwingArrival(id: id, role: role, side: bestSide, pos: best,
-                                        remaining: tuning.forcedTelegraphTime, glowTime: tuning.forcedTelegraphTime,
-                                        isForced: true))
-        events.append(.arrivalTelegraphed(id: id, role: role, side: bestSide, at: best))
+        return (bestSide, best)
     }
 
     private mutating func updateArrivals(_ dt: Double) {
         guard !arrivals.isEmpty else { return }
         var index = 0
         while index < arrivals.count {
+            // A forced arrival keeps its least distance: if the rider comes that close to its
+            // glow, the glow moves to the farthest place, keeping its time.
+            if arrivals[index].isForced, rider.isAlive,
+               wrapDistance(arrivals[index].pos, rider.body.pos) < tuning.forcedClearance {
+                let (side, p) = farthestMouthPlace(for: arrivals[index].role)
+                arrivals[index].side = side
+                arrivals[index].pos = p
+                events.append(.arrivalTelegraphed(id: arrivals[index].id, role: arrivals[index].role, side: side, at: p))
+            }
             arrivals[index].remaining -= dt
             // A little slack so 120 steps of 1/120 s make a second despite rounding.
             guard arrivals[index].remaining <= 1e-9 else {
@@ -648,6 +677,7 @@ public struct RiftwingRun: Sendable {
         guard rider.isAlive else {
             riderPinnedFor = 0
             riderStillFor = 0
+            riderBumpTicks.removeAll()
             if rider.lives > 0 {
                 rider.respawnTimer -= dt
                 if rider.respawnTimer <= 0 { respawnRider() }
@@ -672,11 +702,16 @@ public struct RiftwingRun: Sendable {
             rider.vent = result.vent
             if let vent = result.vent { events.append(.ventEntered(vent: vent, at: at)) }
         }
+        if result.bumped || result.bumpedRoof {
+            riderBumpTicks.append(tick)
+            if riderBumpTicks.count > max(tuning.pinnedBumps, 1) { riderBumpTicks.removeFirst() }
+        }
         riderPinnedFor = isRiderPinned ? riderPinnedFor + dt : 0
+        // Time in one place counts only while fighting unprotected.
         if wrapDistance(rider.body.pos, stillAnchor) > tuning.stillRadius {
             stillAnchor = rider.body.pos
             riderStillFor = 0
-        } else {
+        } else if phase == .fighting, !rider.isInvulnerable {
             riderStillFor += dt
         }
         if rider.body.pos.y < tuning.riftLevel {
@@ -685,9 +720,14 @@ public struct RiftwingRun: Sendable {
     }
 
     /// The rider's flight numbers.
+    /// Rock knocks it harder for each bump in the last `RiftwingTuning.pinnedWindow` seconds, so
+    /// it cannot hold itself pressed against a ceiling.
     var riderFlight: FlightParams {
-        FlightParams(maxSpeed: tuning.maxAirSpeed, airAccel: tuning.airAccel, flapImpulse: tuning.flapImpulse,
-                     flapThrust: tuning.flapThrust, maxRise: tuning.maxRise, runSpeed: tuning.runSpeed)
+        let window = Int((tuning.pinnedWindow / Self.timeStep).rounded())
+        let recent = riderBumpTicks.count { tick - $0 <= window }
+        return FlightParams(maxSpeed: tuning.maxAirSpeed, airAccel: tuning.airAccel, flapImpulse: tuning.flapImpulse,
+                            flapThrust: tuning.flapThrust, maxRise: tuning.maxRise, runSpeed: tuning.runSpeed,
+                            knockScale: 1 + tuning.pressedKnockGrowth * Double(recent))
     }
 
     /// The rider is lost (it does nothing while protected).
@@ -793,5 +833,7 @@ func unitVector(_ angle: Double) -> Vec2 {
 
 @inline(never) func cosine(_ x: Double) -> Double { cos(x) }
 @inline(never) func sine(_ x: Double) -> Double { sin(x) }
+/// `pow`, never inlined for the same reason.
+@inline(never) func power(_ x: Double, _ y: Double) -> Double { pow(x, y) }
 /// `exp`, never inlined for the same reason.
 @inline(never) func expo(_ x: Double) -> Double { exp(x) }

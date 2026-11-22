@@ -17,8 +17,7 @@ extension RiftwingRun {
 
     /// The clash rule on its own, for the rider at `rider` meeting `opponent`. `leniency` changes
     /// the margin on the losing side only: an opponent must be that much more clearly above to
-    /// win (`RiftwingWaves.leniency(ease:)`); a negative leniency narrows it (a camping rider,
-    /// `RiftwingTuning.campingMargin`), never below level.
+    /// win (`RiftwingWaves.leniency(ease:)`); a negative leniency narrows it, never below level.
     public func clashOutcome(rider: RiftwingBody, opponent: RiftwingBody, leniency: Double = 0) -> ClashOutcome {
         let diff = clashHeight(rider) - clashHeight(opponent)
         if diff > tuning.clashMargin { return .win }
@@ -62,13 +61,18 @@ extension RiftwingRun {
     private mutating func clash(_ index: Int) {
         let o = opponents[index]
         let at = Vec2(wrapX(rider.body.pos.x + dxWrap(rider.body.pos.x, o.pos.x) / 2), (rider.body.pos.y + o.pos.y) / 2)
-        // A rider camping in one place (against rock, or anywhere) gets none of the early
-        // leniency or mercy, and loses to an opponent only a little above it.
-        let camping = isRiderCamping
-        let leniency = camping ? tuning.campingMargin - tuning.clashMargin : director.leniency(ease: o.ease)
+        // A rider clinging to a ceiling gets none of the early opponents' leniency or mercy, but
+        // the clash is judged by the ordinary rule: nothing makes it harder to win or easier to
+        // lose than that.
+        let clinging = isRiderClinging
+        // An opponent the rider keeps ramming level needs only the clash margin to win.
+        let rammed = o.rammed > Double(max(tuning.rammingBounces, 1)) - 1 + 1e-9
+        let leniency = rammed ? 0 : director.leniency(ease: clinging ? 0 : o.ease)
         var outcome = clashOutcome(rider: rider.body, opponent: o.body, leniency: leniency)
         if outcome == .lose, rider.isInvulnerable { outcome = .bounce }
-        if outcome == .lose, !camping, o.ease > 0, director.clashMercy > 0, rng.chance(min(director.clashMercy * o.ease, 1)) {
+        // Wave 1 is for learning the controls: a rider standing on a ledge in it is never beaten.
+        if outcome == .lose, rider.body.isGrounded, wave <= director.standingGraceWaves { outcome = .bounce }
+        if outcome == .lose, !clinging, rng.chance(director.mercy(ease: o.ease)) {
             outcome = .bounce
         }
         opponents[index].clashCooldown = tuning.clashCooldown
@@ -115,6 +119,7 @@ extension RiftwingRun {
         opponents[index].body.vel.y += riderHigher ? -tuning.bounceLift : tuning.bounceLift
         opponents[index].body.ledge = nil
         opponents[index].body.isDiving = false
+        opponents[index].rammed += 1
         events.append(.clashBounced(opponent: o.id, role: o.role, at: at))
     }
 

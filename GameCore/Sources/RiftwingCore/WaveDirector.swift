@@ -1,3 +1,4 @@
+import Foundation
 import GameCore
 
 /// Decides what each Riftwing wave sends and how gently each role flies in it.
@@ -32,11 +33,31 @@ public struct RiftwingWaves: Sendable {
     /// its threat grows a little with each appearance as the angle it needs widens.
     public var clashLeniency = 0.0
     public var clashLeniencyBase = 16.1
-    /// In its first appearances an opponent that would win a clash misjudges it this share of
-    /// the time (times its ease: every time at its debut, never at full strength), and the
-    /// meeting bounces instead. Drawn from the run's seeded random source, so a run still
-    /// replays exactly. This makes each kind's threat grow smoothly with its appearances.
-    public var clashMercy = 1.0
+    /// In its first appearances an opponent that would win a clash misjudges it, and the meeting
+    /// bounces instead (`mercy(ease:)`): `clashMercy` of the time at its debut, so a kind wins a
+    /// little there, fading with its ease as a ramp (`clashMercyCurve` shapes it so the share it
+    /// wins at most doubles from one appearance to the next, with no step at its second), and
+    /// never once its ease is down to `clashMercyFloor` (its eighth appearance). Drawn from the
+    /// run's seeded random source, so a run still replays exactly.
+    public var clashMercy = 0.85
+    public var clashMercyCurve = 0.45
+    public var clashMercyFloor = 0.2
+    /// In waves up to this one, an opponent always misjudges a clash it would win against a rider
+    /// standing on a ledge: a beginner standing still to work out the controls is not beaten
+    /// for it.
+    public var standingGraceWaves = 1
+
+    /// The chance that an opponent with `ease` left misjudges a clash it would have won:
+    /// `clashMercy` times ((ease - floor) / (1 - floor)) raised to `clashMercyCurve`, 0 at or
+    /// under the floor. With the defaults it wins 15%, 28%, 36%, 45%, 54%, 64%, 76% and then all
+    /// of the clashes it would win in its first, second, third ... appearances.
+    public func mercy(ease: Double) -> Double {
+        let floor = min(max(clashMercyFloor, 0), 0.99)
+        let e = (min(max(ease, 0), 1) - floor) / (1 - floor)
+        guard e > 0, clashMercy > 0 else { return 0 }
+        let shaped = clashMercyCurve == 1 ? e : power(e, clashMercyCurve)
+        return min(clashMercy * shaped, 1)
+    }
 
     /// The extra height an opponent with `ease` left must have over the rider to win a clash.
     public func leniency(ease: Double) -> Double {
@@ -53,12 +74,15 @@ public struct RiftwingWaves: Sendable {
     /// ... and, sinking near the Rift, is held up by its heat for this many seconds (times the
     /// role's ease) before it falls in.
     public var podHoverEase = 5.0
-    /// The height above the Rift at which an eased pod is held up.
-    public var podHoverHeight = 140.0
+    /// The height above the Rift at which an eased pod is held up over open Rift (one dropped
+    /// lower is held where it is). Chosen clear of every ledge's rock in all three layouts, with
+    /// room for the pod: the gap between the low shelves (tops up to 175) and the middle ones
+    /// (undersides from 221).
+    public var podHoverHeight = 178.0
 
     /// Rigs in the gallery (or on their way in) at once, by wave (wave 1 first; the last entry
     /// holds for every later wave).
-    public var concurrency: [Int] = [2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6]
+    public var concurrency: [Int] = [2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6, 7, 7, 8, 8]
     /// Seconds between one rig's place coming free and the next being sent.
     public var sendGap = 1.2
     /// Seconds between the opening rigs' telegraphs.
@@ -107,7 +131,7 @@ public struct RiftwingWaves: Sendable {
     // MARK: The table
 
     /// The opponents a wave sends, all roles: the single table every count and ease is derived
-    /// from. Waves 1 to 10 are written out; from wave 11 every role grows slowly to a cap. No two
+    /// from. Waves 1 to 10 are written out; from wave 11 every role grows to a cap. No two
     /// roles debut in the same wave.
     public func composition(forWave wave: Int) -> [(role: RiftwingRole, count: Int)] {
         let early: [[(RiftwingRole, Int)]] = [
@@ -120,17 +144,17 @@ public struct RiftwingWaves: Sendable {
             [(.glider, 2), (.striker, 3), (.warden, 1), (.gleaner, 1)],      // 7
             [(.glider, 2), (.striker, 3), (.warden, 1), (.sower, 1), (.gleaner, 1)], // 8: Sowers
             [(.glider, 2), (.striker, 3), (.warden, 2), (.gleaner, 1)],      // 9
-            [(.glider, 2), (.striker, 3), (.warden, 2), (.sower, 1), (.gleaner, 2)], // 10
+            [(.glider, 2), (.striker, 4), (.warden, 2), (.sower, 1), (.gleaner, 2)], // 10
         ]
         guard wave >= 1 else { return [] }
         if wave <= early.count {
             return early[wave - 1].map { (role: $0.0, count: $0.1) }
         }
         let past = wave - 11
-        let strikers: Int = min(3 + past / 3, 5)
-        let wardens: Int = min(2 + (past + 1) / 3, 4)
-        let sowers: Int = min(1 + past / 4, 2)
-        let gleaners: Int = min(2 + past / 4, 3)
+        let strikers: Int = min(4 + (past + 1) / 2, 8)
+        let wardens: Int = min(4 + past / 2, 8)
+        let sowers: Int = min(1 + past / 3, 2)
+        let gleaners: Int = min(2 + past / 3, 3)
         let late: [(role: RiftwingRole, count: Int)] = [
             (role: .glider, count: 2), (role: .striker, count: strikers), (role: .warden, count: wardens),
             (role: .sower, count: sowers), (role: .gleaner, count: gleaners),

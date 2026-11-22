@@ -72,10 +72,23 @@ import GameCore
         #expect(has(near.events, "clashBounced"))
     }
 
-    /// In its debut an opponent that would win a clash misjudges it and bounces; its chance to
-    /// win grows with its appearances (`RiftwingWaves.clashMercy`), and at full strength it
-    /// always wins.
+    /// In its first appearances an opponent that would win a clash usually misjudges it and
+    /// bounces: in its debut it wins only a few, and its chance to win grows with its appearances
+    /// as a ramp, never more than doubling from one appearance to the next
+    /// (`RiftwingWaves.mercy(ease:)`); at full strength it always wins.
     @Test func anOpponentInItsFirstAppearancesMisjudgesClashesItWouldWin() throws {
+        let w = RiftwingWaves()
+        var wins: [Double] = []
+        for k in 0...w.rampEase.count {
+            let ease = k < w.rampEase.count ? w.rampEase[k] : 0
+            wins.append(1 - w.mercy(ease: ease))
+        }
+        #expect(wins[0] > 0.05 && wins[0] < 0.35, "\(wins)")
+        for k in 1..<wins.count {
+            #expect(wins[k] >= wins[k - 1], "\(wins)")
+            #expect(wins[k] <= wins[k - 1] * 2.05, "appearance \(k + 1): \(wins)")
+        }
+        #expect(wins.last == 1)
         func losses(ease: Double) -> Int {
             (0..<200).count { i in
                 var r = quietRun(seed: UInt64(100 + i))
@@ -85,23 +98,130 @@ import GameCore
                 return has(r.step(still), "riderLost")
             }
         }
-        #expect(losses(ease: 1) == 0)
+        let debut = losses(ease: 1)
+        #expect(debut > 0 && debut < 70, "\(debut) of 200")
         #expect(losses(ease: 0) == 200)
         let half = losses(ease: 0.5)
         #expect((60...140).contains(half), "\(half) of 200")
     }
 
-    /// A rider camping in one place gets no leniency or mercy: a debut opponent only a little
-    /// above it wins.
-    @Test func aCampingRiderGetsNoLeniency() throws {
+    /// Wave 1 is for learning the controls: a rider standing on a ledge in it is never beaten
+    /// in a clash (the opponent always misjudges). In the air, or standing in a later wave, the
+    /// ordinary chances apply.
+    @Test func aRiderStandingOnALedgeInTheFirstWaveIsNeverBeaten() throws {
+        func losses(wave: Int, standing: Bool) -> Int {
+            (0..<60).count { i in
+                var r = quietRun(seed: UInt64(500 + i))
+                r.wave = wave
+                let ledge = r.ledges[1]
+                let stand = RiftwingRun.standingPoint(on: ledge, radius: r.rider.body.radius, tuning: r.tuning)
+                r.placeRider(at: standing ? stand : Vec2(stand.x, stand.y + 40))
+                if standing { r.rider.body.ledge = 1 }
+                let id = r.place(.glider, at: Vec2(r.rider.pos.x + 2, r.rider.pos.y + 28.5),
+                                 ease: r.director.ease(of: .glider, inWave: wave))
+                r.freeze(id)
+                return has(r.step(still), "riderLost")
+            }
+        }
+        #expect(losses(wave: 1, standing: true) == 0)
+        #expect(losses(wave: 1, standing: false) > 0)
+        #expect(losses(wave: 2, standing: true) > 0)
+    }
+
+    /// A rider pressed against rock for long (clinging to a ceiling) loses the early mercy meant
+    /// for beginners, but never more than that: an opponent squarely on top of it wins even at
+    /// its debut, and one only a little above it still only bounces, as under the ordinary rule.
+    @Test func aClingingRiderLosesTheMercyButNotTheOrdinaryRule() throws {
+        func outcome(above: Double) -> [RiftwingEvent] {
+            // Pinned anywhere (an opponent cannot be squarely above a rider pressed under real
+            // rock: the rock is in the way), so the rule itself is tested in open air.
+            var tuning = RiftwingTuning()
+            tuning.pinnedBand = 1000
+            var r = quietRun(tuning: tuning)
+            let y = 300.0
+            r.placeRider(at: Vec2(600, y))
+            r.riderPinnedFor = r.tuning.pinnedPatience + 1
+            r.riderBumpTicks = Array(repeating: r.tick, count: r.tuning.pinnedBumps)
+            #expect(r.isRiderClinging)
+            #expect(r.isRiderCamping)
+            let id = r.place(.striker, at: Vec2(602, y + above), ease: 1)
+            r.freeze(id)
+            return r.step(still)
+        }
+        // Squarely on top, at its debut: no mercy for a rider clinging to a ceiling.
+        #expect(has(outcome(above: 28.5), "riderLost"))
+        // A little above: the ordinary rule bounces it (it once lost here).
+        #expect(has(outcome(above: 5), "clashBounced"))
+        #expect(has(outcome(above: 20), "clashBounced"))
+    }
+
+    /// A rider camping by staying in one place draws opponents, but the clash rule is unchanged
+    /// for it: early opponents still misjudge, and one only a little above still bounces.
+    @Test func aStillRiderKeepsTheClashRuleAndTheMercy() throws {
+        var lost = 0
+        for i in 0..<40 {
+            var r = quietRun(seed: UInt64(300 + i))
+            r.placeRider(at: Vec2(450, 300))
+            r.riderStillFor = 1000
+            r.stillAnchor = Vec2(450, 300)
+            #expect(r.isRiderCamping)
+            #expect(!r.isRiderClinging)
+            let id = r.place(.striker, at: Vec2(452, 300 + 28.5), ease: 1)
+            r.freeze(id)
+            if has(r.step(still), "riderLost") { lost += 1 }
+        }
+        // At its debut a striker squarely on top usually misjudges.
+        #expect(lost < 20, "\(lost) of 40")
         var r = quietRun()
         r.placeRider(at: Vec2(450, 300))
-        r.riderStillFor = r.tuning.gliderDrawAfter + 1
+        r.riderStillFor = 1000
         r.stillAnchor = Vec2(450, 300)
-        #expect(r.isRiderCamping)
-        let id = r.place(.striker, at: Vec2(462, 300 + r.tuning.campingMargin + 3), ease: 1)
+        let id = r.place(.striker, at: Vec2(452, 305), ease: 0)
         r.freeze(id)
+        #expect(has(r.step(still), "clashBounced"))
+    }
+
+    /// Ramming the same opponent level again and again is not a near miss: once a rider has
+    /// bounced off one opponent `rammingBounces` times in quick succession, that opponent needs
+    /// only the clash margin to win the next meeting, until the memory fades.
+    @Test func rammingTheSameOpponentLevelAgainAndAgainLosesTheLeniency() throws {
+        var r = quietRun()
+        let id = r.place(.striker, at: Vec2(460, 300), ease: 0)
+        r.freeze(id)
+        for _ in 0..<r.tuning.rammingBounces {
+            r.placeRider(at: Vec2(440, 302))
+            r.opponents[r.index(of: id)].body.pos = Vec2(460, 300)
+            r.opponents[r.index(of: id)].clashCooldown = 0
+            #expect(has(r.step(still), "clashBounced"))
+        }
+        // 20 units above: once a bounce, now a loss.
+        r.placeRider(at: Vec2(450, 300))
+        r.opponents[r.index(of: id)].body.pos = Vec2(450, 320)
+        r.opponents[r.index(of: id)].body.vel = .zero
+        r.opponents[r.index(of: id)].clashCooldown = 0
         #expect(has(r.step(still), "riderLost"))
+        // After a while apart, the opponent needs the clear height again.
+        var s = quietRun()
+        let other = s.place(.striker, at: Vec2(460, 300), ease: 0)
+        s.freeze(other)
+        for _ in 0..<s.tuning.rammingBounces {
+            s.placeRider(at: Vec2(440, 302))
+            s.opponents[s.index(of: other)].body.pos = Vec2(460, 300)
+            s.opponents[s.index(of: other)].clashCooldown = 0
+            _ = s.step(still)
+        }
+        for _ in 0..<seconds(s.tuning.rammingMemory * Double(s.tuning.rammingBounces) + 0.5) {
+            s.placeRider(at: Vec2(100, 500))
+            s.rider.invulnerableTimer = .infinity
+            s.opponents[s.index(of: other)].body.pos = Vec2(460, 300)
+            s.opponents[s.index(of: other)].body.vel = .zero
+            _ = s.step(still)
+        }
+        s.placeRider(at: Vec2(450, 300))
+        s.opponents[s.index(of: other)].body.pos = Vec2(450, 320)
+        s.opponents[s.index(of: other)].body.vel = .zero
+        s.opponents[s.index(of: other)].clashCooldown = 0
+        #expect(has(s.step(still), "clashBounced"))
     }
 
     @Test func aBounceThrowsBothApartAcrossOnly() throws {

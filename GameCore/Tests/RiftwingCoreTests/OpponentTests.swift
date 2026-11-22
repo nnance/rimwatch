@@ -76,27 +76,73 @@ import GameCore
         #expect(flaps(riderAbove: true) < flaps(riderAbove: false))
     }
 
-    /// A rider that stays put for `gliderDrawAfter` draws the Gliders' wandering to about its
-    /// height, so no perch is safe from clashes for long.
+    /// A rider that stays put for longer than the wave allows
+    /// (`RiftwingTuning.gliderDrawAfter(forWave:)`) draws the Gliders' wandering to about its
+    /// height, so no perch is safe for ever.
     @Test func aGliderIsDrawnToARiderThatStaysPut() throws {
-        var r = quietRun(seed: 3)
+        // Opponents cannot win here (a huge leniency), so the rider stays put unhurt.
+        var waves = RiftwingWaves()
+        waves.clashLeniencyBase = 1000
+        var r = quietRun(seed: 3, waves: waves)
         let perch = Vec2(450, 560)
         let id = r.place(.glider, at: Vec2(150, 300), ease: 0)
+        let allowed = r.tuning.gliderDrawAfter(forWave: 1)
         var closest = Double.infinity
         var drawnGoals = 0
-        for step in 0..<seconds(20) {
+        var stillTooSoon = false
+        for step in 0..<seconds(allowed + 16) {
             r.placeRider(at: perch)
-            r.rider.invulnerableTimer = .infinity
             _ = r.step(still)
-            if step > seconds(r.tuning.gliderDrawAfter + 4), let g = r.opponent(id) {
+            if Double(step) / 120 < allowed - 0.1, r.isRiderCamping { stillTooSoon = true }
+            if step > seconds(allowed + 4), let g = r.opponent(id) {
                 closest = min(closest, r.wrapDistance(g.pos, perch))
                 // Its wandering goal is now about the rider's height, near it.
                 if abs(r.dxWrap(g.goal.x, perch.x)) <= 140 + 1e-9, g.goal.y >= perch.y - 10 - 1e-9 { drawnGoals += 1 }
             }
         }
+        #expect(!stillTooSoon)
         #expect(r.isRiderCamping)
+        #expect(r.isRiderStill)
         #expect(drawnGoals > seconds(5))
         #expect(closest < 150, "\(closest)")
+    }
+
+    /// Resting is not camping: the time a rider may stay in one place is long, generous in the
+    /// early waves and tighter later, and never short.
+    @Test func restingIsAllowedForASensibleTime() throws {
+        let t = RiftwingTuning()
+        #expect(t.gliderDrawAfter(forWave: 1) >= 30)
+        #expect(t.gliderDrawAfter(forWave: 2) >= 25)
+        var last = Double.infinity
+        for wave in 1...30 {
+            let allowed = t.gliderDrawAfter(forWave: wave)
+            #expect(allowed <= last)
+            #expect(allowed >= 15)
+            last = allowed
+        }
+        #expect(t.gliderDrawAfter(forWave: 12) < t.gliderDrawAfter(forWave: 1))
+    }
+
+    /// The time in one place runs only while the rider is fighting unprotected: not in the break
+    /// between waves, and not while it is protected after returning.
+    @Test func theTimeInOnePlaceRunsOnlyWhileFightingUnprotected() throws {
+        var r = RiftwingRun(seed: 4)
+        // The break before the first wave.
+        run(&r, steps: seconds(r.tuning.firstWaveDelay - 0.1))
+        #expect(r.riderStillFor == 0)
+        // Protected, in the fight.
+        r = quietRun()
+        r.rider.invulnerableTimer = 3
+        run(&r, steps: seconds(2.5))
+        #expect(r.riderStillFor == 0)
+        run(&r, steps: seconds(1.5))
+        #expect(r.riderStillFor > 0.9 && r.riderStillFor < 1.1, "\(r.riderStillFor)")
+        // A break between waves pauses it.
+        r.phase = .intermission(remaining: 99)
+        r.wavesEnabled = true
+        let before = r.riderStillFor
+        run(&r, steps: seconds(2))
+        #expect(r.riderStillFor == before)
     }
 
     /// Holds the rider still in the air at `p`, protected, every step.
@@ -129,8 +175,14 @@ import GameCore
         #expect(lowestInStrike < spot.y + 30)
     }
 
+    /// Holds the rider pressed up against rock at `p` (rising into it every step), protected.
+    private func press(_ r: inout RiftwingRun, at p: Vec2) {
+        r.placeRider(at: p, vel: Vec2(0, 120))
+        r.rider.invulnerableTimer = .infinity
+    }
+
     /// A rider passing along the roof is let be: a Striker keeps out of the roof's band, where a
-    /// meeting would be level. One that stays pinned against the roof (or under a ledge) is
+    /// meeting would be level. One that stays pressed against the roof (or under a ledge) is
     /// hunted there: the Striker comes up under the same rock after it.
     @Test func aStrikerHuntsARiderThatStaysPinnedAgainstTheRoof() throws {
         var r = quietRun(seed: 2)
@@ -139,11 +191,12 @@ import GameCore
         let band = r.tuning.roof - r.tuning.stats(for: .striker).radius - r.tuning.roofBand
         var highestEarly = 0.0, highestLate = 0.0
         for step in 0..<seconds(10) {
-            hold(&r, at: spot)
+            press(&r, at: spot)
             _ = r.step(still)
             let y = try r.req(opponent: id).pos.y
             if Double(step) / 120 < r.tuning.pinnedPatience { highestEarly = max(highestEarly, y) } else { highestLate = max(highestLate, y) }
         }
+        #expect(r.isRiderClinging)
         #expect(highestEarly < band)
         #expect(highestLate > band - 8)
     }
@@ -156,13 +209,46 @@ import GameCore
         let id = r.place(.striker, at: Vec2(150, 300), ease: 0)
         var closest = Double.infinity
         for step in 0..<seconds(12) {
-            hold(&r, at: under)
+            press(&r, at: under)
             _ = r.step(still)
             if Double(step) / 120 > r.tuning.pinnedPatience, let o = r.opponent(id) {
                 closest = min(closest, r.wrapDistance(o.pos, under))
             }
         }
+        #expect(r.isRiderClinging)
         #expect(closest < r.tuning.riderRadius + r.tuning.stats(for: .striker).radius + 15, "\(closest)")
+    }
+
+    /// Flying near the roof is not clinging to it: a rider holding height a little under the roof,
+    /// or touching it now and then, is not pinned. Pressed against it (bumping it again and again
+    /// in a short time), it is.
+    @Test func onlyARiderPressedAgainstRockIsPinned() throws {
+        var r = quietRun()
+        let t = r.tuning
+        // Holding height 15 under the roof's limit, flapping now and then, for 6 s.
+        r.placeRider(at: Vec2(450, t.roof - t.riderRadius - 15))
+        r.rider.invulnerableTimer = .infinity
+        var pinned = false
+        for step in 0..<seconds(6) {
+            let flap = r.rider.vel.y < -40 && r.rider.pos.y < t.roof - t.riderRadius - 15
+            _ = r.step(RiftwingInput(stick: Vec2(step % 240 < 120 ? 0.5 : -0.5, 0), flap: flap))
+            if r.isRiderPinned { pinned = true }
+        }
+        #expect(!pinned)
+        #expect(!r.isRiderCamping)
+        // One bump of the roof is not pinning either.
+        r.riderBumpTicks.removeAll()
+        r.placeRider(at: Vec2(450, t.roof - t.riderRadius - 1), vel: Vec2(0, 200))
+        _ = r.step(still)
+        #expect(!r.isRiderPinned)
+        // Pressed against it, bumping again and again: pinned, and after the patience, clinging.
+        for _ in 0..<seconds(t.pinnedPatience + 2) {
+            press(&r, at: Vec2(450, t.roof - t.riderRadius))
+            _ = r.step(still)
+        }
+        #expect(r.isRiderPinned)
+        #expect(r.isRiderClinging)
+        #expect(r.isRiderCamping)
     }
 
     @Test func aWardenKeepsHeightAboveTheRiderAndDives() throws {
