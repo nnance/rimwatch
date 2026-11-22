@@ -19,6 +19,10 @@ public enum RiftwingEvent: Sendable, Equatable {
     case lampsRestored
     /// The wave has dragged on: gas will rise from the Rift to `level` after the warning.
     case riftWarning(level: Double)
+    /// The breath's last step: after this longer warning the gas fills the whole gallery to the
+    /// roof (`level`), taking everything not protected; then the cycle starts again from the
+    /// lowest step. Sent instead of `riftWarning` for that step.
+    case riftFillWarning(level: Double)
     /// The gas is rising.
     case riftBreathed(level: Double)
     /// The gas has sunk back into the Rift.
@@ -30,6 +34,8 @@ public enum RiftwingEvent: Sendable, Equatable {
     case landed(at: Vec2, ledge: Int)
     /// Its head struck a ledge's underside.
     case bumpedLedge(at: Vec2)
+    /// It flew up into the roof and was knocked down a little (nothing clings to the roof).
+    case bumpedRoof(at: Vec2)
     case diveBegan(at: Vec2)
     /// The dive was let go: the wings start to open.
     case wingsOpening(at: Vec2)

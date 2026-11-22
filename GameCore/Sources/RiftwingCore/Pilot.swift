@@ -14,12 +14,18 @@ public struct RiftwingPilot: Sendable {
     public enum Skill: String, Sendable, CaseIterable {
         /// Never touches the controls.
         case idle
-        /// The stand-in for a first-time player: flaps to stay airborne at a comfortable height,
-        /// goes for the nearest opponent and tries to come at it from above but misjudges the
-        /// height by a random amount each time, picks up pods when they are close, flees an
-        /// opponent above it only some of the time, never dives, ignores mines, and re-plans
-        /// only about three times a second, so it reacts late.
+        /// The stand-in for a first-time player, flying like a person: it sees the gallery a
+        /// quarter of a second late (its own rig a little less), taps flap at a human rate with
+        /// uneven timing and a short press, over- and undershoots the heights it means to hold,
+        /// does not plan round ledges (it bumps into them, then works round), leads a moving
+        /// opponent only roughly, knows a pod is about to hatch only from its warning, notices a
+        /// landed pod late and goes to it slowly, now and then stops flapping for a moment, and
+        /// sometimes misjudges and falls into the Rift. It never dives and ignores mines.
         case novice
+        /// The first novice, kept for comparison: frame-perfect flap and steering from exact
+        /// velocity and gravity, routing round ledges by their shapes, leading targets by their
+        /// exact velocity, and reaching a landed pod in about half a second.
+        case sharpNovice
         /// Plays well: re-plans ten times a second, keeps height over its target and comes
         /// down on it, stoops when high above, gets out from under threats, catches falling
         /// pods, frees pods before they hatch, goes for Gleaners holding pods, steers round
@@ -37,6 +43,14 @@ public struct RiftwingPilot: Sendable {
         /// Exploit: chases the nearest opponent at its own height, never trying to get above
         /// it, so most meetings bounce.
         case levelBouncer
+        /// Exploit: flies under the highest ledge and hovers pressed against its underside.
+        case underLedgeHoverer
+        /// Exploit: hovers at the join of the two tunnel mouths, at mid-height, where nothing
+        /// may arrive close by.
+        case seamCamper
+        /// Exploit: stands on the highest ledge and comes out only to stoop on an opponent that
+        /// passes below, then goes back.
+        case ambusher
     }
 
     public let skill: Skill
@@ -57,6 +71,16 @@ public struct RiftwingPilot: Sendable {
     public private(set) var lastTarget = Vec2.zero
     /// Exploit bots: the ledge or vent it settled on.
     private var spot: Int?
+    /// The human novice: what it saw, oldest first (it acts on the oldest), and its own state.
+    private var seen: [RiftwingRun] = []
+    private var pressFor = 0
+    private var nextTapGap = 0.3
+    private var panicGap = 0.15
+    private var lookahead = 0.18
+    private var stallFor = 0.0
+    private var noticed: [Int: Double] = [:]
+    private var detour: (Vec2, Double)?
+    private var blockedFor = 0.0
 
     public init(skill: Skill, seed: UInt64) {
         self.skill = skill
@@ -65,21 +89,32 @@ public struct RiftwingPilot: Sendable {
 
     public mutating func input(for run: RiftwingRun) -> RiftwingInput {
         sinceFlap += RiftwingRun.timeStep
+        if skill == .novice {
+            // What it will see a moment from now: it acts on the oldest.
+            seen.append(run)
+            if seen.count > Self.humanDelaySteps + 1 { seen.removeFirst() }
+        }
         guard run.rider.isAlive, !run.isGameOver else {
             flapDown = false
             diving = false
             spot = nil
+            pressFor = 0
+            detour = nil
             return RiftwingInput()
         }
         switch skill {
         case .idle: return RiftwingInput()
-        case .novice: return noviceInput(run)
+        case .novice: return humanInput(run)
+        case .sharpNovice: return noviceInput(run)
         case .competent: return competentInput(run)
         case .topLedgeSitter: return sitterInput(run, high: true)
         case .lowHider: return sitterInput(run, high: false)
         case .roofHoverer: return roofInput(run)
         case .ventRider: return ventInput(run)
         case .levelBouncer: return bouncerInput(run)
+        case .underLedgeHoverer: return underLedgeInput(run)
+        case .seamCamper: return seamInput(run)
+        case .ambusher: return ambushInput(run)
         }
     }
 
@@ -154,6 +189,141 @@ public struct RiftwingPilot: Sendable {
         }
         // Nothing about: drift at a comfortable height.
         return Vec2(run.wrapX(me.pos.x + rng.range(-150...150)), rng.range(260...420))
+    }
+
+
+    // MARK: Human novice
+
+    /// Steps the human novice sees the gallery late: a quarter of a second. It sees its own rig
+    /// `humanOwnDelaySteps` late.
+    static let humanDelaySteps = 30
+    static let humanOwnDelaySteps = 18
+    /// The lowest it means to fly (going for a pod, lower), and below which it taps in a panic.
+    static let humanLow = 150.0
+    static let humanLowForPod = 75.0
+    static let humanPanic = 115.0
+    /// Seconds between its taps, uneven: usually, and in a panic.
+    static let humanTapGap = 0.18...0.36
+    static let humanPanicGap = 0.12...0.2
+
+    private mutating func humanInput(_ run: RiftwingRun) -> RiftwingInput {
+        let dt = RiftwingRun.timeStep
+        let view = seen.first ?? run
+        let ownIndex = max(seen.count - 1 - Self.humanOwnDelaySteps, 0)
+        let mine = seen.isEmpty ? run : seen[ownIndex]
+        // Just back on a ledge after a loss: what it saw before is of the old life.
+        let me = mine.rider.isAlive ? mine.rider.body : run.rider.body
+        replanIn -= dt
+        stallFor -= dt
+        if replanIn <= 0 {
+            replanIn = rng.range(0.35...0.6)
+            heightError = rng.chance(0.2) ? rng.range(-45...0) : rng.range(-10...50)
+            lookahead = rng.range(0.08...0.26)
+            goal = humanGoal(view, me)
+            // Now and then its attention slips and it stops flapping for a moment.
+            if stallFor <= 0, rng.chance(0.04) { stallFor = rng.range(0.3...0.8) }
+        }
+        var target = goal
+        // It does not plan round ledges: it bumps its head, then works round to the nearer end.
+        if let (spot, left) = detour {
+            target = spot
+            detour = left - dt > 0 ? (spot, left - dt) : nil
+        } else if target.y > me.pos.y + 20, let ledge = view.ledges.first(where: { l in
+            l.spans(me.pos.x) && abs((l.top - view.tuning.ledgeThickness) - (me.pos.y + me.radius * view.tuning.headShare)) < 6
+        }) {
+            blockedFor += dt
+            if blockedFor > 0.4 {
+                blockedFor = 0
+                let left = ledge.minX - me.radius - 25, right = ledge.maxX + me.radius + 25
+                let x = abs(view.dxWrap(me.pos.x, left)) < abs(view.dxWrap(me.pos.x, right)) ? left : right
+                detour = (Vec2(view.wrapX(x), me.pos.y), rng.range(0.8...1.4))
+            }
+        } else {
+            blockedFor = 0
+        }
+        // It keeps well clear of the Rift, unless it is going for a pod.
+        var low = chasingPod ? Self.humanLowForPod : Self.humanLow
+        if view.breath != .calm, !view.isBreathFilling { low = max(low, min(view.breathLevel + 40, view.tuning.roof - 25)) }
+        target.y = max(target.y, low)
+        lastTarget = target
+        let dx = view.dxWrap(me.pos.x, target.x)
+        let desired = clamp(dx * 1.6, -170, 170)
+        let steer = clamp((desired - me.vel.x) / 70, -1, 1)
+        return RiftwingInput(stick: Vec2(abs(steer) < 0.15 ? 0 : steer, 0), flap: humanFlap(me, targetY: target.y))
+    }
+
+    /// A tap of flap: held for a few steps, then let go; no faster than its uneven tapping
+    /// rate; when the height it sees (late) is heading below where it means to be.
+    private mutating func humanFlap(_ me: RiftwingBody, targetY: Double) -> Bool {
+        if pressFor > 0 {
+            pressFor -= 1
+            return true
+        }
+        // Low over the Rift, or dropping fast toward it, it taps as fast as it can, whatever
+        // else it was doing.
+        let panic = !me.isGrounded && me.vel.y < 40
+            && (me.pos.y < Self.humanPanic || (me.pos.y < Self.humanPanic + 90 && me.vel.y < -170))
+        let gap = panic ? min(nextTapGap, panicGap) : nextTapGap
+        guard sinceFlap >= gap, stallFor <= 0 else { return false }
+        let g = 430.0
+        let ahead = me.vel.y < -150 ? lookahead + 0.12 : lookahead
+        let predicted = me.pos.y + me.vel.y * ahead - 0.5 * g * ahead * ahead
+        guard panic || predicted < targetY || (me.isGrounded && targetY > me.pos.y + 25) else { return false }
+        sinceFlap = 0
+        pressFor = Int(rng.range(3...8))
+        nextTapGap = rng.range(Self.humanTapGap)
+        panicGap = rng.range(Self.humanPanicGap)
+        return true
+    }
+
+    private mutating func humanGoal(_ view: RiftwingRun, _ me: RiftwingBody) -> Vec2 {
+        chasingPod = false
+        let rigs = view.opponents.filter { $0.role.isRig && !isWaking($0) }
+        // Pods it has seen, and when it notices each.
+        let now = Double(view.tick) * RiftwingRun.timeStep
+        for pod in view.pods where isFreeable(pod) && noticed[pod.id] == nil {
+            noticed[pod.id] = now + rng.range(0.6...2.2)
+        }
+        // An opponent above and close: it climbs away, some of the time.
+        if let threat = rigs.filter({ view.wrapDistance($0.pos, me.pos) < 120 && $0.pos.y > me.pos.y + 6 })
+            .min(by: { view.wrapDistance($0.pos, me.pos) < view.wrapDistance($1.pos, me.pos) }), rng.chance(0.4) {
+            let away: Double = view.dxWrap(threat.pos.x, me.pos.x) >= 0 ? 1 : -1
+            return Vec2(view.wrapX(me.pos.x + away * 150), min(threat.pos.y + 40 + heightError, 560))
+        }
+        let busy = rigs.contains { view.wrapDistance($0.pos, me.pos) < 160 && $0.pos.y > me.pos.y - 20 }
+        // A pod it has noticed: a flashing one first, else a near one when nothing is close.
+        let pods = view.pods.filter { p in
+            guard isFreeable(p), let at = noticed[p.id], now >= at else { return false }
+            if case .resting = p.state, p.hatchIn < view.tuning.hatchWarning { return true }
+            if case .falling = p.state, view.wrapDistance(p.pos, me.pos) < 140 { return true }
+            return !busy && view.wrapDistance(p.pos, me.pos) < 320
+        }
+        if let pod = pods.min(by: { view.wrapDistance($0.pos, me.pos) < view.wrapDistance($1.pos, me.pos) }), rng.chance(0.8) {
+            chasingPod = true
+            return Vec2(pod.pos.x + rng.range(-15...15), pod.pos.y - 8 + heightError * 0.3)
+        }
+        // A Gleaner with a pod, if it is not far.
+        if let gleaner = view.opponents.first(where: { $0.role == .gleaner && holdsPod($0) && view.wrapDistance($0.pos, me.pos) < 260 }),
+           rng.chance(0.7) {
+            return Vec2(gleaner.pos.x, gleaner.pos.y + 10 + heightError * 0.3)
+        }
+        // The nearest opponent, from above as it judges it, leading it roughly.
+        if var target = rigs.min(by: { view.wrapDistance($0.pos, me.pos) < view.wrapDistance($1.pos, me.pos) }) {
+            target.body.pos.x = view.wrapX(target.pos.x + target.vel.x * rng.range(0...0.5))
+            let dx = view.dxWrap(me.pos.x, target.pos.x)
+            if me.pos.y > target.pos.y + 10, abs(dx) < 60 {
+                return Vec2(target.pos.x, target.pos.y + rng.range(-5...25))
+            }
+            if target.pos.y > me.pos.y + 40, rng.chance(0.6) {
+                // Well below it: it waits a little way off for it to come down.
+                let away: Double = dx >= 0 ? -1 : 1
+                return Vec2(view.wrapX(me.pos.x + (abs(dx) < 160 ? away * 80 : 0)), min(max(me.pos.y, 200), 430))
+            }
+            let want = target.pos.y + 20 + heightError
+            if me.pos.y < want - 20, abs(dx) < 110 { return Vec2(me.pos.x, want) }
+            return Vec2(target.pos.x, want)
+        }
+        return Vec2(view.wrapX(me.pos.x + rng.range(-150...150)), rng.range(250...420))
     }
 
     // MARK: Competent
@@ -329,6 +499,63 @@ public struct RiftwingPilot: Sendable {
         let steer = steerTo(run, me, vent.x, speed: 120)
         let inColumn = abs(run.dxWrap(me.pos.x, vent.x)) < run.tuning.ventHalfWidth
         let flap = flapControl(run, me, targetY: inColumn ? 70 : vent.top - 60, lookahead: 0.3, gap: 0.14)
+        return RiftwingInput(stick: Vec2(steer, 0), flap: flap)
+    }
+
+    private mutating func underLedgeInput(_ run: RiftwingRun) -> RiftwingInput {
+        let me = run.rider.body
+        let ledges = run.ledges
+        if spot == nil || spot! >= ledges.count {
+            spot = ledges.indices.max { ledges[$0].top < ledges[$1].top }
+        }
+        let ledge = ledges[spot!]
+        let bottom = ledge.top - run.tuning.ledgeThickness
+        let under = bottom - me.radius * run.tuning.headShare
+        let dx = run.dxWrap(me.pos.x, ledge.midX)
+        // Get beneath it from the side, then press up against its underside.
+        if abs(dx) > ledge.length / 2 - 10 {
+            let steer = steerTo(run, me, ledge.midX, speed: 160)
+            let flap = flapControl(run, me, targetY: min(under - 30, me.pos.y + 5), lookahead: 0.25, gap: 0.14)
+            return RiftwingInput(stick: Vec2(steer, 0), flap: flap)
+        }
+        let steer = steerTo(run, me, ledge.midX, speed: 100)
+        let flap = flapControl(run, me, targetY: bottom, lookahead: 0.3, gap: 0.12)
+        return RiftwingInput(stick: Vec2(steer, 0), flap: flap)
+    }
+
+    private mutating func seamInput(_ run: RiftwingRun) -> RiftwingInput {
+        let me = run.rider.body
+        let steer = steerTo(run, me, 0, speed: 160)
+        let flap = flapControl(run, me, targetY: 340, lookahead: 0.25, gap: 0.12)
+        return RiftwingInput(stick: Vec2(steer, 0), flap: flap)
+    }
+
+    private mutating func ambushInput(_ run: RiftwingRun) -> RiftwingInput {
+        let me = run.rider.body
+        let ledges = run.ledges
+        if spot == nil || spot! >= ledges.count {
+            spot = ledges.indices.max { ledges[$0].top < ledges[$1].top }
+        }
+        let ledge = ledges[spot!]
+        // Something passing below, not far down or across: it stoops on it.
+        if me.pos.y > ledge.top - 60, let prey = run.opponents.filter({ o in
+            o.role.isRig && o.pos.y < me.pos.y - 25 && o.pos.y > me.pos.y - 260 && abs(run.dxWrap(me.pos.x, o.pos.x)) < 110
+        }).min(by: { run.wrapDistance($0.pos, me.pos) < run.wrapDistance($1.pos, me.pos) }) {
+            let dx = run.dxWrap(me.pos.x, prey.pos.x)
+            let steer = steerTo(run, me, prey.pos.x + prey.vel.x * 0.2, speed: 200)
+            let dive = abs(dx) < 45 && me.pos.y - prey.pos.y > 30 && prey.pos.y > 140
+            let flap = dive ? false : flapControl(run, me, targetY: prey.pos.y + 25, lookahead: 0.15, gap: 0.12)
+            return RiftwingInput(stick: Vec2(steer, 0), flap: flap, dive: dive)
+        }
+        if me.ledge == spot {
+            let dx = ledge.midX - me.pos.x
+            return RiftwingInput(stick: Vec2(abs(dx) > 20 ? clamp(dx / 40, -1, 1) : 0, 0))
+        }
+        // Back to its ledge.
+        let target = Vec2(ledge.midX, ledge.top + 40)
+        let steer = steerTo(run, me, target.x, speed: 170)
+        let over = abs(run.dxWrap(me.pos.x, target.x)) < 40
+        let flap = flapControl(run, me, targetY: over ? ledge.top + 15 : target.y, lookahead: 0.25, gap: 0.12)
         return RiftwingInput(stick: Vec2(steer, 0), flap: flap)
     }
 

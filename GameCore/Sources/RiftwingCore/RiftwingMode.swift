@@ -34,7 +34,10 @@ extension RiftwingRun: ModeRun {
     public init(seed: UInt64, config: Config) {
         var tuning = config.tuning
         #if DEBUG
-        if let after = config.breathAfter { tuning.breathAfter = after }
+        if let after = config.breathAfter {
+            tuning.breathAfter = after
+            tuning.breathAfterEarly = after
+        }
         #endif
         self.init(seed: seed, tuning: tuning, waves: config.waves)
         #if DEBUG

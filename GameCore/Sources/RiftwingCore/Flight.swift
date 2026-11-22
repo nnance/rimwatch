@@ -26,6 +26,8 @@ struct FlightResult: Sendable {
     var flapped = false
     var landed: Int?
     var bumped = false
+    /// It flew up into the roof and was knocked down.
+    var bumpedRoof = false
     var diveBegan = false
     var wingsOpening = false
     var wingsOpened = false
@@ -137,10 +139,16 @@ extension RiftwingRun {
         let previous = b.pos
         b.pos = b.pos + b.vel * dt
         b.pos.x = wrapX(b.pos.x)
-        // The roof stops it and does no harm.
+        // The roof stops it and does no harm, but nothing can cling to it: flying up into it
+        // knocks the rig down a little, so it bobs below the rock.
         if b.pos.y > tuning.roof - b.radius {
             b.pos.y = tuning.roof - b.radius
-            b.vel.y = min(b.vel.y, 0)
+            if b.vel.y > 0 {
+                b.vel.y = -max(tuning.ceilingKnock, b.vel.y * 0.25)
+                result.bumpedRoof = true
+            } else {
+                b.vel.y = min(b.vel.y, 0)
+            }
         }
 
         // Ledges: land on top, bump the head underneath.
@@ -161,8 +169,9 @@ extension RiftwingRun {
                 result.vent = nil
                 break
             } else {
+                // Its head strikes the underside: knocked down a little, as at the roof.
                 b.pos.y = bottom - head
-                b.vel.y = -abs(b.vel.y) * 0.25
+                b.vel.y = -max(tuning.ledgeKnock, abs(b.vel.y) * 0.25)
                 result.bumped = true
             }
         }

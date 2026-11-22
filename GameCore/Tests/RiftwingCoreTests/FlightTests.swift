@@ -144,6 +144,35 @@ import GameCore
         #expect(r.rider.pos.y < ledge.top - r.tuning.ledgeThickness)
     }
 
+    /// Nothing clings to a ceiling: flying up into the roof knocks a rig down at least
+    /// `ceilingKnock`, and into a ledge's underside at least `ledgeKnock`.
+    @Test func nothingClingsToTheRoofOrALedgesUnderside() throws {
+        var r = quietRun()
+        r.placeRider(at: Vec2(450, r.tuning.roof - r.rider.body.radius - 1), vel: Vec2(0, 200))
+        let events = r.step(still)
+        #expect(has(events, "bumpedRoof"))
+        #expect(r.rider.vel.y <= -r.tuning.ceilingKnock + 1e-9)
+        // Under the first layout's middle shelf (345...505, top 250).
+        let ledge = r.ledges[1]
+        let under = ledge.top - r.tuning.ledgeThickness - r.rider.body.radius * r.tuning.headShare
+        r.placeRider(at: Vec2(ledge.midX, under - 1), vel: Vec2(0, 150))
+        #expect(has(r.step(still), "bumpedLedge"))
+        #expect(r.rider.vel.y <= -r.tuning.ledgeKnock + 1e-9)
+    }
+
+    /// Vents lift opponents as they lift the rider.
+    @Test func aVentCarriesAnOpponentUp() throws {
+        var r = quietRun()
+        r.removeRider()
+        let vent = r.vents[0]
+        let id = r.place(.glider, at: Vec2(vent.x, 200))
+        r.freeze(id)
+        run(&r, steps: seconds(0.6))
+        let o = try r.req(opponent: id)
+        #expect(o.pos.y > 230)
+        #expect(o.vel.y > 100)
+    }
+
     @Test func aVentCarriesTheRiderUpWithoutFlapping() throws {
         var r = quietRun()
         let vent = r.vents[0]

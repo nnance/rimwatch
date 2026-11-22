@@ -165,6 +165,13 @@ public struct RiftwingPod: Sendable, Identifiable, Equatable {
     public var restedFor = 0.0
     /// Its fastest fall (slower for a pod from a role in its first appearances).
     public var terminal = 190.0
+    /// Its drift across toward a ledge below while it falls (a pod from a role in its first
+    /// appearances), and the ledge.
+    var drift = 0.0
+    var driftLedge: Int?
+    /// Seconds the Rift's heat can still hold it up just above the Rift (a pod from a role in its
+    /// first appearances).
+    public internal(set) var hoverLeft = 0.0
     var warned = false
 
     /// Seconds before it can be taken, from its drop (`RiftwingTuning.podCatchDelay`).

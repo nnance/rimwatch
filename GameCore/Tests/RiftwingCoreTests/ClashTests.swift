@@ -32,7 +32,8 @@ import GameCore
     }
 
     @Test func theLowerRigLosesALife() throws {
-        let (r, id, events) = meet(.striker, riderAt: Vec2(450, 305), at: Vec2(450, 330))
+        // Clearly above: more than the margin and the lasting leniency (`aMeetingNeedsAClearHeightToWin`).
+        let (r, id, events) = meet(.striker, riderAt: Vec2(450, 305), at: Vec2(450, 333))
         #expect(events.contains { if case .clashLost(id, .striker, _) = $0 { true } else { false } })
         #expect(events.contains { if case .riderLost(_, 2, .clash(id, .striker)) = $0 { true } else { false } })
         #expect(!r.rider.isAlive)
@@ -55,22 +56,60 @@ import GameCore
         #expect(r.clashOutcome(rider: body(y: 300 - edge - 0.5), opponent: body(y: 300)) == .lose)
     }
 
-    @Test func anOpponentInItsFirstAppearanceMustBeClearlyAboveToWin() throws {
-        // 20 units above: a loss at full strength, a bounce from a debut opponent.
-        let full = meet(.striker, riderAt: Vec2(450, 300), at: Vec2(450, 320), ease: 0)
-        #expect(has(full.events, "riderLost"))
-        let debut = meet(.striker, riderAt: Vec2(450, 300), at: Vec2(450, 320), ease: 1)
-        #expect(has(debut.events, "clashBounced"))
-        #expect(debut.run.rider.isAlive)
-        let r = debut.run
-        let lenient = r.director.clashLeniency
-        #expect(r.clashOutcome(rider: body(y: 300), opponent: body(y: 300 + r.tuning.clashMargin + lenient - 0.5),
-                               leniency: lenient) == .bounce)
-        #expect(r.clashOutcome(rider: body(y: 300), opponent: body(y: 300 + r.tuning.clashMargin + lenient + 0.5),
-                               leniency: lenient) == .lose)
-        // Winning is the same at any ease.
+    /// To win, an opponent must be more than the margin and the lasting leniency above the rider
+    /// (about 27 units: contact comes at about 29, so it must come down nearly squarely on top).
+    /// Winning for the rider is the margin alone.
+    @Test func aMeetingNeedsAClearHeightToWin() throws {
+        let r = quietRun()
+        let lose = r.tuning.clashMargin + r.director.leniency(ease: 0)
+        #expect(lose > 24 && lose < 29)
+        #expect(r.clashOutcome(rider: body(y: 300), opponent: body(y: 300 + lose - 0.5), leniency: r.director.leniency(ease: 0)) == .bounce)
+        #expect(r.clashOutcome(rider: body(y: 300), opponent: body(y: 300 + lose + 0.5), leniency: r.director.leniency(ease: 0)) == .lose)
         #expect(r.clashOutcome(rider: body(y: 300 + r.tuning.clashMargin + 0.5), opponent: body(y: 300),
-                               leniency: lenient) == .win)
+                               leniency: r.director.leniency(ease: 0)) == .win)
+        // 20 units above is not enough, even at full strength.
+        let near = meet(.striker, riderAt: Vec2(450, 300), at: Vec2(450, 320), ease: 0)
+        #expect(has(near.events, "clashBounced"))
+    }
+
+    /// In its debut an opponent that would win a clash misjudges it and bounces; its chance to
+    /// win grows with its appearances (`RiftwingWaves.clashMercy`), and at full strength it
+    /// always wins.
+    @Test func anOpponentInItsFirstAppearancesMisjudgesClashesItWouldWin() throws {
+        func losses(ease: Double) -> Int {
+            (0..<200).count { i in
+                var r = quietRun(seed: UInt64(100 + i))
+                r.placeRider(at: Vec2(450, 300))
+                let id = r.place(.striker, at: Vec2(450, 328), ease: ease)
+                r.freeze(id)
+                return has(r.step(still), "riderLost")
+            }
+        }
+        #expect(losses(ease: 1) == 0)
+        #expect(losses(ease: 0) == 200)
+        let half = losses(ease: 0.5)
+        #expect((60...140).contains(half), "\(half) of 200")
+    }
+
+    /// A rider camping in one place gets no leniency or mercy: a debut opponent only a little
+    /// above it wins.
+    @Test func aCampingRiderGetsNoLeniency() throws {
+        var r = quietRun()
+        r.placeRider(at: Vec2(450, 300))
+        r.riderStillFor = r.tuning.gliderDrawAfter + 1
+        r.stillAnchor = Vec2(450, 300)
+        #expect(r.isRiderCamping)
+        let id = r.place(.striker, at: Vec2(462, 300 + r.tuning.campingMargin + 3), ease: 1)
+        r.freeze(id)
+        #expect(has(r.step(still), "riderLost"))
+    }
+
+    @Test func aBounceThrowsBothApartAcrossOnly() throws {
+        let (r, id, _) = meet(.glider, riderAt: Vec2(440, 300), at: Vec2(460, 303))
+        let o = try r.req(opponent: id)
+        // No vertical part: a bounce never sets up a win on the next meeting.
+        #expect(abs(r.rider.vel.y - (-r.tuning.gravity * RiftwingRun.timeStep)) < 1)
+        #expect(o.vel.y <= 0.5)
     }
 
     @Test func pressedAgainstTheRoofBothAreLevel() throws {

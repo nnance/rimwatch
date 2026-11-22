@@ -80,7 +80,7 @@ import GameCore
 
     @Test func podsLastLongInEarlyWavesAndShrinkToAFloor() throws {
         let waves = RiftwingWaves(), tuning = RiftwingTuning()
-        #expect(waves.podLife(forWave: 1, tuning: tuning) == 15)
+        #expect(waves.podLife(forWave: 1, tuning: tuning) == 20)
         var last = 99.0
         for wave in 1...30 {
             let life = waves.podLife(forWave: wave, tuning: tuning)
@@ -88,7 +88,8 @@ import GameCore
             #expect(life >= 7)
             last = life
         }
-        #expect(waves.podLife(forWave: 11, tuning: tuning) == 7)
+        #expect(waves.podLife(forWave: 11, tuning: tuning) > 7)
+        #expect(waves.podLife(forWave: 12, tuning: tuning) == 7)
         #expect(waves.podLife(forWave: 30, tuning: tuning) == 7)
     }
 

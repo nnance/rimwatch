@@ -3,13 +3,15 @@ import GameCore
 import RiftwingCore
 
 // `Harness riftwing [seeds] [maxMinutes] [skill...]`: runs Riftwing's scripted pilots over many
-// seeds and prints difficulty and rescue statistics. Skills: idle, novice, competent,
-// topLedgeSitter, roofHoverer, ventRider, lowHider, levelBouncer (default: all of them).
+// seeds and prints difficulty and rescue statistics. Skills: idle, novice, sharpNovice,
+// competent, topLedgeSitter, roofHoverer, ventRider, lowHider, levelBouncer, underLedgeHoverer,
+// seamCamper, ambusher (default: all of them).
 // SEEDBASE moves the seed set (default 1000) to check a result is not luck of the seeds.
 // Environment overrides for the main tuning numbers (see `riftwingTuning` and `riftwingWaves`):
 // flight GRAV FLAP MAXRISE AIRACC AIRMAX REOPEN DIVEG; the clash MARGIN ROOFBAND LENIENCY;
 // lives SAFE INVULN EXTRA LIVES0; pods PODLIFE0 PODSHRINK PODFLOOR PODKNOCK PODGRAV PODTERM;
-// the breath BREATH BREATHREP BREATHLVL BREATHGROW; opponents SKIP STRCLIMB STRREACH STRTIME
+// the breath BREATH BREATHEARLY BREATHREP BREATHLVL BREATHGROW BREATHSTEPS; ceilings KNOCK PINNED;
+// pods CATCHDELAY PODTHROW; RESPAWN; opponents SKIP STRCLIMB STRREACH STRTIME
 // STRREC STRPAT WARDH WARDDIVE MINEGAP GLSPEED GLCARRY; waves RAMP=1,0.7,... CONC=2,2,3,...
 // SENDGAP GLDELAY GLDELAYEASE GLSLOW GLGRABEASE GLCARRYEASE; FIGURE for the size factor.
 // TRACE=<seed> (TRACEBOT, TRACEFROM, TRACETO, TRACEEVERY) prints one game; GOLDEN=1 prints the
@@ -49,8 +51,21 @@ private func riftwingTuning() -> RiftwingTuning {
     if let v = env["STRTIME"].flatMap(Double.init) { t.strikerStrikeTime = v }
     if let v = env["STRREC"].flatMap(Double.init) { t.strikerRecover = v }
     if let v = env["STRPAT"].flatMap(Double.init) { t.strikerPatience = v }
+    if let v = env["STRSTEER"].flatMap(Double.init) { t.strikerStrikeSteer = v }
+    if let v = env["MARGINX"].flatMap(Double.init) { t.clashMargin = v }
+    if let v = env["BOUNCELIFT"].flatMap(Double.init) { t.bounceLift = v }
+    if let v = env["BOUNCESPEED"].flatMap(Double.init) { t.bounceSpeed = v }
+    if let v = env["CLASHCOOL"].flatMap(Double.init) { t.clashCooldown = v }
     if let v = env["WARDDIVE"].flatMap(Double.init) { t.wardenDiveReach = v }
     if let v = env["PODGRAV"].flatMap(Double.init) { t.podGravity = v }
+    if let v = env["BREATHEARLY"].flatMap(Double.init) { t.breathAfterEarly = v }
+    if let v = env["BREATHSTEPS"].flatMap(Int.init) { t.breathSteps = v }
+    if let v = env["KNOCK"].flatMap(Double.init) { t.ceilingKnock = v }
+    if let v = env["LEDGEKNOCK"].flatMap(Double.init) { t.ledgeKnock = v }
+    if let v = env["PINNED"].flatMap(Double.init) { t.pinnedBand = v }
+    if let v = env["CATCHDELAY"].flatMap(Double.init) { t.podCatchDelay = v }
+    if let v = env["PODTHROW"].flatMap(Double.init) { t.podThrow = v }
+    if let v = env["RESPAWN"].flatMap(Double.init) { t.respawnDelay = v }
     if let v = env["PODTERM"].flatMap(Double.init) { t.podTerminal = v }
     // Lives to start with (and the most the rig can hold): a large number lets a weak bot play
     // on into waves it would not reach, to measure them.
@@ -65,6 +80,20 @@ private func riftwingWaves() -> RiftwingWaves {
     if let v = env["CONC"] { w.concurrency = v.split(separator: ",").compactMap { Int($0) } }
     if let v = env["SENDGAP"].flatMap(Double.init) { w.sendGap = v }
     if let v = env["LENIENCY"].flatMap(Double.init) { w.clashLeniency = v }
+    if let v = env["LENBASE"].flatMap(Double.init) { w.clashLeniencyBase = v }
+    if let v = env["MERCY"].flatMap(Double.init) { w.clashMercy = v }
+    if let v = env["STRSPEEDEASE"].flatMap(Double.init) { w.strikerSpeedEase = v }
+    if let v = env["STRCLIMBEASE"].flatMap(Double.init) { w.strikerClimbEase = v }
+    if let v = env["STRREPLANEASE"].flatMap(Double.init) { w.strikerReplanEase = v }
+    if let v = env["STRRECEASE"].flatMap(Double.init) { w.strikerRecoverEase = v }
+    if let v = env["GLSHY"].flatMap(Double.init) { w.gliderShyEase = v }
+    if let v = env["GLBANDEASE"].flatMap(Double.init) { w.gliderBandEase = v }
+    if let v = env["WARDSPEEDEASE"].flatMap(Double.init) { w.wardenSpeedEase = v }
+    if let v = env["WARDDIVEEASE"].flatMap(Double.init) { w.wardenDiveEase = v }
+    if let v = env["PODFALLEASE"].flatMap(Double.init) { w.podFallEase = v }
+    if let v = env["PODDRIFT"].flatMap(Double.init) { w.podDriftEase = v }
+    if let v = env["PODHOVER"].flatMap(Double.init) { w.podHoverEase = v }
+    if let v = env["PODHOVERH"].flatMap(Double.init) { w.podHoverHeight = v }
     if let v = env["GLDELAY"].flatMap(Double.init) { w.gleanerDelayBase = v }
     if let v = env["GLDELAYEASE"].flatMap(Double.init) { w.gleanerDelayEase = v }
     if let v = env["GLSLOW"].flatMap(Double.init) { w.gleanerSlowdown = v }
@@ -85,6 +114,11 @@ private struct RiftwingWaveStats {
     var firstLoss: Double?
     var breaths = 0
     var carryTimes: [Double] = []
+    /// Lives lost here by cause, and pods lost within 5 s of landing.
+    var causes: [String: Int] = [:]
+    var lostQuickly = 0
+    /// Seconds each settled pod lay on ledges (freed, hatched or carried off).
+    var restTimes: [Double] = []
 }
 
 private struct RiftwingStats {
@@ -104,6 +138,8 @@ private struct RiftwingStats {
     var steps = 0
     /// Seconds from each caught pod's drop to its catch.
     var catchDelays: [Double] = []
+    /// Bounced and lost clashes: the opponent's role and its height over the rider just before.
+    var clashDy: [(RiftwingRole, Double, String)] = []
 }
 
 private func cause(_ c: RiftwingLossCause) -> String {
@@ -142,13 +178,18 @@ private func playRiftwing(skill: RiftwingPilot.Skill, seed: UInt64, maxMinutes: 
                 stats.waves[cleared, default: RiftwingWaveStats()].length = t - waveStart
             case .riderLost(_, _, let c):
                 stats.waves[w, default: RiftwingWaveStats()].livesLost += 1
-                stats.causes[cause(c), default: 0] += 1
+                let name = c == .breath && before.isBreathFilling ? "fill" : cause(c)
+                stats.causes[name, default: 0] += 1
+                stats.waves[w, default: RiftwingWaveStats()].causes[name, default: 0] += 1
             case .podDropped(let id, _, _):
                 stats.waves[w, default: RiftwingWaveStats()].dropped += 1
                 droppedAt[id] = t
             case .podFreed(let id, _, _, _):
                 stats.waves[w, default: RiftwingWaveStats()].freed += 1
-                if let pod = before.pod(id) { stats.waves[w, default: RiftwingWaveStats()].lieTimes.append(pod.restedFor) }
+                if let pod = before.pod(id) {
+                    stats.waves[w, default: RiftwingWaveStats()].lieTimes.append(pod.restedFor)
+                    stats.waves[w, default: RiftwingWaveStats()].restTimes.append(pod.restedFor)
+                }
             case .podCaught(let id, _, _, _):
                 if let at = droppedAt[id] { stats.catchDelays.append(t - at) }
                 stats.waves[w, default: RiftwingWaveStats()].freed += 1
@@ -163,6 +204,12 @@ private func playRiftwing(skill: RiftwingPilot.Skill, seed: UInt64, maxMinutes: 
                 case .breath: "breath"
                 }
                 stats.waves[w, default: RiftwingWaveStats()].lost[name, default: 0] += 1
+                if let pod = before.pod(id) {
+                    if c != .rift, pod.restedFor < 5, pod.restedFor > 0 || c == .breath {
+                        stats.waves[w, default: RiftwingWaveStats()].lostQuickly += 1
+                    }
+                    if c == .hatched || c == .carried { stats.waves[w, default: RiftwingWaveStats()].restTimes.append(pod.restedFor) }
+                }
                 if stats.waves[w]?.firstLoss == nil { stats.waves[w]?.firstLoss = t - waveStart }
                 if c == .carried, let at = carriedAt[id] { stats.waves[w, default: RiftwingWaveStats()].carryTimes.append(t - at) }
             case .riftBreathed:
@@ -171,8 +218,12 @@ private func playRiftwing(skill: RiftwingPilot.Skill, seed: UInt64, maxMinutes: 
             case .clashWon(_, _, _, let stoop):
                 stats.clashes["won", default: 0] += 1
                 if stoop { stats.stoops += 1 }
-            case .clashBounced: stats.clashes["bounced", default: 0] += 1
-            case .clashLost: stats.clashes["lost", default: 0] += 1
+            case .clashBounced(let id, _, _):
+                stats.clashes["bounced", default: 0] += 1
+                if let o = before.opponent(id) { stats.clashDy.append((o.role, o.pos.y - before.rider.pos.y, "b")) }
+            case .clashLost(let id, _, _):
+                stats.clashes["lost", default: 0] += 1
+                if let o = before.opponent(id) { stats.clashDy.append((o.role, o.pos.y - before.rider.pos.y, "l")) }
             case .extraLife: stats.extraLives += 1
             case .lampsFailed: stats.lampsOut += 1
             case .opponentArrived(_, _, let at):
@@ -234,8 +285,8 @@ private func traceRiftwing(seed: UInt64) {
     }
 }
 
-/// `GOLDEN=1`: the fingerprint `RiftwingDeterminismTests` pins (three minutes of the competent
-/// pilot on seed 1), computed in this (release) build, to check Debug and Release agree.
+/// `GOLDEN=1`: the fingerprint `RiftwingDeterminismTests` pins (330 s of the competent pilot on
+/// seed 1), computed in this (release) build, to check Debug and Release agree.
 private func riftwingGolden() {
     var r = RiftwingRun(seed: 1)
     var pilot = RiftwingPilot(skill: .competent, seed: 1)
@@ -244,7 +295,7 @@ private func riftwingGolden() {
     func mix(_ text: String) {
         for byte in text.utf8 { hash = (hash ^ UInt64(byte)) &* 0x100_0000_01B3 }
     }
-    for _ in 0..<(180 * 120) {
+    for _ in 0..<(330 * 120) {
         let events = r.step(pilot.input(for: r))
         total += events.count
         for event in events { mix("\(r.tick) \(event);") }
@@ -293,6 +344,18 @@ func runRiftwing(_ args: [String]) {
                      Double(all.reduce(0) { $0 + $1.flaps }) / max(all.reduce(0) { $0 + $1.survival } / 60, 0.01)))
         var causes: [String: Int] = [:]
         for g in all { for (k, v) in g.causes { causes[k, default: 0] += v } }
+        if ProcessInfo.processInfo.environment["CLASHDY"] != nil {
+            // `CLASHDY=1`: how far above the rider each kind was in bounced and lost clashes.
+            for role in [RiftwingRole.glider, .striker, .warden] {
+                let d = all.flatMap(\.clashDy).filter { $0.0 == role }
+                var line = "clash height over rider, \(role.rawValue) (bounced/lost) by 4s:"
+                for lo in stride(from: -8, to: 40, by: 4) {
+                    let inBin = d.filter { $0.1 >= Double(lo) && $0.1 < Double(lo + 4) }
+                    line += " \(lo):\(inBin.count { $0.2 == "b" })/\(inBin.count { $0.2 == "l" })"
+                }
+                print(line)
+            }
+        }
         let delays = all.flatMap(\.catchDelays)
         let dropped = all.reduce(0) { $0 + $1.waves.values.reduce(0) { $0 + $1.dropped } }
         print(String(format: "catches            %.1f%% of pods dropped, %.1f%% within 0.05 s of the drop, %.1f%% within 0.4 s",
@@ -332,6 +395,44 @@ func runRiftwing(_ args: [String]) {
                              dropped > 0 ? totalLost / dropped * 100 : 0, median(ws.flatMap(\.lieTimes)),
                              median(firsts), firsts.count, carries.min() ?? .nan, sum(\.breaths) / n))
             }
+        }
+        if top >= 1 {
+            // Lives lost per game reaching the wave, by cause; pods lost within 5 s of landing;
+            // how long freed and hatched or carried pods lay (median), in each wave.
+            let kinds = ["rift", "breath", "fill", "mine", "clash-glider", "clash-striker", "clash-warden", "clash-sower"]
+            print("per wave: lives lost/game by cause " + kinds.joined(separator: " ") + " | pods lost quickly/game | pod lay s med (all settled from ledges)")
+            for w in 1...top {
+                let reached = all.filter { $0.wave >= w }
+                guard !reached.isEmpty else { continue }
+                let n = Double(reached.count)
+                let ws = reached.compactMap { $0.waves[w] }
+                let parts = kinds.map { k in String(format: "%.2f", Double(ws.reduce(0) { $0 + ($1.causes[k] ?? 0) }) / n) }
+                print(String(format: "  w%-2d ", w) + parts.joined(separator: " ")
+                      + String(format: " | %.2f | %.1f", Double(ws.reduce(0) { $0 + $1.lostQuickly }) / n, median(ws.flatMap(\.restTimes))))
+            }
+            // Each kind's threat by its own appearances: lives it cost per game reaching that
+            // wave (Gleaners: pods carried off), and per one of it sent.
+            let director = riftwingWaves()
+            print("threat by appearance (1st, 2nd, ...): cost per game reaching the wave / per one sent")
+            for role in RiftwingRole.allCases {
+                var line = "  \(role.rawValue.padding(toLength: 8, withPad: " ", startingAt: 0))"
+                for w in 1...top {
+                    guard let k = director.appearance(of: role, inWave: w), k < 8 else { continue }
+                    let reached = all.filter { $0.wave >= w }
+                    let n = Double(reached.count)
+                    let cost: Double
+                    switch role {
+                    case .gleaner: cost = Double(reached.reduce(0) { $0 + ($1.waves[w]?.lost["carried"] ?? 0) })
+                    case .sower: cost = Double(reached.reduce(0) { $0 + ($1.waves[w]?.causes["clash-sower"] ?? 0) + ($1.waves[w]?.causes["mine"] ?? 0) })
+                    default: cost = Double(reached.reduce(0) { $0 + ($1.waves[w]?.causes["clash-\(role.rawValue)"] ?? 0) })
+                    }
+                    let sent = Double(director.count(of: role, inWave: w))
+                    line += String(format: "  w%d %.2f/%.2f", w, cost / n, cost / n / max(sent, 1))
+                }
+                print(line)
+            }
+            let lay = all.flatMap { $0.waves.values.flatMap(\.restTimes) }
+            print(String(format: "pods lie (median, every settled pod that landed): %.1f s", median(lay)))
         }
         let early = all.reduce(0) { $0 + ($1.waves[1]?.livesLost ?? 0) + ($1.waves[2]?.livesLost ?? 0) }
         let earlyDropped = all.reduce(0) { $0 + ($1.waves[1]?.dropped ?? 0) + ($1.waves[2]?.dropped ?? 0) }

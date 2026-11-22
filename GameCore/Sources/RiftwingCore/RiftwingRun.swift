@@ -64,6 +64,11 @@ public struct RiftwingRun: Sendable {
     /// Gleaners this wave still has to send, and the wave-clock time the next may come.
     var gleanersLeft = 0
     var gleanerNextAt = 0.0
+    /// Seconds the rider has stayed pinned against rock (`isRiderPinned`).
+    var riderPinnedFor = 0.0
+    /// Seconds the rider has stayed within `RiftwingTuning.stillRadius` of `stillAnchor`.
+    var riderStillFor = 0.0
+    var stillAnchor = Vec2.zero
     /// The step since which no place in the mouths has been clear for a new arrival.
     var arrivalBlockedSince: Int?
     /// Wave-clock time of the next breath's warning.
@@ -86,7 +91,7 @@ public struct RiftwingRun: Sendable {
         rng = SeededRNG(seed: seed ^ 0x21F7_3A1D_C0DE_9E11)
         nextExtraLifeScore = tuning.extraLifeEvery
         phase = .intermission(remaining: tuning.firstWaveDelay)
-        nextBreathAt = tuning.breathAfter
+        nextBreathAt = tuning.breathAfter(forWave: 1)
         layoutIndex = 0
         let start = RiftwingCavern.layouts[0]
         var body = RiftwingBody(pos: .zero, radius: tuning.riderRadius)
@@ -116,11 +121,23 @@ public struct RiftwingRun: Sendable {
         }
     }
 
+    /// Which step of the breath's cycle the current (or next) breath is: 0 for the lowest, up to
+    /// `RiftwingTuning.breathSteps`, the one that fills the gallery; then it starts again.
+    public var breathStep: Int {
+        max(breathsThisWave - 1, 0) % (max(tuning.breathSteps, 0) + 1)
+    }
+
+    /// The current (or next) breath fills the gallery to the roof: nothing escapes it but a
+    /// protected rider.
+    public var isBreathFilling: Bool { breathStep >= max(tuning.breathSteps, 0) }
+
     /// The height the current (or next) breath of this wave rises to: `RiftwingTuning.breathLevel`
-    /// for the first, `breathGrowth` higher for each after it, up to the roof, so a wave that
-    /// stalls anywhere is ended in the end.
+    /// for the first, `breathGrowth` higher for each step after it, each one a height that can be
+    /// flown above; then the step that fills the gallery to the roof, so a wave that stalls
+    /// anywhere is ended in the end.
     public var breathLevel: Double {
-        min(tuning.breathLevel + tuning.breathGrowth * Double(max(breathsThisWave - 1, 0)), tuning.roof)
+        if isBreathFilling { return tuning.roof }
+        return min(tuning.breathLevel + tuning.breathGrowth * Double(breathStep), tuning.roof)
     }
 
     /// Seconds until the current breath stops taking what is under it (0 while calm or falling).
@@ -314,7 +331,7 @@ public struct RiftwingRun: Sendable {
         sendTimer = 0
         gleanersLeft = director.count(of: .gleaner, inWave: wave)
         gleanerNextAt = director.gleanerDelay(forWave: wave)
-        nextBreathAt = tuning.breathAfter
+        nextBreathAt = tuning.breathAfter(forWave: wave)
         breath = .calm
         breathsThisWave = 0
         #if DEBUG
@@ -571,8 +588,13 @@ public struct RiftwingRun: Sendable {
         case .calm:
             if waveClock >= nextBreathAt {
                 breathsThisWave += 1
-                breath = .warning(remaining: tuning.breathWarning)
-                events.append(.riftWarning(level: breathLevel))
+                if isBreathFilling {
+                    breath = .warning(remaining: tuning.breathFillWarning)
+                    events.append(.riftFillWarning(level: breathLevel))
+                } else {
+                    breath = .warning(remaining: tuning.breathWarning)
+                    events.append(.riftWarning(level: breathLevel))
+                }
             }
         case .warning(let remaining):
             if remaining - dt <= 0 {
@@ -597,15 +619,20 @@ public struct RiftwingRun: Sendable {
     }
 
     /// While the gas rises or holds, whatever is under it is lost: the rider (unless protected),
-    /// opponents, and pods falling or resting.
+    /// opponents (except in the gas that fills the gallery, which they shelter from), and pods
+    /// falling or resting.
     private mutating func applyBreath() {
         guard isBreathDeadly else { return }
         let level = gasLevel
         if rider.isAlive, !rider.isInvulnerable, rider.body.pos.y < level {
             loseRider(cause: .breath)
         }
-        for index in opponents.indices where !opponents[index].isDead && opponents[index].pos.y < level {
-            opponentFell(at: index, cause: .breath)
+        // Opponents are lost to a step of the breath, but shelter from the gas that fills the
+        // gallery: it ends a stalling rider's lives without clearing the wave for it.
+        if !isBreathFilling {
+            for index in opponents.indices where !opponents[index].isDead && opponents[index].pos.y < level {
+                opponentFell(at: index, cause: .breath)
+            }
         }
         for index in pods.indices where pods[index].pos.y < level {
             switch pods[index].state {
@@ -619,6 +646,8 @@ public struct RiftwingRun: Sendable {
 
     private mutating func updateRider(_ input: RiftwingInput, _ dt: Double) {
         guard rider.isAlive else {
+            riderPinnedFor = 0
+            riderStillFor = 0
             if rider.lives > 0 {
                 rider.respawnTimer -= dt
                 if rider.respawnTimer <= 0 { respawnRider() }
@@ -638,9 +667,17 @@ public struct RiftwingRun: Sendable {
         if result.flapped { events.append(.flapped(at: at, fromLedge: wasGrounded)) }
         if let ledge = result.landed { events.append(.landed(at: at, ledge: ledge)) }
         if result.bumped { events.append(.bumpedLedge(at: at)) }
+        if result.bumpedRoof { events.append(.bumpedRoof(at: at)) }
         if result.vent != rider.vent {
             rider.vent = result.vent
             if let vent = result.vent { events.append(.ventEntered(vent: vent, at: at)) }
+        }
+        riderPinnedFor = isRiderPinned ? riderPinnedFor + dt : 0
+        if wrapDistance(rider.body.pos, stillAnchor) > tuning.stillRadius {
+            stillAnchor = rider.body.pos
+            riderStillFor = 0
+        } else {
+            riderStillFor += dt
         }
         if rider.body.pos.y < tuning.riftLevel {
             loseRider(cause: .rift)

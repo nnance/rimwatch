@@ -20,26 +20,83 @@ import GameCore
         }
     }
 
-    @Test func aGliderWandersAndPaysTheRiderNoAttention() throws {
-        // The same Glider with the rider far off on a ledge, or gone: the same path.
+    /// A Glider pays the rider little attention. At full strength, with the rider flying about
+    /// far off, it flies exactly the path it would fly with no rider at all, and it wanders.
+    /// Early on it will not flap up into a rider just above it; and a rider that stays put draws
+    /// its wandering (`aGliderIsDrawnToARiderThatStaysPut`).
+    @Test func aGliderWandersAndPaysAFarRiderNoAttention() throws {
         func path(riderThere: Bool) -> [Vec2] {
             var r = quietRun(seed: 5)
             if !riderThere { r.removeRider() }
-            r.rider.invulnerableTimer = .infinity
             let id = r.place(.glider, at: Vec2(700, 450), ease: 0)
             var points: [Vec2] = []
             for step in 0..<seconds(8) {
+                if riderThere {
+                    // Far below the Glider's band, moving, so it is never still for long.
+                    let x = 100 + Double(step % seconds(4)) * 0.4
+                    r.placeRider(at: Vec2(x, 60))
+                    r.rider.invulnerableTimer = .infinity
+                }
                 _ = r.step(still)
                 if step % 60 == 0, let g = r.opponent(id) { points.append(g.pos) }
             }
             return points
         }
         let with = path(riderThere: true), without = path(riderThere: false)
-        // It stays clear of the rider's ledge in this seed, so its flight is the same.
         #expect(with == without)
-        // And it wanders: it covers ground.
         let span = (with.map(\.x).max() ?? 0) - (with.map(\.x).min() ?? 0)
         #expect(span > 100)
+    }
+
+    /// In its first appearances a Glider is shy of a rider just above it: it skips the flaps
+    /// that would lift it into the rider, so it flaps less than with no rider there.
+    @Test func anEarlyGliderWillNotFlapUpIntoARiderJustAboveIt() throws {
+        func flaps(riderAbove: Bool) -> Int {
+            var total = 0
+            for seed: UInt64 in 1...8 {
+                var r = quietRun(seed: seed)
+                if !riderAbove { r.removeRider() }
+                let id = r.place(.glider, at: Vec2(600, 300), ease: 1)
+                var last = 99.0
+                for _ in 0..<seconds(3) {
+                    guard let g = r.opponent(id) else { break }
+                    if riderAbove {
+                        r.placeRider(at: Vec2(g.pos.x + 70, g.pos.y + 50))
+                        r.rider.invulnerableTimer = .infinity
+                    }
+                    _ = r.step(still)
+                    if let g2 = r.opponent(id) {
+                        if g2.body.sinceFlap < last { total += 1 }
+                        last = g2.body.sinceFlap
+                    }
+                }
+            }
+            return total
+        }
+        #expect(flaps(riderAbove: true) < flaps(riderAbove: false))
+    }
+
+    /// A rider that stays put for `gliderDrawAfter` draws the Gliders' wandering to about its
+    /// height, so no perch is safe from clashes for long.
+    @Test func aGliderIsDrawnToARiderThatStaysPut() throws {
+        var r = quietRun(seed: 3)
+        let perch = Vec2(450, 560)
+        let id = r.place(.glider, at: Vec2(150, 300), ease: 0)
+        var closest = Double.infinity
+        var drawnGoals = 0
+        for step in 0..<seconds(20) {
+            r.placeRider(at: perch)
+            r.rider.invulnerableTimer = .infinity
+            _ = r.step(still)
+            if step > seconds(r.tuning.gliderDrawAfter + 4), let g = r.opponent(id) {
+                closest = min(closest, r.wrapDistance(g.pos, perch))
+                // Its wandering goal is now about the rider's height, near it.
+                if abs(r.dxWrap(g.goal.x, perch.x)) <= 140 + 1e-9, g.goal.y >= perch.y - 10 - 1e-9 { drawnGoals += 1 }
+            }
+        }
+        #expect(r.isRiderCamping)
+        #expect(drawnGoals > seconds(5))
+        #expect(closest < 150, "\(closest)")
     }
 
     /// Holds the rider still in the air at `p`, protected, every step.
@@ -72,18 +129,40 @@ import GameCore
         #expect(lowestInStrike < spot.y + 30)
     }
 
-    @Test func aStrikerDoesNotChaseARiderPressedAgainstTheRoof() throws {
+    /// A rider passing along the roof is let be: a Striker keeps out of the roof's band, where a
+    /// meeting would be level. One that stays pinned against the roof (or under a ledge) is
+    /// hunted there: the Striker comes up under the same rock after it.
+    @Test func aStrikerHuntsARiderThatStaysPinnedAgainstTheRoof() throws {
         var r = quietRun(seed: 2)
         let spot = Vec2(450, r.tuning.roof - r.tuning.riderRadius)
         let id = r.place(.striker, at: Vec2(300, 450), ease: 0)
-        var highest = 0.0
-        for _ in 0..<seconds(8) {
+        let band = r.tuning.roof - r.tuning.stats(for: .striker).radius - r.tuning.roofBand
+        var highestEarly = 0.0, highestLate = 0.0
+        for step in 0..<seconds(10) {
             hold(&r, at: spot)
             _ = r.step(still)
-            highest = max(highest, try r.req(opponent: id).pos.y)
+            let y = try r.req(opponent: id).pos.y
+            if Double(step) / 120 < r.tuning.pinnedPatience { highestEarly = max(highestEarly, y) } else { highestLate = max(highestLate, y) }
         }
-        // It never climbs into the roof's band, where a meeting would only be level.
-        #expect(highest < r.tuning.roof - r.tuning.stats(for: .striker).radius - r.tuning.roofBand)
+        #expect(highestEarly < band)
+        #expect(highestLate > band - 8)
+    }
+
+    @Test func aStrikerHuntsARiderThatStaysPinnedUnderALedge() throws {
+        var r = quietRun(seed: 6)
+        // Under the first layout's high right shelf (530...720, top 455).
+        let ledge = r.ledges[4]
+        let under = Vec2(ledge.midX, ledge.top - r.tuning.ledgeThickness - r.tuning.riderRadius * r.tuning.headShare)
+        let id = r.place(.striker, at: Vec2(150, 300), ease: 0)
+        var closest = Double.infinity
+        for step in 0..<seconds(12) {
+            hold(&r, at: under)
+            _ = r.step(still)
+            if Double(step) / 120 > r.tuning.pinnedPatience, let o = r.opponent(id) {
+                closest = min(closest, r.wrapDistance(o.pos, under))
+            }
+        }
+        #expect(closest < r.tuning.riderRadius + r.tuning.stats(for: .striker).radius + 15, "\(closest)")
     }
 
     @Test func aWardenKeepsHeightAboveTheRiderAndDives() throws {

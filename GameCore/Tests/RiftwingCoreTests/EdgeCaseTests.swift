@@ -231,7 +231,7 @@ import GameCore
             let id = r.dropPod(at: Vec2(ledge.midX, ledge.top + 20), vel: .zero, from: from)
             var warned: RiftwingRole?
             var hatched: RiftwingRole?
-            for _ in 0..<seconds(20) {
+            for _ in 0..<seconds(30) {
                 for event in r.step(still) {
                     if case .hatchWarning(id, _, let becomes) = event { warned = becomes }
                     if case .podHatched(id, _, let role, _) = event { hatched = role }

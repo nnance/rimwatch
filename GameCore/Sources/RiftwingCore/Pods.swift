@@ -17,6 +17,12 @@ extension RiftwingRun {
         pod.vel = Vec2(vel.x * tuning.podInherit + away * tuning.podThrow,
                        min(vel.y * tuning.podInherit, 0) - tuning.podKnock)
         pod.catchableIn = tuning.podCatchDelay
+        let eased = min(max(ease, 0), 1)
+        if eased > 0, director.podDriftEase > 0 {
+            pod.drift = director.podDriftEase * eased
+            pod.driftLedge = nearestLedge(below: pos, terminal: pod.terminal, drift: pod.drift)
+            pod.hoverLeft = director.podHoverEase * eased
+        }
         pods.append(pod)
         waveDropped += 1
         events.append(.podDropped(id: id, at: pos, from: role))
@@ -49,7 +55,22 @@ extension RiftwingRun {
     private mutating func fall(_ index: Int, _ dt: Double) {
         var pod = pods[index]
         pod.vel.y = max(pod.vel.y - tuning.podGravity * dt, -pod.terminal)
-        pod.vel.x *= expo(-1.2 * dt)
+        if let l = pod.driftLedge, l < ledges.count, !ledges[l].spans(pod.pos.x) || abs(pod.vel.x) > pod.drift {
+            // Drifting toward the ledge below: across toward its nearer end, a little way in.
+            let ledge = ledges[l]
+            let x = clamp(pod.pos.x, ledge.minX + 20, ledge.maxX - 20)
+            let want = clamp(dxWrap(pod.pos.x, x) * 2, -pod.drift, pod.drift)
+            pod.vel.x += clamp(want - pod.vel.x, -400 * dt, 400 * dt)
+        } else {
+            pod.vel.x *= expo(-1.2 * dt)
+        }
+        // Near the Rift its heat holds an early pod up for a while before it sinks in.
+        let hover = tuning.riftLevel + director.podHoverHeight
+        if pod.hoverLeft > 0, pod.pos.y <= hover, pod.vel.y < 0 {
+            pod.hoverLeft -= dt
+            pod.vel.y = 0
+            pod.pos.y = hover
+        }
         let previous = pod.pos
         pod.pos = pod.pos + pod.vel * dt
         pod.pos.x = wrapX(pod.pos.x)
@@ -89,6 +110,26 @@ extension RiftwingRun {
         opponents[o].state = .waking(remaining: tuning.hatchWake)
         opponents[o].hatched = true
         events.append(.podHatched(id: pod.id, opponent: id, role: role, at: stand))
+    }
+
+    /// The ledge below `p` nearest it across (round the join) that a pod falling at most
+    /// `terminal` and drifting at `drift` can reach before it falls past; if none can be
+    /// reached, the nearest below.
+    func nearestLedge(below p: Vec2, terminal: Double, drift: Double) -> Int? {
+        var best: Int?
+        var bestGap = Double.infinity
+        var bestReachable = false
+        for (index, ledge) in ledges.enumerated() where ledge.top < p.y - tuning.podRadius {
+            let x = clamp(p.x, ledge.minX + 20, ledge.maxX - 20)
+            let gap = abs(dxWrap(p.x, x))
+            let reachable = gap / max(drift, 1e-9) < (p.y - tuning.podRadius - ledge.top) / max(terminal, 1e-9)
+            if (reachable && !bestReachable) || (reachable == bestReachable && gap < bestGap) {
+                bestGap = gap
+                best = index
+                bestReachable = reachable
+            }
+        }
+        return best
     }
 
     /// What a pod would hatch into now: one grade tougher, but its own kind until the tougher

@@ -15,13 +15,14 @@ extension RiftwingRun {
         case win, bounce, lose
     }
 
-    /// The clash rule on its own, for the rider at `rider` meeting `opponent`. `leniency` widens
-    /// the margin on the losing side only: an opponent in one of its first appearances must be
-    /// that much more clearly above to win (`RiftwingWaves.clashLeniency`).
+    /// The clash rule on its own, for the rider at `rider` meeting `opponent`. `leniency` changes
+    /// the margin on the losing side only: an opponent must be that much more clearly above to
+    /// win (`RiftwingWaves.leniency(ease:)`); a negative leniency narrows it (a camping rider,
+    /// `RiftwingTuning.campingMargin`), never below level.
     public func clashOutcome(rider: RiftwingBody, opponent: RiftwingBody, leniency: Double = 0) -> ClashOutcome {
         let diff = clashHeight(rider) - clashHeight(opponent)
         if diff > tuning.clashMargin { return .win }
-        if diff < -(tuning.clashMargin + max(leniency, 0)) { return .lose }
+        if diff < -max(tuning.clashMargin + leniency, 0) { return .lose }
         return .bounce
     }
 
@@ -61,8 +62,15 @@ extension RiftwingRun {
     private mutating func clash(_ index: Int) {
         let o = opponents[index]
         let at = Vec2(wrapX(rider.body.pos.x + dxWrap(rider.body.pos.x, o.pos.x) / 2), (rider.body.pos.y + o.pos.y) / 2)
-        var outcome = clashOutcome(rider: rider.body, opponent: o.body, leniency: director.clashLeniency * o.ease)
+        // A rider camping in one place (against rock, or anywhere) gets none of the early
+        // leniency or mercy, and loses to an opponent only a little above it.
+        let camping = isRiderCamping
+        let leniency = camping ? tuning.campingMargin - tuning.clashMargin : director.leniency(ease: o.ease)
+        var outcome = clashOutcome(rider: rider.body, opponent: o.body, leniency: leniency)
         if outcome == .lose, rider.isInvulnerable { outcome = .bounce }
+        if outcome == .lose, !camping, o.ease > 0, director.clashMercy > 0, rng.chance(min(director.clashMercy * o.ease, 1)) {
+            outcome = .bounce
+        }
         opponents[index].clashCooldown = tuning.clashCooldown
         switch outcome {
         case .win:

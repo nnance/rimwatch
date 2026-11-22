@@ -20,19 +20,41 @@ public struct RiftwingWaves: Sendable {
     public init() {}
 
     /// How much of a role's ease is left in each of its appearances, first to last; 0 after
-    /// the last entry. Steps of at most 0.3 and a last step of 0.1, so it fades rather than
-    /// stops: a role is at full strength from its seventh appearance.
-    public var rampEase: [Double] = [1, 0.7, 0.5, 0.35, 0.2, 0.1]
+    /// the last entry. Small steps and a last step of 0.05, so it fades rather than stops: a
+    /// role is at full strength from its thirteenth appearance.
+    public var rampEase: [Double] = [1, 0.75, 0.62, 0.5, 0.4, 0.32, 0.25, 0.19, 0.14, 0.1, 0.06, 0.03]
 
-    /// In a role's first appearances it must be this many units more clearly above the rider to
-    /// win a clash (times its ease: the full amount in its first appearance, none at full
-    /// strength); otherwise the meeting bounces. Winning is unchanged.
-    public var clashLeniency = 16.0
+    /// An opponent must be this many units more clearly above the rider than the clash margin
+    /// to win a clash, at every strength (`clashLeniencyBase`), and `clashLeniency` more times
+    /// its ease in its first appearances; otherwise the meeting bounces. Winning is unchanged.
+    /// Contact comes at about 29 units between centres, so an opponent needing 25 to 30 units
+    /// must come down almost squarely on top of the rider: at its debut it can hardly win, and
+    /// its threat grows a little with each appearance as the angle it needs widens.
+    public var clashLeniency = 0.0
+    public var clashLeniencyBase = 16.1
+    /// In its first appearances an opponent that would win a clash misjudges it this share of
+    /// the time (times its ease: every time at its debut, never at full strength), and the
+    /// meeting bounces instead. Drawn from the run's seeded random source, so a run still
+    /// replays exactly. This makes each kind's threat grow smoothly with its appearances.
+    public var clashMercy = 1.0
+
+    /// The extra height an opponent with `ease` left must have over the rider to win a clash.
+    public func leniency(ease: Double) -> Double {
+        clashLeniencyBase + clashLeniency * min(max(ease, 0), 1)
+    }
 
     /// A pod from a role in its first appearances falls this share more slowly (times the
     /// role's ease), so an early mid-air catch is within reach and fewer early pods reach the
     /// Rift.
-    public var podFallEase = 0.8
+    public var podFallEase = 0.9
+    /// ... and drifts toward the nearest ledge below it at up to this speed across (times the
+    /// role's ease), so fewer early pods are lost to the Rift while a new player is learning.
+    public var podDriftEase = 150.0
+    /// ... and, sinking near the Rift, is held up by its heat for this many seconds (times the
+    /// role's ease) before it falls in.
+    public var podHoverEase = 5.0
+    /// The height above the Rift at which an eased pod is held up.
+    public var podHoverHeight = 140.0
 
     /// Rigs in the gallery (or on their way in) at once, by wave (wave 1 first; the last entry
     /// holds for every later wave).
@@ -93,8 +115,8 @@ public struct RiftwingWaves: Sendable {
             [(.glider, 5)],                                                  // 2
             [(.glider, 3), (.striker, 2)],                                   // 3: Strikers
             [(.glider, 2), (.striker, 3), (.gleaner, 1)],                    // 4: Gleaners
-            [(.glider, 3), (.striker, 3), (.gleaner, 1)],                    // 5
-            [(.glider, 2), (.striker, 2), (.warden, 1), (.gleaner, 1)],      // 6: Wardens
+            [(.glider, 2), (.striker, 3), (.gleaner, 1)],                    // 5
+            [(.glider, 2), (.striker, 3), (.warden, 1), (.gleaner, 1)],      // 6: Wardens
             [(.glider, 2), (.striker, 3), (.warden, 1), (.gleaner, 1)],      // 7
             [(.glider, 2), (.striker, 3), (.warden, 1), (.sower, 1), (.gleaner, 1)], // 8: Sowers
             [(.glider, 2), (.striker, 3), (.warden, 2), (.gleaner, 1)],      // 9
@@ -166,7 +188,7 @@ public struct RiftwingWaves: Sendable {
     // MARK: Pods
 
     /// Seconds a pod rests before hatching in a wave: long at first, shrinking each wave to a
-    /// floor (15 s in wave 1, 0.8 s less a wave, 7 s from wave 11).
+    /// floor (20 s in wave 1, 1.2 s less a wave, 7 s from wave 12).
     public func podLife(forWave wave: Int, tuning: RiftwingTuning) -> Double {
         max(tuning.podLifeFloor, tuning.podLifeFirst - tuning.podLifeShrink * Double(max(wave - 1, 0)))
     }

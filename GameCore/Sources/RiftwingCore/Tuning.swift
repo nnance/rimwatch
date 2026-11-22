@@ -63,6 +63,12 @@ public struct RiftwingTuning: Sendable {
     /// Fastest fall with the wings open; faster falls (after a dive) ease back to it.
     public var terminalFall = 290.0
     public var overspeedDrag = 8.0
+    /// A rig that flies up into the roof is knocked down at least this fast, and one that flies
+    /// up into a ledge's underside at least `ledgeKnock`: nothing can cling to a ceiling, so a
+    /// rig hovering pressed under rock bobs below it, where a rig flying steadily can get above
+    /// it. Low ledges are close to the Rift, so their knock is gentler.
+    public var ceilingKnock = 150.0
+    public var ledgeKnock = 60.0
     /// Running on a ledge.
     public var runSpeed = 150.0
     public var runAccel = 900.0
@@ -100,14 +106,19 @@ public struct RiftwingTuning: Sendable {
 
     // The clash
     /// Within this many units of level, both bounce apart and nobody is hurt.
-    public var clashMargin = 8.0
+    public var clashMargin = 11.0
+    /// A rider camping in one place (`RiftwingRun.isRiderCamping`) loses a clash to an opponent
+    /// more than this above it, instead of the clash margin and any leniency.
+    public var campingMargin = 2.0
     /// Heights closer to the roof than this count as the roof's level less the band: pressed
     /// against the roof beside an opponent, you are level with it, so sitting at the top wins
     /// nothing.
-    public var roofBand = 12.0
-    /// Speed each is thrown apart at in a bounce (horizontal), and the vertical part.
+    public var roofBand = 4.0
+    /// Speed each is thrown apart at in a bounce (horizontal), and the vertical part (the higher
+    /// up, the lower down). No vertical part: one that sent the higher up set up a win on the
+    /// next meeting, which a rider chasing level with opponents could repeat for ever.
     public var bounceSpeed = 210.0
-    public var bounceLift = 60.0
+    public var bounceLift = 0.0
     /// After any clash an opponent cannot clash with the rider again for this long.
     public var clashCooldown = 0.35
     /// The winner of a clash springs up at least this fast.
@@ -155,8 +166,8 @@ public struct RiftwingTuning: Sendable {
     public var podCatchDelay = 0.4
     /// Seconds a pod rests on a ledge before it hatches, by wave: `podLifeFirst` in wave 1,
     /// `podLifeShrink` less each wave, never under `podLifeFloor`.
-    public var podLifeFirst = 15.0
-    public var podLifeShrink = 0.8
+    public var podLifeFirst = 20.0
+    public var podLifeShrink = 1.2
     public var podLifeFloor = 7.0
     /// Seconds before hatching that the warning is given.
     public var hatchWarning = 4.0
@@ -180,20 +191,38 @@ public struct RiftwingTuning: Sendable {
     public var ventRise = 210.0
     public var ventHalfWidth = 26.0
 
-    // The Rift's breath: if a wave drags on, gas rises part of the way up the gallery.
-    /// Seconds into a wave of the first breath's warning, and between later ones.
+    // The Rift's breath: if a wave drags on, gas rises from the Rift in steps.
+    /// Seconds into a wave of the first breath's warning: `breathAfterEarly` in the first
+    /// `breathEarlyWaves` waves, easing to `breathAfter` by wave `breathEaseUntil` (a person
+    /// learning to flap is slow in the first waves). Then `breathRepeat` between breaths.
+    public var breathAfterEarly = 90.0
+    public var breathEarlyWaves = 2
+    public var breathEaseUntil = 7
     public var breathAfter = 50.0
-    public var breathRepeat = 15.0
+    public var breathRepeat = 18.0
     public var breathWarning = 3.0
     public var breathRise = 1.0
     public var breathHold = 3.0
     public var breathFall = 1.5
-    /// The height the gas reaches: anything whose centre is under the gas while it rises or
-    /// holds is lost.
-    public var breathLevel = 175.0
-    /// Each later breath in the same wave rises this much higher, up to the roof: a wave
-    /// stalled anywhere (under the roof, on a high ledge, in a vent) is ended in the end.
-    public var breathGrowth = 210.0
+    /// The breath grows in steps, each of which can be flown above: the first reaches
+    /// `breathLevel`, each later one `breathGrowth` higher, for `breathSteps` steps. Anything
+    /// whose centre is under the gas while it rises or holds is lost.
+    public var breathLevel = 130.0
+    public var breathGrowth = 70.0
+    public var breathSteps = 4
+    /// After the last step the gas fills the gallery to the roof, after a longer warning of its
+    /// own, so a wave stalled anywhere is ended in the end. Then the cycle starts again from the
+    /// lowest step.
+    public var breathFillWarning = 5.0
+
+    /// Seconds into wave `wave` of its first breath's warning.
+    public func breathAfter(forWave wave: Int) -> Double {
+        let early = max(breathEarlyWaves, 1), until = max(breathEaseUntil, early + 1)
+        if wave <= early { return breathAfterEarly }
+        if wave >= until { return breathAfter }
+        let share = Double(wave - early) / Double(until - early)
+        return breathAfterEarly + (breathAfter - breathAfterEarly) * share
+    }
 
     // Opponent behaviour (the eases are in `RiftwingWaves`).
     /// Glider: picks a new place to wander to every so often; skips this share of its flaps.
@@ -201,6 +230,10 @@ public struct RiftwingTuning: Sendable {
     public var gliderSkip = 0.3
     /// The heights a Glider wanders between.
     public var gliderBand = 250.0...520.0
+    /// A rider that has stayed within `stillRadius` of one place this long (on a perch, under
+    /// rock, anywhere) draws the Gliders' wandering to about its height.
+    public var gliderDrawAfter = 6.0
+    public var stillRadius = 70.0
     /// Striker: the height above the rider it climbs to before coming down, and how close
     /// across it must be to come down.
     public var strikerClimb = 45.0
@@ -208,10 +241,18 @@ public struct RiftwingTuning: Sendable {
     /// The longest a Striker's strike lasts, and how long it flies off level after one.
     public var strikerStrikeTime = 1.4
     public var strikerRecover = 1.0
+    /// How hard a Striker steers after the rider during its strike (1: fully; less, and a rider
+    /// who moves aside escapes it).
+    public var strikerStrikeSteer = 1.0
     /// Seconds a Striker keeps trying to get above the rider before it breaks off.
     public var strikerPatience = 3.5
     /// Seconds between a Striker's or Warden's decisions.
     public var hunterReplan = 0.25
+    /// A rider whose centre is within this of the highest it can be where it is (under the roof
+    /// or a ledge) is pinned against rock; once it has stayed pinned for `pinnedPatience`,
+    /// hunters come up under the same rock after it.
+    public var pinnedBand = 30.0
+    public var pinnedPatience = 1.5
     /// Warden: the height above the rider it keeps, and the reach across within which it dives.
     public var wardenHeight = 80.0
     public var wardenDiveReach = 130.0

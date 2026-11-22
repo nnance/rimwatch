@@ -129,7 +129,10 @@ import GameCore
                 while r.tick < seconds(200), !r.isGameOver {
                     let before = r
                     for event in r.step(pilot.input(for: before)) {
-                        guard case .opponentArrived(_, _, let at) = event, before.rider.isAlive else { continue }
+                        guard case .opponentArrived(let id, _, let at) = event, before.rider.isAlive else { continue }
+                        // A forced arrival (the rider camped where nothing was clear) comes out
+                        // at the farthest place instead (`campingTheSideSeamDoesNotStopArrivals`).
+                        if before.arrivals.first(where: { $0.id == id })?.isForced == true { continue }
                         landings += 1
                         let gap = r.wrapDistance(at, r.rider.pos)
                         #expect(gap >= r.tuning.safeDistance - 2, "\(skill) seed \(seed): \(gap)")
@@ -287,14 +290,17 @@ import GameCore
     // MARK: The Rift's breath
 
     @Test func aDraggingWaveMakesTheRiftBreatheAfterAWarning() throws {
-        var r = quietRun()
-        let low = r.ledges[0]  // top 135, under the first breath
+        var tuning = RiftwingTuning()
+        tuning.breathLevel = 200  // so the first layout's low shelf (top 135) is under the first breath
+        var r = quietRun(tuning: tuning)
+        let low = r.ledges[0]
+        let after = r.tuning.breathAfter(forWave: 1)
         r.placeRider(at: Vec2(low.midX, low.top + 40))
         // A pod dropped onto the same low shelf shortly before the breath.
-        run(&r, steps: seconds(r.tuning.breathAfter - 5))
+        run(&r, steps: seconds(after - 5))
         let pod = r.dropPod(at: Vec2(low.midX + 50, low.top + 10), vel: .zero, from: .glider)
         var warnedAt: Double?, breathedAt: Double?, lost: Double?, podLost = false, settled = false
-        for step in seconds(r.tuning.breathAfter - 5)..<seconds(r.tuning.breathAfter + 10) {
+        for step in seconds(after - 5)..<seconds(after + 10) {
             for event in r.step(still) {
                 let t = Double(step + 1) / 120
                 if case .riftWarning(let level) = event { warnedAt = t; #expect(level == r.tuning.breathLevel) }
@@ -307,37 +313,111 @@ import GameCore
             if case .warning = r.breath { #expect(r.rider.isAlive) }
         }
         let w = try #require(warnedAt), b = try #require(breathedAt), l = try #require(lost)
-        #expect(abs(w - r.tuning.breathAfter) < 0.02)
+        #expect(abs(w - after) < 0.02)
         #expect(abs(b - w - r.tuning.breathWarning) < 0.02)
         #expect(l >= b)
         #expect(podLost)
         #expect(settled)
     }
 
-    @Test func eachLaterBreathRisesHigherUpToTheRoof() throws {
+    /// The first warning comes late while a new player is slow (about 90 s into waves 1 and 2),
+    /// easing to about 50 s by wave 7, never earlier.
+    @Test func theBreathComesLateInTheFirstWaves() throws {
+        let t = RiftwingTuning()
+        #expect(t.breathAfter(forWave: 1) == 90)
+        #expect(t.breathAfter(forWave: 2) == 90)
+        #expect(t.breathAfter(forWave: 7) == 50)
+        #expect(t.breathAfter(forWave: 20) == 50)
+        for wave in 1..<20 { #expect(t.breathAfter(forWave: wave + 1) <= t.breathAfter(forWave: wave)) }
+    }
+
+    /// The breath grows in steps, each a height with room above to fly in; only the last fills
+    /// the gallery, after a warning of its own; then the cycle starts again from the lowest.
+    @Test func theBreathRisesInStepsThenFillsTheGalleryAndStartsAgain() throws {
         var r = quietRun()
         r.removeRider()
-        var levels: [Double] = []
+        var warnings: [(fill: Bool, level: Double, at: Int)] = []
+        var breathed: [Int] = []
         for _ in 0..<seconds(400) {
             for event in r.step(still) {
-                if case .riftWarning(let level) = event { levels.append(level) }
+                if case .riftWarning(let level) = event { warnings.append((false, level, r.tick)) }
+                if case .riftFillWarning(let level) = event { warnings.append((true, level, r.tick)) }
+                if case .riftBreathed = event { breathed.append(r.tick) }
             }
         }
-        #expect(levels.count >= 5)
-        #expect(levels.first == r.tuning.breathLevel)
-        for (a, b) in zip(levels, levels.dropFirst()) { #expect(b >= a) }
-        #expect(levels.last == r.tuning.roof)
-        // Above it, the gas never reaches.
-        #expect(r.gasLevel <= r.tuning.roof)
+        let steps = r.tuning.breathSteps
+        #expect(steps >= 3)
+        try #require(warnings.count >= steps + 2)
+        for i in 0..<steps {
+            #expect(!warnings[i].fill)
+            #expect(abs(warnings[i].level - (r.tuning.breathLevel + r.tuning.breathGrowth * Double(i))) < 1e-9)
+            // Room above every step: the gallery's upper part stays clear.
+            #expect(warnings[i].level < r.tuning.roof - 150)
+            if i > 0 { #expect(warnings[i].level > warnings[i - 1].level) }
+        }
+        #expect(warnings[steps].fill)
+        #expect(warnings[steps].level == r.tuning.roof)
+        // Its own, longer warning.
+        #expect(abs(Double(breathed[steps] - warnings[steps].at) / 120 - r.tuning.breathFillWarning) < 0.02)
+        #expect(r.tuning.breathFillWarning > r.tuning.breathWarning)
+        // Then it starts again from the lowest step.
+        #expect(!warnings[steps + 1].fill)
+        #expect(warnings[steps + 1].level == r.tuning.breathLevel)
+    }
+
+    /// Opponents are lost to a step of the breath but shelter from the gas that fills the
+    /// gallery, so the fill ends a stalling rider's lives without clearing the wave for it.
+    @Test func opponentsShelterFromTheFillButNotFromAStep() throws {
+        var r = quietRun()
+        r.removeRider()
+        let low = r.place(.glider, at: Vec2(500, 80))
+        r.freeze(low)
+        r.breathsThisWave = 1
+        r.breath = .holding(remaining: 1)
+        let events = r.step(still)
+        #expect(events.contains { if case .opponentFell(low, _, _, .breath) = $0 { true } else { false } })
+        var f = quietRun()
+        f.removeRider()
+        let high = f.place(.glider, at: Vec2(500, 300))
+        f.freeze(high)
+        f.breathsThisWave = f.tuning.breathSteps + 1
+        #expect(f.isBreathFilling)
+        f.breath = .holding(remaining: 1)
+        for _ in 0..<seconds(0.5) {
+            f.opponents[f.index(of: high)].body.vel = .zero
+            f.opponents[f.index(of: high)].body.pos = Vec2(500, 300)
+            #expect(!has(f.step(still), "opponentFell"))
+        }
+        #expect(f.opponent(high) != nil)
     }
 
     @Test func aRiderHighUpIsNotTouchedByTheFirstBreath() throws {
         var r = quietRun()
         let high = r.ledges[4]  // top 455
         r.placeRider(at: Vec2(high.midX, high.top + 30))
-        let events = run(&r, steps: seconds(r.tuning.breathAfter + 9))
+        let events = run(&r, steps: seconds(r.tuning.breathAfter(forWave: 1) + 9))
         #expect(has(events, "riftBreathed"))
         #expect(!has(events, "riderLost"))
+    }
+
+    /// While the Rift breathes, a lost rider returns on a ledge above the gas when there is one.
+    @Test func aRiderReturnsAboveTheGasWhenALedgeIsClear() throws {
+        var tuning = RiftwingTuning()
+        tuning.breathLevel = 300
+        var r = quietRun(tuning: tuning)
+        r.breathsThisWave = 1
+        r.breath = .warning(remaining: 3)
+        r.placeRider(at: Vec2(450, 560))
+        r.loseRider(cause: .rift)
+        var ledge: Int?
+        for _ in 0..<seconds(r.tuning.respawnDelay + 0.1) {
+            for event in r.step(still) {
+                if case .riderRespawned(_, let l) = event { ledge = l }
+            }
+        }
+        let l = try #require(ledge)
+        #expect(r.ledges[l].top > r.breathLevel)
+        #expect(!has(run(&r, steps: seconds(6)), "riderLost"))
     }
 
     // MARK: Lives

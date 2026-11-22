@@ -40,22 +40,23 @@ import GameCore
         #expect(c.hash != a.hash)
     }
 
-    /// Three minutes of the competent pilot on seed 1: waves 1 to 6, the cavern's first shift,
-    /// four of the five roles. Debug and Release builds give the same values
-    /// (`GOLDEN=1 .build/release/Harness riftwing` prints them from a release build). If a
-    /// deliberate change to the rules, the tuning, the wave table or the pilot breaks it, capture
-    /// the new values from the printed line and say so in the commit. First captured for 15a;
-    /// re-captured after the check's fixes (a catch needs pursuit).
+    /// 330 s of the competent pilot on seed 1: waves 1 to 9, past the Sower's debut in wave 8
+    /// (its mines), both cavern shifts and all five roles. Debug and Release builds give the
+    /// same values (`GOLDEN=1 .build/release/Harness riftwing` prints them from a release
+    /// build). If a deliberate change to the rules, the tuning, the wave table or the pilot breaks
+    /// it, capture the new values from the printed line and say so in the commit. First captured
+    /// for 15a; re-captured after the check's fixes, and again (extended from 180 s) after the
+    /// breath, ceiling, clash and tuning changes.
     @Test func aScriptedRunReplaysExactly() throws {
-        let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180)
+        let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 330)
         print("RIFTWING GOLDEN hash \(hash) events \(events) score \(r.score) wave \(r.wave) saved \(r.colonistsSaved) lives \(r.rider.lives) tick \(r.tick)")
-        #expect(hash == 6_526_289_674_064_225_972)
-        #expect(events == 908)
-        #expect(r.score == 60_050)
-        #expect(r.wave == 6)
-        #expect(r.colonistsSaved == 20)
-        #expect(r.rider.lives == 3)
-        #expect(r.tick == 21_600)
+        #expect(hash == 16_771_875_436_173_643_305)
+        #expect(events == 2014)
+        #expect(r.score == 141_900)
+        #expect(r.wave == 9)
+        #expect(r.colonistsSaved == 42)
+        #expect(r.rider.lives == 4)
+        #expect(r.tick == 39_600)
     }
 }
 #endif

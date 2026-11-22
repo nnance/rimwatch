@@ -66,7 +66,7 @@ extension RiftwingRun {
     /// The lowest height an opponent lets itself sink to: out of the Rift, and above the gas
     /// while the Rift is about to breathe or breathing.
     private var opponentFloor: Double {
-        breath == .calm ? tuning.opponentFloor : min(max(tuning.opponentFloor, breathLevel + 45), tuning.roof - 40)
+        breath == .calm || isBreathFilling ? tuning.opponentFloor : min(max(tuning.opponentFloor, breathLevel + 45), tuning.roof - 40)
     }
 
     /// The highest a hunter climbs: just under the roof's band, where a meeting would be level.
@@ -74,9 +74,71 @@ extension RiftwingRun {
         tuning.roof - o.body.radius - tuning.roofBand - 6
     }
 
-    /// The rider is pressed up near the roof, where a hunter could at best meet it level.
+    /// The highest the centre of a rig of `radius` can be at `x`, at about height `y`: just
+    /// under the lowest rock above it there (a ledge's underside, or the roof).
+    func ceilingHeight(at x: Double, above y: Double, radius: Double) -> Double {
+        let head = radius * tuning.headShare
+        var cap = tuning.roof - radius
+        for ledge in ledges where ledge.spans(x) {
+            let bottom = ledge.top - tuning.ledgeThickness
+            if bottom >= y + head - 1 { cap = min(cap, bottom - head) }
+        }
+        return cap
+    }
+
+    /// The rider is up against rock (the roof or a ledge's underside), where it cannot climb.
+    var isRiderPinned: Bool {
+        rider.isAlive && rider.body.pos.y
+            > ceilingHeight(at: rider.body.pos.x, above: rider.body.pos.y - 1, radius: rider.body.radius) - tuning.pinnedBand
+    }
+
+    /// The rider has stayed up against rock for `RiftwingTuning.pinnedPatience`: hunters come up
+    /// under the same rock after it and hover there, gently, while it bobs from bumping the rock.
+    private var riderCamping: Bool { riderPinnedFor >= tuning.pinnedPatience }
+
+    /// The rider is camping: pinned against rock for `pinnedPatience`, or staying within
+    /// `stillRadius` of one place for `gliderDrawAfter`. Opponents show it no leniency or mercy.
+    public var isRiderCamping: Bool {
+        rider.isAlive && (riderPinnedFor >= tuning.pinnedPatience || riderStillFor >= tuning.gliderDrawAfter)
+    }
+
+    /// The rider is pressed up near the roof (but not camping there): a hunter could at best
+    /// meet it level, so it hangs back below.
     private var riderAtRoof: Bool {
         rider.body.pos.y > tuning.roof - rider.body.radius - tuning.roofBand - 15
+    }
+
+    /// The highest a hunter can be over the rider, under the rock the rider is under.
+    private func hunterCap(_ o: RiftwingOpponent) -> Double {
+        ceilingHeight(at: rider.body.pos.x, above: rider.body.pos.y - 5, radius: o.body.radius)
+    }
+
+    /// Where a hunter heads for `goal`: if a ledge overhead stands between it and a goal above
+    /// that is not under the same ledge, it first goes out past the ledge's nearer end.
+    private func routeRound(_ o: RiftwingOpponent, _ goal: Vec2) -> Vec2 {
+        let head = o.body.radius * tuning.headShare
+        guard goal.y > o.pos.y + 10, let ledge = ledges.first(where: { l in
+            let bottom = l.top - tuning.ledgeThickness
+            return l.spans(o.pos.x) && bottom >= o.pos.y + head - 1 && bottom < goal.y
+        }) else { return goal }
+        if ledge.spans(goal.x), goal.y < ledge.top { return goal }
+        let left = ledge.minX - o.body.radius - 20, right = ledge.maxX + o.body.radius + 20
+        let toward = dxWrap(o.pos.x, goal.x)
+        let x = ledge.spans(goal.x) ? (abs(dxWrap(o.pos.x, left)) < abs(dxWrap(o.pos.x, right)) ? left : right)
+            : (toward < 0 ? left : right)
+        return Vec2(wrapX(x), o.pos.y)
+    }
+
+    /// Flap as `flapToHold` would, but never into the rock above: only when the flap's rise
+    /// stops short of it, so a hunter holds steady under a ceiling instead of bobbing.
+    private mutating func flapUnderRock(_ index: Int, height: Double) -> Bool {
+        let o = opponents[index]
+        let ceiling = ceilingHeight(at: o.pos.x, above: o.pos.y, radius: o.body.radius)
+        let impulse = tuning.stats(for: o.role).flapImpulse
+        let v = max(o.body.vel.y, min(o.body.vel.y + impulse, tuning.maxRise))
+        let apex = o.pos.y + (v > 0 ? v * v / (2 * tuning.gravity) : 0)
+        if apex > ceiling - 0.5, o.pos.y > opponentFloor + 10 { return false }
+        return flapToHold(index, height: height)
     }
 
     /// Steer toward `x` round the join, braking so it does not overshoot.
@@ -103,24 +165,35 @@ extension RiftwingRun {
     }
 
     /// Glider: wanders to a new place every few seconds, flapping lazily and skipping some
-    /// flaps, so it holds height badly. It pays the rider no attention.
+    /// flaps, so it holds height badly. It pays the rider little attention: early on it will not
+    /// flap up into a rider just above it, and a rider that stays put for
+    /// `RiftwingTuning.gliderDrawAfter` draws its wandering to about the rider's height.
     private mutating func gliderBehaviour(_ index: Int, _ dt: Double) -> RigControl {
         opponents[index].timer -= dt
         let o = opponents[index]
         if o.timer <= 0 || wrapDistance(o.goal, o.pos) < 30 {
-            // Early on it keeps lower in the gallery, so a new player finds it below them.
-            let band = tuning.gliderBand
-            let top = max(band.upperBound - director.gliderBandEase * o.ease, band.lowerBound)
-            opponents[index].goal = Vec2(rng.range(0...tuning.width), rng.range(band.lowerBound...top))
-            opponents[index].timer = rng.range(tuning.gliderWander)
+            if rider.isAlive, riderStillFor >= tuning.gliderDrawAfter {
+                // A rider that stays put draws it: it wanders about the rider's height nearby,
+                // so no perch is safe from clashes for long.
+                let y = min(rider.body.pos.y + rng.range(-10...35), tuning.roof - o.body.radius)
+                opponents[index].goal = Vec2(wrapX(rider.body.pos.x + rng.range(-140...140)), max(y, tuning.opponentFloor))
+                opponents[index].timer = rng.range(1.5...3)
+            } else {
+                // Early on it keeps lower in the gallery, so a new player finds it below them.
+                let band = tuning.gliderBand
+                let top = max(band.upperBound - director.gliderBandEase * o.ease, band.lowerBound)
+                opponents[index].goal = Vec2(rng.range(0...tuning.width), rng.range(band.lowerBound...top))
+                opponents[index].timer = rng.range(tuning.gliderWander)
+            }
         }
-        let goal = opponents[index].goal
+        let goal = routeRound(o, opponents[index].goal)
         var control = RigControl(steer: steer(o.body, toward: goal.x, speed: o.speed) * 0.7)
         let urgent = o.pos.y < opponentFloor + 80 && o.body.vel.y < -100
         if flapToHold(index, height: goal.y, lookahead: 0.2) {
             var skip = tuning.gliderSkip + director.gliderSkipEase * o.ease
-            // Early on it does not flap up into a rider just above it.
-            if rider.isAlive, abs(dxWrap(o.pos.x, rider.body.pos.x)) < 90,
+            // Early on it does not flap up into a rider just above it (unless the rider is
+            // camping there).
+            if rider.isAlive, !isRiderCamping, abs(dxWrap(o.pos.x, rider.body.pos.x)) < 90,
                (0...70).contains(rider.body.pos.y - o.pos.y) {
                 skip += director.gliderShyEase * o.ease
             }
@@ -133,7 +206,7 @@ extension RiftwingRun {
     /// flapping and comes down on the rider, tracking it, until it is well below or the strike
     /// has run its time. Then it recovers, flying off level for a moment (when it is open to a
     /// blow from above), and climbs again. Below the rider and close, it backs off sideways
-    /// while it climbs; with the rider at the roof it hangs back below.
+    /// while it climbs; with the rider up against rock it comes up under the same rock after it.
     private mutating func strikerBehaviour(_ index: Int, _ dt: Double) -> RigControl {
         opponents[index].timer -= dt
         opponents[index].phaseTime += dt
@@ -160,7 +233,7 @@ extension RiftwingRun {
                 opponents[index].goal = Vec2(wrapX(o.pos.x - (dx >= 0 ? 1 : -1) * 200), max(o.pos.y, opponentFloor + 30))
             } else {
                 // Glide down on it, tracking it; flap only to keep out of the Rift.
-                var control = RigControl(steer: steer(o.body, toward: target.x, speed: o.speed))
+                var control = RigControl(steer: steer(o.body, toward: target.x, speed: o.speed) * tuning.strikerStrikeSteer)
                 control.flap = flapToHold(index, height: opponentFloor)
                 return control
             }
@@ -181,7 +254,16 @@ extension RiftwingRun {
                 opponents[index].timer = tuning.hunterReplan + director.strikerReplanEase * o.ease
                 let climb = tuning.strikerClimb * (1 - director.strikerClimbEase * o.ease)
                 let reach = tuning.strikerStrikeReach * (1 - director.strikerReachEase * o.ease)
-                if riderAtRoof {
+                let cap = hunterCap(o) - 3
+                if riderCamping {
+                    // The rider stays up against rock: it comes up under the same rock beside
+                    // it, then across at it, holding steady while the rider bobs.
+                    if o.pos.y < cap - 25, abs(dx) < 110 {
+                        opponents[index].goal = Vec2(wrapX(target.x - (dx >= 0 ? 1 : -1) * 160), cap)
+                    } else {
+                        opponents[index].goal = Vec2(target.x, cap)
+                    }
+                } else if riderAtRoof {
                     // Nothing is won level at the roof: it breaks off to a place below and away,
                     // fixed when it turns, so a rider coming down can catch it there.
                     opponents[index].phase = .recovering
@@ -192,15 +274,15 @@ extension RiftwingRun {
                     opponents[index].phaseTime = 0
                 } else if above < 0, abs(dx) < 130 {
                     // Under it: get out from beneath while climbing.
-                    opponents[index].goal = Vec2(wrapX(target.x - (dx >= 0 ? 1 : -1) * 170), target.y + climb)
+                    opponents[index].goal = Vec2(wrapX(target.x - (dx >= 0 ? 1 : -1) * 170), min(target.y + climb, cap))
                 } else {
-                    opponents[index].goal = Vec2(target.x, min(target.y + climb, roofLine(o)))
+                    opponents[index].goal = Vec2(target.x, min(target.y + climb, roofLine(o), cap))
                 }
             }
         }
-        let goal = opponents[index].goal
+        let goal = routeRound(o, opponents[index].goal)
         var control = RigControl(steer: steer(o.body, toward: goal.x, speed: o.speed))
-        control.flap = flapToHold(index, height: goal.y)
+        control.flap = flapUnderRock(index, height: goal.y)
         return control
     }
 
@@ -223,10 +305,19 @@ extension RiftwingRun {
                    target.y > opponentFloor + 40, rng.chance(1 - director.wardenDiveEase * o.ease) {
                     diving = true
                 }
-                if riderAtRoof {
+                let cap = hunterCap(o) - 3
+                if riderCamping {
+                    // Staying up against rock: it comes up under the same rock beside it, then
+                    // across.
+                    if o.pos.y < cap - 25, abs(dx) < 110 {
+                        opponents[index].goal = Vec2(wrapX(target.x - (dx >= 0 ? 1 : -1) * 160), cap)
+                    } else {
+                        opponents[index].goal = Vec2(target.x, cap)
+                    }
+                } else if riderAtRoof {
                     opponents[index].goal = Vec2(wrapX(target.x - (dx >= 0 ? 1 : -1) * 160), target.y - 120)
                 } else {
-                    let high = min(max(target.y + tuning.wardenHeight, 220), roofLine(o))
+                    let high = min(max(target.y + tuning.wardenHeight, 220), roofLine(o), cap)
                     opponents[index].goal = Vec2(target.x, high)
                 }
             }
@@ -237,9 +328,9 @@ extension RiftwingRun {
                 opponents[index].goal = Vec2(rng.range(0...tuning.width), rng.range(300...500))
             }
         }
-        let goal = diving ? rider.body.pos : opponents[index].goal
+        let goal = diving ? rider.body.pos : routeRound(o, opponents[index].goal)
         var control = RigControl(steer: steer(o.body, toward: goal.x, speed: o.speed), dive: diving)
-        if !diving { control.flap = flapToHold(index, height: goal.y) }
+        if !diving { control.flap = flapUnderRock(index, height: goal.y) }
         return control
     }
 
