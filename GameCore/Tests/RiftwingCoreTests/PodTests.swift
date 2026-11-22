@@ -135,25 +135,60 @@ import GameCore
         }
     }
 
-    /// A hatched rig is one grade tougher: of the tougher kind once that kind has had its debut
-    /// (before then of its own kind), and at full strength, with none of its kind's early ease
-    /// (so a pod left to hatch in the first waves is no gentle Glider).
-    @Test func aHatchedRigFliesAtFullStrength() throws {
-        var r = quietRun()
-        r.removeRider()
-        let ledge = r.ledges[1]
-        let id = r.dropPod(at: Vec2(ledge.midX, ledge.top + 20), vel: .zero, from: .glider, ease: 1)
-        var opponent: Int?
-        for _ in 0..<seconds(30) {
-            for event in r.step(still) {
-                if case .podHatched(id, let o, _, _) = event { opponent = o }
+    /// A hatched rig is one grade tougher (of the tougher kind once that kind has had its debut,
+    /// before then of its own kind), and how much of its kind's early ease it keeps depends on
+    /// the rider's rescues: a rider who has freed at least `hatchedEaseFullShare` of the
+    /// colonists settled in this wave and the last meets it with all of its kind's ease; one who
+    /// has freed hardly any (`hatchedEaseNoShare` or fewer: who leaves pods to hatch) meets it at
+    /// full strength; between, in proportion. So a beginner slow to reach pods is not punished, and leaving pods to hatch
+    /// is no way to fill the gallery with gentle opponents.
+    @Test func aHatchedRigKeepsItsKindsEaseForARiderWhoFreesColonists() throws {
+        func hatchling(freed: Int, lost: Int, previousFreed: Int = 0, previousLost: Int = 0, wave: Int = 1) throws -> RiftwingOpponent {
+            var r = quietRun()
+            r.wave = wave
+            r.removeRider()
+            r.waveFreed = freed
+            r.waveLost = lost
+            r.previousWaveFreed = previousFreed
+            r.previousWaveLost = previousLost
+            let ledge = r.ledges[1]
+            let id = r.dropPod(at: Vec2(ledge.midX, ledge.top + 20), vel: .zero, from: .glider, ease: 1)
+            var opponent: Int?
+            for _ in 0..<seconds(30) {
+                for event in r.step(still) {
+                    if case .podHatched(id, let o, _, _) = event { opponent = o }
+                }
+                if opponent != nil { break }
             }
-            if opponent != nil { break }
+            return try r.req(opponent: try #require(opponent))
         }
-        let o = try r.req(opponent: try #require(opponent))
-        #expect(r.director.ease(of: .glider, inWave: 1) == 1)
-        #expect(o.ease == 0)
-        #expect(abs(o.speed - r.tuning.stats(for: o.role).maxSpeed) < 1e-9)
+        let waves = RiftwingWaves()
+        let full = waves.ease(of: .glider, inWave: 1)
+        #expect(full == 1)
+        // Freed every colonist so far (the hatching pod itself is the only one lost): all the ease.
+        let diligent = try hatchling(freed: 3, lost: 0)
+        #expect(abs(diligent.ease - full) < 1e-9)
+        #expect(abs(diligent.speed - RiftwingTuning().stats(for: .glider).maxSpeed * (1 - waves.gliderSpeedEase)) < 1e-9)
+        // Freed none, in this wave or the last: full strength.
+        let idle = try hatchling(freed: 0, lost: 4, previousFreed: 0, previousLost: 5, wave: 2)
+        #expect(idle.ease == 0)
+        #expect(abs(idle.speed - RiftwingTuning().stats(for: .glider).maxSpeed) < 1e-9)
+        // The first pod of a run hatching before anything else is settled: none freed, so full
+        // strength, the same as any rider who has freed none.
+        #expect(try hatchling(freed: 0, lost: 0).ease == 0)
+        // Last wave's rescues count: a rider who freed most of last wave's colonists keeps the
+        // ease for the first hatch of this wave.
+        let carried = try hatchling(freed: 0, lost: 0, previousFreed: 4, previousLost: 1, wave: 2)
+        #expect(carried.ease > 0.9 * waves.ease(of: .glider, inWave: 2), "\(carried.ease)")
+        // Freeing hardly any (one in six) earns none of it.
+        #expect(try hatchling(freed: 1, lost: 4, wave: 1).ease == 0)
+        // Between: in proportion to the share freed, from the share that earns none to the share
+        // that earns all of it.
+        let some = try hatchling(freed: 2, lost: 3, wave: 1)
+        let share = 2.0 / 6.0
+        let expected = full * (share - waves.hatchedEaseNoShare) / (waves.hatchedEaseFullShare - waves.hatchedEaseNoShare)
+        #expect(expected > 0.1 && expected < 0.9)
+        #expect(abs(some.ease - expected) < 1e-9, "\(some.ease)")
     }
 
     @Test func aWaveEndsOnlyWhenEveryPodIsSettled() throws {

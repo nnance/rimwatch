@@ -35,8 +35,10 @@ import GameCore
         var scorePerMinute: Double { Double(score) / max(survival / 60, 0.01) }
     }
 
-    static func play(_ skill: RiftwingPilot.Skill, seed: UInt64, maxSeconds: Double) -> Game {
-        var r = RiftwingRun(seed: seed)
+    static func play(_ skill: RiftwingPilot.Skill, seed: UInt64, maxSeconds: Double, startAt: Int = 1) -> Game {
+        var config = RiftwingRun.Config()
+        config.startAtWave = startAt
+        var r = RiftwingRun(seed: seed, config: config)
         var pilot = RiftwingPilot(skill: skill, seed: seed)
         var game = Game()
         var started = 0.0
@@ -85,7 +87,7 @@ import GameCore
     static func mean(_ values: [Double]) -> Double { values.reduce(0, +) / Double(max(values.count, 1)) }
 
     /// Plays `skill` on every seed in parallel, in seed order.
-    static func playAll(_ skill: RiftwingPilot.Skill, seeds: [UInt64], maxSeconds: Double) -> [Game] {
+    static func playAll(_ skill: RiftwingPilot.Skill, seeds: [UInt64], maxSeconds: Double, startAt: Int = 1) -> [Game] {
         final class Results: @unchecked Sendable {
             var games: [Game]
             let lock = NSLock()
@@ -93,7 +95,7 @@ import GameCore
         }
         let results = Results(seeds.count)
         DispatchQueue.concurrentPerform(iterations: seeds.count) { i in
-            let game = play(skill, seed: seeds[i], maxSeconds: maxSeconds)
+            let game = play(skill, seed: seeds[i], maxSeconds: maxSeconds, startAt: startAt)
             results.lock.lock()
             results.games[i] = game
             results.lock.unlock()
@@ -109,17 +111,25 @@ import GameCore
     /// measured against (measured here, not a constant, so it follows the game).
     static var noviceLevel: Double { mean(novice.map { Double($0.wave) }) }
 
+    /// The novice starting in the second layout (wave 4) and the third (wave 7), on the first 60
+    /// seeds, for the exploits started there (computed once each).
+    static let noviceFromSpur: [Game] = playAll(.novice, seeds: seeds(60), maxSeconds: 1500, startAt: 4)
+    static let noviceFromShelves: [Game] = playAll(.novice, seeds: seeds(60), maxSeconds: 1500, startAt: 7)
+
     /// A rider who never touches the controls is not beaten for standing on its ledge in the
-    /// first wave; it is lost there in the end to the Rift's breath (and to being bounced off its
-    /// ledge into the Rift), about three minutes in.
+    /// first wave, nor thrown off it into the Rift by a meeting; it is lost there in the end to
+    /// the Rift's breath, about three minutes in.
     @Test func anIdleRiderIsLostInTheFirstWavesButNotForStanding() throws {
         let games = Self.playAll(.idle, seeds: Self.seeds(24), maxSeconds: 600)
         #expect(games.allSatisfy { $0.isOver && $0.wave <= 2 }, "\(games.map(\.wave))")
         let survival = Self.median(games.map(\.survival))
         #expect((120...300).contains(survival), "\(survival)")
-        // Clash losses in wave 1 come only after a bounce has thrown it off its ledge.
+        // It keeps its footing in wave 1: no clash losses there, and none to the Rift (it lost
+        // 1.5 lives a game to the Rift when every meeting threw it off its ledge).
         let clashes = games.reduce(0) { $0 + ($1.clashLosses[1] ?? 0) }
         #expect(Double(clashes) <= 0.1 * Double(games.count), "\(clashes) clash losses in wave 1")
+        let rift = games.reduce(0) { $0 + $1.riftLosses.count { $0 == 1 } }
+        #expect(rift == 0, "\(rift) lost to the Rift in wave 1")
     }
 
     /// The novice pilot stands in for a first-time player: a first game usually reaches wave 5
@@ -137,9 +147,8 @@ import GameCore
         #expect(Self.novice.count { $0.wave <= 1 } <= 2, "\(waves)")
     }
 
-    /// It flies like a person: some of its lives go into the Rift (only a few, nearly all in the
-    /// first wave, now that a lapse never stops the tap that saves it once it has learned), and
-    /// pods lie a while before it reaches them.
+    /// It flies like a person: some of its lives go into the Rift (about a tenth), and pods lie a
+    /// while before it reaches them.
     @Test func theNoviceFliesLikeAPerson() throws {
         let lost = Self.novice.reduce(into: [String: Int]()) { total, g in
             for (k, v) in g.lostTo { total[k, default: 0] += v }
@@ -151,18 +160,32 @@ import GameCore
         #expect(Self.median(Self.novice.flatMap(\.lieTimes)) >= 2)
     }
 
-    /// Once past the first wave the novice no longer lets a lapse of attention drop it into the
-    /// Rift (a person stops doing that within a minute): it loses hardly any lives to the Rift
-    /// in waves 2 to 5 (it lost about 0.18 a wave there before).
-    @Test func theNoviceStopsLapsingIntoTheRiftAfterTheFirstWave() throws {
-        var rift = 0, waves = 0
-        for w in 2...5 {
-            waves += Self.novice.count { $0.wave >= w }
+    /// Past the first wave the novice still falls into the Rift now and then (a lapse of
+    /// attention sometimes keeps it from the tap that saves it, less often each wave), but
+    /// rarely: few lives a wave in waves 2 to 5, more of them early than late.
+    @Test func theNoviceStillFallsIntoTheRiftNowAndThenAfterTheFirstWave() throws {
+        func rate(_ waves: ClosedRange<Int>) -> Double {
+            let reached = waves.reduce(0) { total, w in total + Self.novice.count { $0.wave >= w } }
+            let rift = Self.novice.reduce(0) { total, g in total + g.riftLosses.count { waves.contains($0) } }
+            return Double(rift) / Double(max(reached, 1))
         }
-        for g in Self.novice { rift += g.riftLosses.filter { (2...5).contains($0) }.count }
-        let rate = Double(rift) / Double(max(waves, 1))
-        print("RIFTWING NOVICE rift losses a wave in waves 2 to 5: \(rate)")
-        #expect(rate <= 0.06, "\(rift) in \(waves) waves")
+        print("RIFTWING NOVICE rift losses a wave: wave 1 \(rate(1...1)), waves 2 to 5 \(rate(2...5)), waves 6 on \(rate(6...30))")
+        #expect(rate(2...5) <= 0.06, "\(rate(2...5))")
+        #expect(rate(2...5) >= 0.01, "\(rate(2...5))")
+        #expect(rate(2...3) > rate(4...30), "\(rate(2...3)) against \(rate(4...30))")
+    }
+
+    /// A novice slow to notice pods (12 to 20 s after each is knocked loose) frees fewer
+    /// colonists and meets more hatched rigs, but is not punished for it out of proportion: the
+    /// rigs hatched while it still frees about half its colonists keep their kind's early ease.
+    /// It reaches about wave 4.8 over 400 games in the harness (3.5 when hatched rigs flew at
+    /// full strength); on 60 games its mean has a standard error of about 0.15.
+    @Test func aNoviceSlowToNoticePodsStillReachesTheMiddleWaves() throws {
+        let games = Self.playAll(.slowNovice, seeds: Self.seeds(60), maxSeconds: 1500)
+        let wave = Self.mean(games.map { Double($0.wave) })
+        print("RIFTWING SLOW NOVICE mean wave \(wave) against \(Self.noviceLevel)")
+        #expect(wave >= 4.3, "\(games.map(\.wave))")
+        #expect(wave <= Self.noviceLevel, "\(wave)")
     }
 
     /// The novice keeps clear of mines once it has had time to see them: flying about for twelve
@@ -270,14 +293,17 @@ import GameCore
         }
     }
 
+    static let exploits: [RiftwingPilot.Skill] = [.topLedgeSitter, .topLedgeStill, .topLedgePacer, .roofHoverer,
+                                                  .underLedgeHoverer, .ventRider, .lowHider, .levelBouncer, .seamCamper,
+                                                  .ambusher, .pacingAmbusher]
+
     /// The exploits, tried by bots: sitting, standing still or pacing on the top ledge, hovering
     /// under the roof or under the highest ledge, riding one vent, hiding low, bouncing level
     /// without committing, camping the side seam, and hiding high (still or pacing) to stoop on
-    /// what passes below. None may reach a mean wave within one wave of the novice's (measured
-    /// above), none may score more a minute than the novice, and none may survive without
-    /// limit.
-    @Test(arguments: [RiftwingPilot.Skill.topLedgeSitter, .topLedgeStill, .topLedgePacer, .roofHoverer, .underLedgeHoverer,
-                      .ventRider, .lowHider, .levelBouncer, .seamCamper, .ambusher, .pacingAmbusher])
+    /// what passes below; each from the start of a run (the first layout). None may reach a mean
+    /// wave within one wave of the novice's (measured above), none may score more a minute than
+    /// the novice, and none may survive without limit.
+    @Test(arguments: exploits)
     func noExploitComesNearTheNovice(_ skill: RiftwingPilot.Skill) throws {
         let games = Self.playAll(skill, seeds: Self.seeds(30), maxSeconds: 1500)
         let wave = Self.mean(games.map { Double($0.wave) })
@@ -286,6 +312,44 @@ import GameCore
         print("RIFTWING EXPLOIT \(skill): wave \(wave) against \(Self.noviceLevel), score a minute \(rate) against \(noviceRate), longest \(games.map(\.survival).max() ?? 0) s")
         #expect(games.allSatisfy { $0.isOver }, "\(skill) lasted \(games.map { Int($0.survival) })")
         #expect(wave <= Self.noviceLevel - 1, "\(skill)")
+        #expect(rate < noviceRate, "\(skill)")
+    }
+
+    /// The same exploits started in the second layout (Spur, wave 4), against the novice started
+    /// there: none within one wave of it, none scoring as much a minute, none lasting without
+    /// limit.
+    @Test(arguments: exploits)
+    func noExploitComesNearTheNoviceInTheSecondLayout(_ skill: RiftwingPilot.Skill) throws {
+        let games = Self.playAll(skill, seeds: Self.seeds(20), maxSeconds: 1500, startAt: 4)
+        let wave = Self.mean(games.map { Double($0.wave) })
+        let novice = Self.mean(Self.noviceFromSpur.map { Double($0.wave) })
+        let noviceRate = Self.mean(Self.noviceFromSpur.map(\.scorePerMinute))
+        let rate = Self.mean(games.map(\.scorePerMinute))
+        print("RIFTWING EXPLOIT FROM WAVE 4 \(skill): wave \(wave) against \(novice), score a minute \(rate) against \(noviceRate)")
+        #expect(games.allSatisfy { $0.isOver }, "\(skill) lasted \(games.map { Int($0.survival) })")
+        #expect(wave <= novice - 1, "\(skill)")
+        #expect(rate < noviceRate, "\(skill)")
+    }
+
+    /// The same exploits started in the third layout (Shelves, wave 7), against the novice
+    /// started there. Its waves are hard for the novice too: with three lives it clears only
+    /// about half a wave on average there, so no bot can be a whole wave under it, and the bar
+    /// is put in waves cleared (the wave reached less the wave started). This is weaker than the
+    /// one-wave bar, and one bot comes close to it: the pacing ambusher clears about half as many
+    /// waves there as the novice (0.25 against 0.47 over 400 games) and scores 86% as much a
+    /// minute. None clears as many as the novice, none scores as much a minute, none lasts
+    /// without limit.
+    @Test(arguments: exploits)
+    func noExploitComesNearTheNoviceInTheThirdLayout(_ skill: RiftwingPilot.Skill) throws {
+        let games = Self.playAll(skill, seeds: Self.seeds(20), maxSeconds: 1500, startAt: 7)
+        let cleared = Self.mean(games.map { Double($0.wave - 7) })
+        let novice = Self.mean(Self.noviceFromShelves.map { Double($0.wave - 7) })
+        let noviceRate = Self.mean(Self.noviceFromShelves.map(\.scorePerMinute))
+        let rate = Self.mean(games.map(\.scorePerMinute))
+        print("RIFTWING EXPLOIT FROM WAVE 7 \(skill): waves cleared \(cleared) against \(novice), score a minute \(rate) against \(noviceRate)")
+        #expect(novice >= 0.25, "the novice clears \(novice) waves from wave 7")
+        #expect(games.allSatisfy { $0.isOver }, "\(skill) lasted \(games.map { Int($0.survival) })")
+        #expect(cleared < novice, "\(skill)")
         #expect(rate < noviceRate, "\(skill)")
     }
 }

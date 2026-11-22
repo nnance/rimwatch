@@ -9,9 +9,6 @@ extension RiftwingRun {
             defer { index += 1 }
             guard !opponents[index].isDead else { continue }
             opponents[index].clashCooldown = max(0, opponents[index].clashCooldown - dt)
-            if opponents[index].rammed > 0 {
-                opponents[index].rammed = max(0, opponents[index].rammed - dt / max(tuning.rammingMemory, 1e-9))
-            }
             opponents[index].flapCooldown -= dt
             if opponents[index].role == .gleaner {
                 updateGleaner(index, dt)
@@ -306,21 +303,27 @@ extension RiftwingRun {
     }
 
     /// Warden: keeps well above the rider and lines up across from it; when it is high above
-    /// and close across it dives, pulling out once level or past.
+    /// and close across it dives, pulling out once level or past. In its first appearances it
+    /// misjudges the line: it lines up and dives some way to the side of the rider
+    /// (`RiftwingWaves.wardenMissEase`), judged afresh for each dive.
     private mutating func wardenBehaviour(_ index: Int, _ dt: Double) -> RigControl {
         opponents[index].timer -= dt
         let o = opponents[index]
         var diving = o.body.isDiving
         if rider.isAlive {
-            let target = rider.body.pos
+            let target = Vec2(wrapX(rider.body.pos.x + o.aimOffset), rider.body.pos.y)
             let above = o.pos.y - target.y
             let dx = dxWrap(o.pos.x, target.x)
             if diving, above < 4 || abs(dx) > 70 || o.pos.y < opponentFloor + 60 {
                 diving = false
+                opponents[index].aimOffset = wardenMiss(ease: o.ease)
             }
             if o.timer <= 0 {
                 opponents[index].timer = tuning.hunterReplan + director.wardenReplanEase * o.ease
-                if !diving, o.body.reopen == 0, above > 60, abs(dx) < tuning.wardenDiveReach * 0.5,
+                // It dives from well above; under a low ceiling (a rider high in the gallery), from
+                // as high as it can get there, so no perch near the roof is out of its reach.
+                let diveFrom = min(60, max(min(roofLine(o), hunterCap(o) - 3) - target.y - 8, 34))
+                if !diving, o.body.reopen == 0, above > diveFrom, abs(dx) < tuning.wardenDiveReach * 0.5,
                    target.y > opponentFloor + 40, rng.chance(1 - director.wardenDiveEase * o.ease) {
                     diving = true
                 }
@@ -347,10 +350,19 @@ extension RiftwingRun {
                 opponents[index].goal = Vec2(rng.range(0...tuning.width), rng.range(300...500))
             }
         }
-        let goal = diving ? rider.body.pos : routeRound(o, opponents[index].goal)
+        let goal = diving ? Vec2(wrapX(rider.body.pos.x + opponents[index].aimOffset), rider.body.pos.y)
+            : routeRound(o, opponents[index].goal)
         var control = RigControl(steer: steer(o.body, toward: goal.x, speed: o.speed), dive: diving)
         if !diving { control.flap = flapUnderRock(index, height: goal.y) }
         return control
+    }
+
+    /// How far to one side of the rider a Warden with `ease` left misjudges its line: up to
+    /// `RiftwingWaves.wardenMissEase` times its ease, either side; none at full strength.
+    mutating func wardenMiss(ease: Double) -> Double {
+        let most = director.wardenMissEase * min(max(ease, 0), 1)
+        guard most > 0 else { return 0 }
+        return (rng.chance(0.5) ? 1 : -1) * rng.range((most * 0.5)...most)
     }
 
     /// Sower: drifts across the gallery in its band, laying a mine every few seconds (never

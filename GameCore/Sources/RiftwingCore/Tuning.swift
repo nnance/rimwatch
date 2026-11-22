@@ -69,11 +69,10 @@ public struct RiftwingTuning: Sendable {
     /// it. Low ledges are close to the Rift, so their knock is gentler.
     public var ceilingKnock = 150.0
     public var ledgeKnock = 60.0
-    /// A rider pressing against rock again and again is knocked harder: the knock grows by this
-    /// share of itself for each bump in the last `pinnedWindow` seconds (at most `pinnedBumps`
-    /// of them), so it bobs well below the rock, where a rig holding steady under the rock can
-    /// get above it. One bump now and then is knocked as usual.
-    public var pressedKnockGrowth = 0.5
+    /// No longer used: rock once knocked a rider harder by this share for each bump in quick
+    /// succession, which drove a rider tapping steadily under a low ledge into the Rift. Every
+    /// bump now gets the plain knock. Kept so code that sets it still builds.
+    public var pressedKnockGrowth = 0.0
     /// Running on a ledge.
     public var runSpeed = 150.0
     public var runAccel = 900.0
@@ -126,11 +125,10 @@ public struct RiftwingTuning: Sendable {
     /// next meeting, which a rider chasing level with opponents could repeat for ever.
     public var bounceSpeed = 210.0
     public var bounceLift = 0.0
-    /// Ramming the same opponent level again and again is not a near miss: once the rider has
-    /// bounced off one opponent `rammingBounces` times in quick succession (each bounce is
-    /// remembered for `rammingMemory` seconds), that opponent needs only `clashMargin` to win
-    /// its next meetings, without the lasting leniency, until the memory fades. A rider that
-    /// bounces level without ever committing gains nothing by it.
+    /// No longer used: after `rammingBounces` bounces off one opponent within `rammingMemory`
+    /// seconds, that opponent once won from the bare clash margin. It counted bounces the rider
+    /// did not cause and was never shown, so it is gone; every meeting is judged by the same
+    /// rule. Kept so code that sets them still builds.
     public var rammingBounces = 2
     public var rammingMemory = 3.0
     /// After any clash an opponent cannot clash with the rider again for this long.
@@ -145,7 +143,7 @@ public struct RiftwingTuning: Sendable {
     // Lives
     public var startingLives = 3
     public var maxLives = 5
-    public var extraLifeEvery = 25_000
+    public var extraLifeEvery = 35_000
     /// Seconds a lost rider is gone before it returns on a ledge away from the fight.
     public var respawnDelay = 1.5
     public var respawnInvulnerability = 2.5

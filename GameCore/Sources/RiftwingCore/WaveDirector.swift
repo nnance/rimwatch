@@ -43,8 +43,9 @@ public struct RiftwingWaves: Sendable {
     public var clashMercyCurve = 0.45
     public var clashMercyFloor = 0.2
     /// In waves up to this one, an opponent always misjudges a clash it would win against a rider
-    /// standing on a ledge: a beginner standing still to work out the controls is not beaten
-    /// for it.
+    /// standing on a ledge, and any meeting with a standing rider leaves it on its ledge (the
+    /// opponent alone is thrown away): a beginner standing still to work out the controls is
+    /// neither beaten nor knocked into the Rift for it.
     public var standingGraceWaves = 1
 
     /// The chance that an opponent with `ease` left misjudges a clash it would have won:
@@ -62,6 +63,27 @@ public struct RiftwingWaves: Sendable {
     /// The extra height an opponent with `ease` left must have over the rider to win a clash.
     public func leniency(ease: Double) -> Double {
         clashLeniencyBase + clashLeniency * min(max(ease, 0), 1)
+    }
+
+    /// A rig hatched from a pod keeps its kind's early ease only for a rider who frees colonists:
+    /// all of it once the rider has freed at least `hatchedEaseFullShare` of the colonists
+    /// settled (freed or lost) in this wave and the last, none at or under `hatchedEaseNoShare`
+    /// (a rider who leaves nearly every pod to hatch), in proportion between. A beginner slow to
+    /// reach pods still frees about half of them or more and meets gentle hatchlings; a rider who
+    /// leaves pods to hatch meets them at full strength. A full share of 0 gives every hatched
+    /// rig its kind's full ease.
+    public var hatchedEaseFullShare = 0.4
+    public var hatchedEaseNoShare = 0.2
+
+    /// The share of its kind's ease a hatched rig keeps, for a rider who has freed `freed` of the
+    /// `settled` colonists of this wave and the last (`hatchedEaseFullShare`, `hatchedEaseNoShare`).
+    public func hatchedEaseShare(freed: Int, settled: Int) -> Double {
+        guard hatchedEaseFullShare > 0 else { return 1 }
+        guard settled > 0 else { return 0 }
+        let none = min(max(hatchedEaseNoShare, 0), hatchedEaseFullShare)
+        let share = Double(freed) / Double(settled)
+        guard share > none else { return 0 }
+        return min((share - none) / max(hatchedEaseFullShare - none, 1e-9), 1)
     }
 
     /// A pod from a role in its first appearances falls this share more slowly (times the
@@ -122,6 +144,10 @@ public struct RiftwingWaves: Sendable {
     public var wardenSpeedEase = 0.3
     public var wardenDiveEase = 0.6
     public var wardenReplanEase = 0.3
+    /// ... and misjudging its line by up to this many units across at its fullest ease (at
+    /// least half of that, either side, drawn afresh for each dive): it lines up and dives beside
+    /// the rider, so fewer of its dives reach it. Contact comes at about 30 units.
+    public var wardenMissEase = 55.0
     /// Sower: at its fullest ease, its mines come this share less often, it holds this many
     /// fewer at once, and it drifts this much more slowly.
     public var sowerIntervalEase = 0.8

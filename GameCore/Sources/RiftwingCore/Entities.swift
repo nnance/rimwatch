@@ -120,9 +120,9 @@ public struct RiftwingOpponent: Sendable, Identifiable, Equatable {
     var phaseTime = 0.0
     /// Seconds before it can clash with the rider again.
     var clashCooldown = 0.0
-    /// How many recent bounces off the rider it remembers (each fades over
-    /// `RiftwingTuning.rammingMemory` seconds).
-    var rammed = 0.0
+    /// A Warden in its first appearances misjudges where the rider is by this much across, and
+    /// lines up and dives there (drawn afresh after each dive).
+    var aimOffset = 0.0
     /// It came from a hatched pod (not from the wave's table).
     public internal(set) var hatched = false
     var isDead = false

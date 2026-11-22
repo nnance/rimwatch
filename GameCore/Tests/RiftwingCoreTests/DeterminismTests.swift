@@ -40,22 +40,25 @@ import GameCore
         #expect(c.hash != a.hash)
     }
 
-    /// 330 s of the competent pilot on seed 1: waves 1 to 9, past the Sower's debut in wave 8
-    /// (its mines), both cavern shifts and all five roles. Debug and Release builds give the
+    /// 330 s of the competent pilot on seed 1: waves 1 to 8, into the Sower's debut in wave 8,
+    /// both cavern shifts and all five roles. Debug and Release builds give the
     /// same values (`GOLDEN=1 .build/release/Harness riftwing` prints them from a release
     /// build). If a deliberate change to the rules, the tuning, the wave table or the pilot breaks
     /// it, capture the new values from the printed line and say so in the commit. First captured
     /// for 15a; re-captured after the check's fixes, and again (extended from 180 s) after the
     /// breath, ceiling, clash and tuning changes, and again after the pod, pinned, resting and
-    /// mercy changes and the retuning that followed them.
+    /// mercy changes and the retuning that followed them, and again after the last round of
+    /// corrections (no ramming rule or harder knock, hatched rigs eased for a rider who frees
+    /// colonists, the standing rider's footing, the Warden's early dives, the extra life back at
+    /// 35,000, and the pilots' routing).
     @Test func aScriptedRunReplaysExactly() throws {
         let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 330)
         print("RIFTWING GOLDEN hash \(hash) events \(events) score \(r.score) wave \(r.wave) saved \(r.colonistsSaved) lives \(r.rider.lives) tick \(r.tick)")
-        #expect(hash == 8_918_258_199_627_900_150)
-        #expect(events == 1504)
-        #expect(r.score == 139_550)
-        #expect(r.wave == 9)
-        #expect(r.colonistsSaved == 42)
+        #expect(hash == 17_106_605_481_073_300_803)
+        #expect(events == 1483)
+        #expect(r.score == 108_100)
+        #expect(r.wave == 8)
+        #expect(r.colonistsSaved == 37)
         #expect(r.rider.lives == 5)
         #expect(r.tick == 39_600)
     }

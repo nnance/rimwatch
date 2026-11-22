@@ -19,14 +19,18 @@ public struct RiftwingPilot: Sendable {
         /// uneven timing and a short press, over- and undershoots the heights it means to hold,
         /// does not plan round ledges (it bumps into them, then works round), leads a moving
         /// opponent only roughly, knows a pod is about to hatch only from its warning, notices a
-        /// landed pod late and goes to it slowly, now and then stops flapping for a moment (but
-        /// after the first wave never when that would drop it into the Rift), keeps clear of a
-        /// mine once it has had time to see it, and sometimes misjudges and falls into the Rift.
+        /// landed pod late and goes to it slowly, now and then stops flapping for a moment, keeps
+        /// clear of a mine once it has had time to see it, and sometimes misjudges and falls into
+        /// the Rift. In the first wave a lapse can drop it into the Rift; after that it mostly
+        /// still makes the tap that saves it, a little more surely each wave, but not always.
         /// It never dives.
         case novice
         /// The novice, resting as a person does: after half its landings it stays on the ledge
         /// for 2 to 9 s, taking off at once if something threatens it.
         case restingNovice
+        /// The novice, slow to notice pods: it sees each pod only 12 to 20 s after it is knocked
+        /// loose (the novice takes 0.6 to 2.2 s), so many hatch before it gets there.
+        case slowNovice
         /// The first novice, kept for comparison: frame-perfect flap and steering from exact
         /// velocity and gravity, routing round ledges by their shapes, leading targets by their
         /// exact velocity, and reaching a landed pod in about half a second.
@@ -98,6 +102,9 @@ public struct RiftwingPilot: Sendable {
     /// The human novice: when it notices each mine; the resting novice's rest and whether it
     /// stood on a ledge a step ago; the pacers' end of the ledge they head for.
     private var noticedMines: [Int: Double] = [:]
+    /// The human novice's current lapse is deep: it misses even the tap that would save it from
+    /// the Rift.
+    private var deepLapse = false
     private var restLeft = 0.0
     private var wasGrounded = true
     private var paceRight = true
@@ -109,7 +116,7 @@ public struct RiftwingPilot: Sendable {
 
     public mutating func input(for run: RiftwingRun) -> RiftwingInput {
         sinceFlap += RiftwingRun.timeStep
-        if skill == .novice || skill == .restingNovice {
+        if skill == .novice || skill == .restingNovice || skill == .slowNovice {
             // What it will see a moment from now: it acts on the oldest.
             seen.append(run)
             if seen.count > Self.humanDelaySteps + 1 { seen.removeFirst() }
@@ -125,7 +132,7 @@ public struct RiftwingPilot: Sendable {
         }
         switch skill {
         case .idle: return RiftwingInput()
-        case .novice, .restingNovice: return humanInput(run)
+        case .novice, .restingNovice, .slowNovice: return humanInput(run)
         case .sharpNovice: return noviceInput(run)
         case .competent: return competentInput(run)
         case .topLedgeSitter: return sitterInput(run, high: true)
@@ -265,8 +272,13 @@ public struct RiftwingPilot: Sendable {
             heightError = rng.chance(0.2) ? rng.range(-45...0) : rng.range(-10...50)
             lookahead = rng.range(0.08...0.26)
             goal = humanGoal(view, me)
-            // Now and then its attention slips and it stops flapping for a moment.
-            if stallFor <= 0, rng.chance(0.04) { stallFor = rng.range(0.3...0.8) }
+            // Now and then its attention slips and it stops flapping for a moment. In the first
+            // wave nothing stops a lapse; after it, a lapse only now and then keeps it from the
+            // tap that saves it from the Rift, less often each wave.
+            if stallFor <= 0, rng.chance(0.04) {
+                stallFor = rng.range(0.3...0.8)
+                deepLapse = view.wave <= 1 || rng.chance(Self.humanDeepLapse(wave: view.wave))
+            }
         }
         var target = goal
         // It does not plan round ledges: it bumps its head, then works round to the nearer end.
@@ -307,14 +319,21 @@ public struct RiftwingPilot: Sendable {
         let desired = clamp(dx * 1.6, -170, 170)
         let steer = clamp((desired - me.vel.x) / 70, -1, 1)
         return RiftwingInput(stick: Vec2(abs(steer) < 0.15 ? 0 : steer, 0),
-                             flap: humanFlap(me, targetY: target.y, learned: view.wave > 1))
+                             flap: humanFlap(me, targetY: target.y))
     }
+
+    /// After the first wave, the share of the human novice's lapses that keep it from the tap
+    /// that would save it from the Rift, in wave `wave`: fewer each wave as it learns.
+    static func humanDeepLapse(wave: Int) -> Double {
+        humanDeepLapseShare * power(humanDeepLapseFade, Double(max(wave - 2, 0)))
+    }
+    static let humanDeepLapseShare = 0.45
+    static let humanDeepLapseFade = 0.8
 
     /// A tap of flap: held for a few steps, then let go; no faster than its uneven tapping
     /// rate; when the height it sees (late) is heading below where it means to be. A lapse of
-    /// attention stops it, except (once it has `learned`, after the first wave) the panic tap
-    /// that saves it from the Rift.
-    private mutating func humanFlap(_ me: RiftwingBody, targetY: Double, learned: Bool) -> Bool {
+    /// attention stops it, and a deep one even the panic tap that saves it from the Rift.
+    private mutating func humanFlap(_ me: RiftwingBody, targetY: Double) -> Bool {
         if pressFor > 0 {
             pressFor -= 1
             return true
@@ -324,7 +343,7 @@ public struct RiftwingPilot: Sendable {
         let panic = !me.isGrounded && me.vel.y < 40
             && (me.pos.y < Self.humanPanic || (me.pos.y < Self.humanPanic + 90 && me.vel.y < -170))
         let gap = panic ? min(nextTapGap, panicGap) : nextTapGap
-        guard sinceFlap >= gap, stallFor <= 0 || (panic && learned) else { return false }
+        guard sinceFlap >= gap, stallFor <= 0 || (panic && !deepLapse) else { return false }
         let g = 430.0
         let ahead = me.vel.y < -150 ? lookahead + 0.12 : lookahead
         let predicted = me.pos.y + me.vel.y * ahead - 0.5 * g * ahead * ahead
@@ -342,7 +361,7 @@ public struct RiftwingPilot: Sendable {
         // Pods it has seen, and when it notices each.
         let now = Double(view.tick) * RiftwingRun.timeStep
         for pod in view.pods where isFreeable(pod) && noticed[pod.id] == nil {
-            noticed[pod.id] = now + rng.range(0.6...2.2)
+            noticed[pod.id] = now + (skill == .slowNovice ? rng.range(12...20) : rng.range(0.6...2.2))
         }
         // An opponent above and close: it climbs away, some of the time.
         if let threat = rigs.filter({ view.wrapDistance($0.pos, me.pos) < 120 && $0.pos.y > me.pos.y + 6 })
@@ -591,8 +610,10 @@ public struct RiftwingPilot: Sendable {
 
     private mutating func ventInput(_ run: RiftwingRun) -> RiftwingInput {
         let me = run.rider.body
-        if spot == nil || spot! >= run.vents.count {
+        // Chosen afresh in each life and each layout: after the cavern shifts, the old vent is gone.
+        if spot == nil || spot! >= run.vents.count || spotLayout != run.layoutIndex {
             spot = run.vents.indices.min { abs(run.dxWrap(me.pos.x, run.vents[$0].x)) < abs(run.dxWrap(me.pos.x, run.vents[$1].x)) }
+            spotLayout = run.layoutIndex
         }
         let vent = run.vents[spot!]
         let steer = steerTo(run, me, vent.x, speed: 120)
@@ -604,8 +625,9 @@ public struct RiftwingPilot: Sendable {
     private mutating func underLedgeInput(_ run: RiftwingRun) -> RiftwingInput {
         let me = run.rider.body
         let ledges = run.ledges
-        if spot == nil || spot! >= ledges.count {
+        if spot == nil || spot! >= ledges.count || spotLayout != run.layoutIndex {
             spot = ledges.indices.max { ledges[$0].top < ledges[$1].top }
+            spotLayout = run.layoutIndex
         }
         let ledge = ledges[spot!]
         let bottom = ledge.top - run.tuning.ledgeThickness
@@ -663,8 +685,13 @@ public struct RiftwingPilot: Sendable {
                 goal = Vec2(450, 350)
             }
         }
-        let steer = steerTo(run, me, goal.x, speed: 200)
-        let flap = flapControl(run, me, targetY: max(goal.y, 100), lookahead: 0.2, gap: 0.11)
+        // It routes round the ledges in the way, as anyone chasing does, and aims a little under
+        // the roof rather than into it.
+        let top = run.tuning.roof - me.radius - 14
+        let target = routed(run, me, Vec2(goal.x, min(max(goal.y, 100), top)))
+        lastTarget = target
+        let steer = steerTo(run, me, target.x, speed: 200)
+        let flap = flapControl(run, me, targetY: target.y, lookahead: 0.2, gap: 0.11)
         return RiftwingInput(stick: Vec2(steer, 0), flap: flap)
     }
 
@@ -694,8 +721,10 @@ public struct RiftwingPilot: Sendable {
             let end = goLeft ? leftEnd : rightEnd
             if overMe {
                 // Under (or over) the rock: get out sideways first, holding clear of it.
+                // Dropping, it holds just over the rock (it may land and run off the end), never
+                // its present height: holding that, every flap would raise the height it holds.
                 let y = climbing ? min(target.y, bottom - head - 6) : max(target.y, ledge.top + feet + 8)
-                return Vec2(run.wrapX(end), climbing ? y : max(y, me.pos.y))
+                return Vec2(run.wrapX(end), y)
             }
             if overTarget, abs(run.dxWrap(me.pos.x, end)) < 90 {
                 // Beside it: climb or drop past the end before going over (or under).

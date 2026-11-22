@@ -145,6 +145,19 @@ import GameCore
         #expect(r.riderStillFor == before)
     }
 
+    /// The time in one place starts afresh each wave: resting late in one wave never counts
+    /// against the next, which allows less.
+    @Test func theTimeInOnePlaceStartsAfreshEachWave() throws {
+        var r = quietRun()
+        r.wavesEnabled = true
+        r.riderStillFor = r.tuning.gliderDrawAfter(forWave: 2) + 5
+        r.stillAnchor = r.rider.body.pos
+        r.startWave()
+        #expect(r.wave == 2)
+        #expect(r.riderStillFor == 0)
+        #expect(!r.isRiderStill)
+    }
+
     /// Holds the rider still in the air at `p`, protected, every step.
     private func hold(_ r: inout RiftwingRun, at p: Vec2) {
         r.placeRider(at: p)
@@ -265,6 +278,45 @@ import GameCore
         }
         #expect(highAbove)
         #expect(dived >= 1)
+    }
+
+    /// A Warden in its first appearances dives less readily and less accurately: it dives less
+    /// often, and a dive aims some way to the side of the rider, so fewer of its dives reach it.
+    /// At full strength it dives readily and squarely.
+    @Test func anEarlyWardenDivesLessReadilyAndLessAccurately() throws {
+        func dives(ease: Double) -> (count: Int, reaching: Int) {
+            var total = 0, reaching = 0
+            for seed: UInt64 in 1...10 {
+                var r = quietRun(seed: seed)
+                let spot = Vec2(450, 250)
+                let id = r.place(.warden, at: Vec2(150, 300), ease: ease)
+                var inDive = false
+                for _ in 0..<seconds(30) {
+                    hold(&r, at: spot)
+                    for event in r.step(still) {
+                        if case .opponentDived(id, _, _) = event {
+                            total += 1
+                            inDive = true
+                        }
+                        // The dive met the (protected) rider: it bounces off.
+                        if inDive, case .clashBounced(id, _, _) = event {
+                            reaching += 1
+                            inDive = false
+                        }
+                    }
+                    if r.opponent(id)?.body.isDiving != true { inDive = false }
+                }
+            }
+            return (total, reaching)
+        }
+        let early = dives(ease: 1), full = dives(ease: 0)
+        print("RIFTWING WARDEN dives (reaching the rider): debut \(early), full strength \(full)")
+        #expect(early.count >= 5, "\(early)")
+        #expect(Double(early.count) < 0.75 * Double(full.count), "\(early) against \(full)")
+        let earlyShare = Double(early.reaching) / Double(max(early.count, 1))
+        let fullShare = Double(full.reaching) / Double(max(full.count, 1))
+        #expect(earlyShare < 0.7 * fullShare, "\(early) against \(full)")
+        #expect(fullShare > 0.4, "\(full)")
     }
 
     @Test func aGleanerCarriesARestingPodOffTakingAtLeastTheMinimumTime() throws {

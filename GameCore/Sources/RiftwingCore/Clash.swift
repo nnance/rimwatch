@@ -65,13 +65,13 @@ extension RiftwingRun {
         // the clash is judged by the ordinary rule: nothing makes it harder to win or easier to
         // lose than that.
         let clinging = isRiderClinging
-        // An opponent the rider keeps ramming level needs only the clash margin to win.
-        let rammed = o.rammed > Double(max(tuning.rammingBounces, 1)) - 1 + 1e-9
-        let leniency = rammed ? 0 : director.leniency(ease: clinging ? 0 : o.ease)
+        let leniency = director.leniency(ease: clinging ? 0 : o.ease)
         var outcome = clashOutcome(rider: rider.body, opponent: o.body, leniency: leniency)
         if outcome == .lose, rider.isInvulnerable { outcome = .bounce }
-        // Wave 1 is for learning the controls: a rider standing on a ledge in it is never beaten.
-        if outcome == .lose, rider.body.isGrounded, wave <= director.standingGraceWaves { outcome = .bounce }
+        // Wave 1 is for learning the controls: a rider standing on a ledge in it is never beaten,
+        // nor thrown off its ledge by the meeting (`bounce(_:at:)`).
+        let standingGrace = rider.body.isGrounded && wave <= director.standingGraceWaves
+        if outcome == .lose, standingGrace { outcome = .bounce }
         if outcome == .lose, !clinging, rng.chance(director.mercy(ease: o.ease)) {
             outcome = .bounce
         }
@@ -107,19 +107,23 @@ extension RiftwingRun {
     }
 
     /// Near level: both are thrown apart, sideways, the higher a little up and the lower a
-    /// little down. Neither stays on a ledge.
+    /// little down. Neither stays on a ledge, except a rider standing on one in the waves where
+    /// standing is never beaten (`RiftwingWaves.standingGraceWaves`): it keeps its footing, and
+    /// the opponent alone is thrown away.
     private mutating func bounce(_ index: Int, at: Vec2) {
         let o = opponents[index]
         let side: Double = dxWrap(o.pos.x, rider.body.pos.x) >= 0 ? 1 : -1
         let riderHigher = clashHeight(rider.body) >= clashHeight(o.body)
-        rider.body.vel.x = side * tuning.bounceSpeed
-        rider.body.vel.y += riderHigher ? tuning.bounceLift : -tuning.bounceLift
-        rider.body.ledge = nil
+        let keepsFooting = rider.body.isGrounded && wave <= director.standingGraceWaves
+        if !keepsFooting {
+            rider.body.vel.x = side * tuning.bounceSpeed
+            rider.body.vel.y += riderHigher ? tuning.bounceLift : -tuning.bounceLift
+            rider.body.ledge = nil
+        }
         opponents[index].body.vel.x = -side * tuning.bounceSpeed
         opponents[index].body.vel.y += riderHigher ? -tuning.bounceLift : tuning.bounceLift
         opponents[index].body.ledge = nil
         opponents[index].body.isDiving = false
-        opponents[index].rammed += 1
         events.append(.clashBounced(opponent: o.id, role: o.role, at: at))
     }
 

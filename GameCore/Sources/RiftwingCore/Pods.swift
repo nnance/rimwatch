@@ -181,7 +181,8 @@ extension RiftwingRun {
 
     /// The pod lay too long: its colonist is lost and a rig one grade tougher stands up where it
     /// lay, taking off after a moment: of the tougher kind once that kind has had its debut (else
-    /// of its own kind), and at full strength.
+    /// of its own kind), with as much of that kind's early ease as the rider's rescues earn
+    /// (`hatchedEase`).
     private mutating func hatch(_ index: Int, ledge: Int) {
         let pod = pods[index]
         losePod(at: index, cause: .hatched)
@@ -194,11 +195,22 @@ extension RiftwingRun {
         opponents[o].body.ledge = ledge
         opponents[o].state = .waking(remaining: tuning.hatchWake)
         opponents[o].hatched = true
-        // One grade tougher, and at full strength: none of its kind's early ease, even where it
-        // is still its own kind (before the tougher kind's debut).
-        opponents[o].ease = 0
-        opponents[o].speed = stats.maxSpeed * speedScale(role, ease: 0)
+        // Its kind's early ease, kept only for a rider who frees colonists: leaving pods to hatch
+        // is no way to fill the gallery with gentle opponents.
+        let ease = hatchedEase(of: role)
+        opponents[o].ease = ease
+        opponents[o].speed = stats.maxSpeed * speedScale(role, ease: ease)
         events.append(.podHatched(id: pod.id, opponent: id, role: role, at: stand))
+    }
+
+    /// The ease a rig of `role` hatching now flies with: its kind's ease this wave, times the
+    /// share it keeps for the colonists the rider has freed in this wave and the last
+    /// (`RiftwingWaves.hatchedEaseShare(freed:settled:)`).
+    func hatchedEase(of role: RiftwingRole) -> Double {
+        let kind = director.ease(of: role, inWave: max(wave, 1))
+        let freed = waveFreed + previousWaveFreed
+        let settled = waveFreed + waveLost + previousWaveFreed + previousWaveLost
+        return kind * director.hatchedEaseShare(freed: freed, settled: settled)
     }
 
     /// What a pod would hatch into now: one grade tougher, but its own kind until the tougher

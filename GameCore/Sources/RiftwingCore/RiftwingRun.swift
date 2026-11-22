@@ -45,6 +45,9 @@ public struct RiftwingRun: Sendable {
     public internal(set) var waveDropped = 0
     public internal(set) var waveFreed = 0
     public internal(set) var waveLost = 0
+    /// The last wave's colonists freed and lost (for how gently a hatched rig flies).
+    var previousWaveFreed = 0
+    var previousWaveLost = 0
     /// The gallery's lamps are out: the renderer darkens it to a pool of light round the rider.
     public internal(set) var isLampsOut = false
     /// Every colonist of a wave was lost: the lamps fail when the next wave starts. True from
@@ -334,10 +337,16 @@ public struct RiftwingRun: Sendable {
         wave += 1
         phase = .fighting
         waveClock = 0
+        previousWaveFreed = waveFreed
+        previousWaveLost = waveLost
         waveDropped = 0
         waveFreed = 0
         waveLost = 0
         pods.removeAll()
+        // Resting starts afresh: time in one place late in the last wave never counts against
+        // this one.
+        riderStillFor = 0
+        stillAnchor = rider.body.pos
         toSend = director.rigs(forWave: wave)
         sendIndex = 0
         sendTimer = 0
@@ -592,7 +601,9 @@ public struct RiftwingRun: Sendable {
             opponent.mineTimer = tuning.mineInterval * (1 + director.sowerIntervalEase * ease) * rng.range(0.5...1)
         case .gleaner:
             opponent.speed = tuning.gleanerSpeed * director.gleanerSpeedScale(forWave: max(wave, 1))
-        case .glider, .striker, .warden:
+        case .warden:
+            opponent.aimOffset = wardenMiss(ease: ease)
+        case .glider, .striker:
             break
         }
         opponents.append(opponent)
@@ -720,14 +731,9 @@ public struct RiftwingRun: Sendable {
     }
 
     /// The rider's flight numbers.
-    /// Rock knocks it harder for each bump in the last `RiftwingTuning.pinnedWindow` seconds, so
-    /// it cannot hold itself pressed against a ceiling.
     var riderFlight: FlightParams {
-        let window = Int((tuning.pinnedWindow / Self.timeStep).rounded())
-        let recent = riderBumpTicks.count { tick - $0 <= window }
-        return FlightParams(maxSpeed: tuning.maxAirSpeed, airAccel: tuning.airAccel, flapImpulse: tuning.flapImpulse,
-                            flapThrust: tuning.flapThrust, maxRise: tuning.maxRise, runSpeed: tuning.runSpeed,
-                            knockScale: 1 + tuning.pressedKnockGrowth * Double(recent))
+        FlightParams(maxSpeed: tuning.maxAirSpeed, airAccel: tuning.airAccel, flapImpulse: tuning.flapImpulse,
+                     flapThrust: tuning.flapThrust, maxRise: tuning.maxRise, runSpeed: tuning.runSpeed)
     }
 
     /// The rider is lost (it does nothing while protected).

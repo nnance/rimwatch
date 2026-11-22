@@ -181,47 +181,57 @@ import GameCore
         #expect(has(r.step(still), "clashBounced"))
     }
 
-    /// Ramming the same opponent level again and again is not a near miss: once a rider has
-    /// bounced off one opponent `rammingBounces` times in quick succession, that opponent needs
-    /// only the clash margin to win the next meeting, until the memory fades.
-    @Test func rammingTheSameOpponentLevelAgainAndAgainLosesTheLeniency() throws {
+    /// Bouncing off the same opponent again and again changes nothing: every meeting is judged
+    /// by the same rule. (A rule that let an opponent win from the bounce margin after two
+    /// bounces within about 3 s is gone: it counted bounces the rider did not cause, such as an
+    /// opponent diving on it twice, and the rider was never told.)
+    @Test func bouncingOffTheSameOpponentAgainAndAgainChangesNothing() throws {
         var r = quietRun()
         let id = r.place(.striker, at: Vec2(460, 300), ease: 0)
         r.freeze(id)
-        for _ in 0..<r.tuning.rammingBounces {
+        for _ in 0..<5 {
             r.placeRider(at: Vec2(440, 302))
             r.opponents[r.index(of: id)].body.pos = Vec2(460, 300)
             r.opponents[r.index(of: id)].clashCooldown = 0
             #expect(has(r.step(still), "clashBounced"))
         }
-        // 20 units above: once a bounce, now a loss.
+        // 20 units above, straight after five bounces: still only a bounce.
         r.placeRider(at: Vec2(450, 300))
         r.opponents[r.index(of: id)].body.pos = Vec2(450, 320)
         r.opponents[r.index(of: id)].body.vel = .zero
         r.opponents[r.index(of: id)].clashCooldown = 0
-        #expect(has(r.step(still), "riderLost"))
-        // After a while apart, the opponent needs the clear height again.
-        var s = quietRun()
-        let other = s.place(.striker, at: Vec2(460, 300), ease: 0)
-        s.freeze(other)
-        for _ in 0..<s.tuning.rammingBounces {
-            s.placeRider(at: Vec2(440, 302))
-            s.opponents[s.index(of: other)].body.pos = Vec2(460, 300)
-            s.opponents[s.index(of: other)].clashCooldown = 0
-            _ = s.step(still)
+        #expect(has(r.step(still), "clashBounced"))
+        #expect(r.rider.isAlive)
+    }
+
+    /// In wave 1 a rider standing on a ledge is never beaten, and a meeting with it does not throw
+    /// it off its ledge either: it keeps its footing and the opponent alone is thrown away (it was
+    /// once thrown off, often into the Rift). From wave 2 a bounce throws both apart as usual.
+    @Test func aStandingRiderSparedInWaveOneKeepsItsFooting() throws {
+        func standing(wave: Int, above: Double) -> (RiftwingRun, Int, [RiftwingEvent]) {
+            var r = quietRun()
+            r.wave = wave
+            let start = r.layout.startLedge
+            #expect(r.rider.body.ledge == start)
+            let p = r.rider.body.pos
+            let id = r.place(.striker, at: Vec2(p.x + 2, p.y + above), ease: 0)
+            r.freeze(id)
+            let events = r.step(still)
+            return (r, id, events)
         }
-        for _ in 0..<seconds(s.tuning.rammingMemory * Double(s.tuning.rammingBounces) + 0.5) {
-            s.placeRider(at: Vec2(100, 500))
-            s.rider.invulnerableTimer = .infinity
-            s.opponents[s.index(of: other)].body.pos = Vec2(460, 300)
-            s.opponents[s.index(of: other)].body.vel = .zero
-            _ = s.step(still)
+        for above in [28.5, 3.0] {
+            let (r, id, events) = standing(wave: 1, above: above)
+            #expect(has(events, "clashBounced"), "\(above)")
+            #expect(r.rider.isAlive)
+            #expect(r.rider.body.ledge == r.layout.startLedge, "\(above)")
+            #expect(abs(r.rider.vel.x) < 1e-9 && abs(r.rider.vel.y) < 1e-9, "\(above): \(r.rider.vel)")
+            #expect(abs(try r.req(opponent: id).vel.x) >= r.tuning.bounceSpeed - 1, "\(above)")
         }
-        s.placeRider(at: Vec2(450, 300))
-        s.opponents[s.index(of: other)].body.pos = Vec2(450, 320)
-        s.opponents[s.index(of: other)].body.vel = .zero
-        s.opponents[s.index(of: other)].clashCooldown = 0
-        #expect(has(s.step(still), "clashBounced"))
+        // Wave 2: a level bounce throws the standing rider off as usual.
+        let (r, _, events) = standing(wave: 2, above: 3)
+        #expect(has(events, "clashBounced"))
+        #expect(r.rider.body.ledge == nil)
+        #expect(abs(r.rider.vel.x) >= r.tuning.bounceSpeed - 1)
     }
 
     @Test func aBounceThrowsBothApartAcrossOnly() throws {

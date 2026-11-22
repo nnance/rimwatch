@@ -4,10 +4,12 @@ import RiftwingCore
 
 // `Harness riftwing [seeds] [maxMinutes] [skill...]`: runs Riftwing's scripted pilots over many
 // seeds and prints difficulty and rescue statistics. Skills: idle, novice, sharpNovice,
-// restingNovice, competent, topLedgeSitter, roofHoverer, ventRider, lowHider, levelBouncer,
+// restingNovice, slowNovice, competent, topLedgeSitter, roofHoverer, ventRider, lowHider, levelBouncer,
 // underLedgeHoverer, seamCamper, ambusher, topLedgeStill, topLedgePacer, pacingAmbusher
 // (default: all of them).
 // SEEDBASE moves the seed set (default 1000) to check a result is not luck of the seeds.
+// STARTWAVE=<n> starts every game at wave n, in its layout (the run's DEBUG `startAtWave`): 4
+// starts in the second layout, 7 in the third. Compare a bot with the novice from the same start.
 // Environment overrides for the main tuning numbers (see `riftwingTuning` and `riftwingWaves`):
 // flight GRAV FLAP MAXRISE AIRACC AIRMAX REOPEN DIVEG; the clash MARGIN ROOFBAND LENIENCY;
 // lives SAFE INVULN EXTRA LIVES0; pods PODLIFE0 PODSHRINK PODFLOOR PODKNOCK PODGRAV PODTERM;
@@ -71,9 +73,6 @@ private func riftwingTuning() -> RiftwingTuning {
     if let v = env["DRAW0"].flatMap(Double.init) { t.gliderDrawAfter = v }
     if let v = env["DRAWSHRINK"].flatMap(Double.init) { t.gliderDrawShrink = v }
     if let v = env["DRAWFLOOR"].flatMap(Double.init) { t.gliderDrawFloor = v }
-    if let v = env["RAMB"].flatMap(Int.init) { t.rammingBounces = v }
-    if let v = env["RAMMEM"].flatMap(Double.init) { t.rammingMemory = v }
-    if let v = env["KNOCKGROW"].flatMap(Double.init) { t.pressedKnockGrowth = v }
     if let v = env["CATCHDELAY"].flatMap(Double.init) { t.podCatchDelay = v }
     if let v = env["PODTHROW"].flatMap(Double.init) { t.podThrow = v }
     if let v = env["RESPAWN"].flatMap(Double.init) { t.respawnDelay = v }
@@ -103,6 +102,8 @@ private func riftwingWaves() -> RiftwingWaves {
     if let v = env["GLBANDEASE"].flatMap(Double.init) { w.gliderBandEase = v }
     if let v = env["WARDSPEEDEASE"].flatMap(Double.init) { w.wardenSpeedEase = v }
     if let v = env["WARDDIVEEASE"].flatMap(Double.init) { w.wardenDiveEase = v }
+    if let v = env["WARDMISS"].flatMap(Double.init) { w.wardenMissEase = v }
+    if let v = env["WARDREPLANEASE"].flatMap(Double.init) { w.wardenReplanEase = v }
     if let v = env["PODFALLEASE"].flatMap(Double.init) { w.podFallEase = v }
     if let v = env["PODDRIFT"].flatMap(Double.init) { w.podDriftEase = v }
     if let v = env["PODHOVER"].flatMap(Double.init) { w.podHoverEase = v }
@@ -112,6 +113,8 @@ private func riftwingWaves() -> RiftwingWaves {
     if let v = env["GLSLOW"].flatMap(Double.init) { w.gleanerSlowdown = v }
     if let v = env["GLGRABEASE"].flatMap(Double.init) { w.gleanerGrabEase = v }
     if let v = env["GLCARRYEASE"].flatMap(Double.init) { w.gleanerCarryEase = v }
+    if let v = env["HATCHSHARE"].flatMap(Double.init) { w.hatchedEaseFullShare = v }
+    if let v = env["HATCHMIN"].flatMap(Double.init) { w.hatchedEaseNoShare = v }
     return w
 }
 
@@ -165,6 +168,14 @@ private struct RiftwingStats {
     var clingTime = 0.0
     var lostCamping = 0
     var lostClinging = 0
+    /// Lives lost in clashes with rigs hatched from pods, by the wave.
+    var lostToHatched: [Int: Int] = [:]
+    /// Seconds of fighting near the roof (within 40 units of the highest a rig can be), standing
+    /// on the lowest ledge, standing on any ledge, and in a vent.
+    var roofTime = 0.0
+    var lowLedgeTime = 0.0
+    var groundTime = 0.0
+    var ventTime = 0.0
 }
 
 private func cause(_ c: RiftwingLossCause) -> String {
@@ -177,7 +188,9 @@ private func cause(_ c: RiftwingLossCause) -> String {
 }
 
 private func playRiftwing(skill: RiftwingPilot.Skill, seed: UInt64, maxMinutes: Double) -> RiftwingStats {
-    var run = RiftwingRun(seed: seed, tuning: riftwingTuning(), waves: riftwingWaves())
+    var config = RiftwingRun.Config(tuning: riftwingTuning(), waves: riftwingWaves())
+    config.startAtWave = ProcessInfo.processInfo.environment["STARTWAVE"].flatMap(Int.init)
+    var run = RiftwingRun(seed: seed, config: config)
     var pilot = RiftwingPilot(skill: skill, seed: seed)
     var stats = RiftwingStats()
     var waveStart = 0.0
@@ -204,6 +217,7 @@ private func playRiftwing(skill: RiftwingPilot.Skill, seed: UInt64, maxMinutes: 
                 stats.waves[cleared, default: RiftwingWaveStats()].length = t - waveStart
             case .riderLost(_, _, let c):
                 stats.waves[w, default: RiftwingWaveStats()].livesLost += 1
+                if case .clash(let id, _) = c, before.opponent(id)?.hatched == true { stats.lostToHatched[w, default: 0] += 1 }
                 let name = c == .breath && before.isBreathFilling ? "fill" : cause(c)
                 stats.causes[name, default: 0] += 1
                 stats.waves[w, default: RiftwingWaveStats()].causes[name, default: 0] += 1
@@ -274,6 +288,13 @@ private func playRiftwing(skill: RiftwingPilot.Skill, seed: UInt64, maxMinutes: 
             stats.fightTime += RiftwingRun.timeStep
             if run.isRiderCamping { stats.campTime += RiftwingRun.timeStep }
             if run.isRiderClinging { stats.clingTime += RiftwingRun.timeStep }
+            let b = run.rider.body
+            if b.pos.y > run.tuning.roof - b.radius - 40 { stats.roofTime += RiftwingRun.timeStep }
+            if let l = b.ledge {
+                stats.groundTime += RiftwingRun.timeStep
+                if l == run.ledges.indices.min(by: { run.ledges[$0].top < run.ledges[$1].top }) { stats.lowLedgeTime += RiftwingRun.timeStep }
+            }
+            if run.rider.vent != nil { stats.ventTime += RiftwingRun.timeStep }
         }
         if run.isGameOver { break }
     }
@@ -305,7 +326,9 @@ private func traceRiftwing(seed: UInt64) {
     let from = env["TRACEFROM"].flatMap(Double.init) ?? 0
     let to = env["TRACETO"].flatMap(Double.init) ?? 60
     let every = max(Int((env["TRACEEVERY"].flatMap(Double.init) ?? 0.5) * 120), 1)
-    var run = RiftwingRun(seed: seed, tuning: riftwingTuning(), waves: riftwingWaves())
+    var config = RiftwingRun.Config(tuning: riftwingTuning(), waves: riftwingWaves())
+    config.startAtWave = env["STARTWAVE"].flatMap(Int.init)
+    var run = RiftwingRun(seed: seed, config: config)
     var pilot = RiftwingPilot(skill: skill, seed: seed)
     func f(_ p: Vec2) -> String { String(format: "(%.0f,%.0f)", p.x, p.y) }
     while !run.isGameOver, Double(run.tick) / 120 < to {
@@ -367,10 +390,21 @@ func runRiftwing(_ args: [String]) {
             print("unknown skill \(name)")
             continue
         }
-        var all: [RiftwingStats] = []
-        for i in 0..<seeds {
-            all.append(playRiftwing(skill: skill, seed: UInt64(seedBase + i * 7919), maxMinutes: maxMinutes))
+        // The games are played in parallel (each is independent and deterministic), kept in
+        // seed order.
+        final class Results: @unchecked Sendable {
+            var games: [RiftwingStats]
+            let lock = NSLock()
+            init(_ count: Int) { games = Array(repeating: RiftwingStats(), count: count) }
         }
+        let results = Results(seeds)
+        DispatchQueue.concurrentPerform(iterations: seeds) { i in
+            let game = playRiftwing(skill: skill, seed: UInt64(seedBase + i * 7919), maxMinutes: maxMinutes)
+            results.lock.lock()
+            results.games[i] = game
+            results.lock.unlock()
+        }
+        let all = results.games
         func col(_ f: (RiftwingStats) -> Double) -> String { q3(all.map(f)) }
         let waves = all.map { Double($0.wave) }
         let mean = waves.reduce(0, +) / Double(waves.count)
@@ -419,6 +453,9 @@ func runRiftwing(_ args: [String]) {
                      all.reduce(0) { $0 + $1.lostCamping }, lostClashes,
                      Double(all.reduce(0) { $0 + $1.lostCamping }) / Double(max(lostClashes, 1)) * 100,
                      all.reduce(0) { $0 + $1.clingTime } / fight * 100, all.reduce(0) { $0 + $1.lostClinging }))
+        print(String(format: "where              near the roof %.1f%%, standing %.1f%% (on the lowest ledge %.1f%%), in a vent %.1f%% of fighting time",
+                     all.reduce(0) { $0 + $1.roofTime } / fight * 100, all.reduce(0) { $0 + $1.groundTime } / fight * 100,
+                     all.reduce(0) { $0 + $1.lowLedgeTime } / fight * 100, all.reduce(0) { $0 + $1.ventTime } / fight * 100))
         let landings = all.flatMap(\.landings).sorted()
         if !landings.isEmpty {
             print(String(format: "arrival distance   min %.0f  1%% %.0f  median %.0f", landings[0],
@@ -492,6 +529,10 @@ func runRiftwing(_ args: [String]) {
         let early = all.reduce(0) { $0 + ($1.waves[1]?.livesLost ?? 0) + ($1.waves[2]?.livesLost ?? 0) }
         let earlyDropped = all.reduce(0) { $0 + ($1.waves[1]?.dropped ?? 0) + ($1.waves[2]?.dropped ?? 0) }
         let earlyLost = all.reduce(0) { total, g in total + [1, 2].reduce(0) { $0 + (g.waves[$1]?.lost.values.reduce(0, +) ?? 0) } }
+        let start = ProcessInfo.processInfo.environment["STARTWAVE"].flatMap(Int.init) ?? 1
+        let hatchedLosses = (1...30).map { w in Double(all.reduce(0) { $0 + ($1.lostToHatched[w] ?? 0) }) / Double(max(all.count { $0.wave >= w }, 1)) }
+        print("lives lost to hatched rigs / game reaching, waves 1-10:", hatchedLosses.prefix(10).map { String(format: "%.2f", $0) }.joined(separator: " "))
+        print(String(format: "start wave %d: waves gained (final - start + 1) mean %.2f", start, mean - Double(start) + 1))
         print(String(format: "summary: mean wave %.2f, lives lost in w1+w2 %.2f a game, pods lost in w1+w2 %.1f%%, step %.2f us",
                      mean, Double(early) / Double(all.count), earlyDropped > 0 ? Double(earlyLost) / Double(earlyDropped) * 100 : 0,
                      all.reduce(0) { $0 + $1.stepSeconds } / Double(max(all.reduce(0) { $0 + $1.steps }, 1)) * 1e6))

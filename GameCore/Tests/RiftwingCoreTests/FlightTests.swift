@@ -160,26 +160,36 @@ import GameCore
         #expect(r.rider.vel.y <= -r.tuning.ledgeKnock + 1e-9)
     }
 
-    /// A rider that keeps pressing against rock is knocked down harder with each bump in a short
-    /// time, so it cannot hold itself pressed there: it bobs well below the rock, where a rig
-    /// holding steady under it can get above it. One bump now and then is knocked as usual.
-    @Test func pressingAgainstRockAgainAndAgainKnocksHarder() throws {
+    /// Rock knocks a rig down by the same amount however often it bumps it: pressing against it
+    /// again and again is knocked as one bump is. (A harder knock for each bump in quick
+    /// succession drove a rider tapping steadily under a low ledge into the Rift.)
+    @Test func pressingAgainstRockAgainAndAgainKnocksAsUsual() throws {
         var r = quietRun()
-        var knocks: [Double] = []
-        for _ in 0..<4 {
+        for _ in 0..<5 {
             r.placeRider(at: Vec2(450, r.tuning.roof - r.rider.body.radius - 1), vel: Vec2(0, 200))
             #expect(has(r.step(still), "bumpedRoof"))
-            knocks.append(-r.rider.vel.y)
+            #expect(abs(-r.rider.vel.y - r.tuning.ceilingKnock) < 5, "\(r.rider.vel.y)")
             run(&r, steps: seconds(0.3))
         }
-        #expect(knocks[0] < r.tuning.ceilingKnock + 5)
-        #expect(knocks[1] > knocks[0] + 20 && knocks[2] > knocks[1] + 20, "\(knocks)")
-        #expect(knocks[3] >= knocks[2] - 1)
-        // After a pause the next bump is ordinary again.
-        run(&r, steps: seconds(r.tuning.pinnedWindow + 0.5))
-        r.placeRider(at: Vec2(450, r.tuning.roof - r.rider.body.radius - 1), vel: Vec2(0, 200))
-        _ = r.step(still)
-        #expect(-r.rider.vel.y < r.tuning.ceilingKnock + 5)
+    }
+
+    /// A rider tapping flap steadily under the lowest ledge of the Shelves layout (its underside
+    /// 70 units above the Rift) bobs under it and is not driven into the Rift.
+    @Test func tappingUnderALowLedgeDoesNotDriveTheRiderIntoTheRift() throws {
+        for gap in [0.2, 0.22, 0.25] {
+            var r = quietRun()
+            r.applyLayout(2)
+            let ledge = r.ledges.min { $0.top < $1.top }!
+            r.placeRider(at: Vec2(ledge.midX, ledge.top - r.tuning.ledgeThickness - r.rider.body.radius))
+            let every = seconds(gap)
+            var bumps = 0
+            let events = run(&r, steps: seconds(20), control: { run in
+                RiftwingInput(flap: run.tick % every < 3)
+            }, until: { $0.kind == "riderLost" })
+            bumps = count(events, "bumpedLedge")
+            #expect(!has(events, "riderLost"), "tapping every \(gap) s: lost at \(r.rider.pos)")
+            #expect(bumps > 10, "\(bumps)")
+        }
     }
 
     /// Vents lift opponents as they lift the rider.
