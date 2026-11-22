@@ -423,6 +423,11 @@ step is pushed so you can install it.
         wave 7 is no longer a cliff for colonists. 432 tests. Pushed before its independent
         check; see "The Gleaners' ease as a ramp" in the Redoubt design. You played refinement
         3 and said stage 2 was improved.
+  - [x] Refinement 6 (2026-11-21, the fix you chose before moving on): Gleaners arrive one at
+        a time through the wave, and a seized colonist cannot be lost in less than a least
+        time. The Spitters' and Burrows' eases now count each kind's own appearances. 535 tests
+        (with Riftwing's). Pushed before its independent check; see "Gleaners through the wave"
+        in the Redoubt design, which also lists what it did not reach.
 - [x] 14. Riftwing design written here (2026-11-21). You chose the one-screen cavern and
       flap plus a dive with no weapon, and told me to build while you were away; I took that
       as approval. My other choices are marked "mine" in "Riftwing design" for you to overrule.
@@ -1225,6 +1230,65 @@ silent in their first wave, and that wave 5 had become the hardest step. You con
 - The harness now prints, per wave, Spitter shots, the share of games with none, Burrow
   spawns, lives at the wave's start and the share of games ending there.
 
+### Gleaners through the wave (2026-11-21)
+
+The last check found that in later waves the Gleaners all landed together and took most of the
+colonists in the first seconds, and that a colonist beside a wall could be lost at once. You
+chose to have that fixed before moving on. Commit `cfcbd8c`.
+
+**What changed**
+
+- **Gleaners come one at a time.** The first Gleaner of a wave lands a set time after the
+  opening crowd. Each of the rest is sent once its share of the wave's Skitters has come in
+  (shares spread evenly from 35% to 80% of the wave), or 8 s after the one before at the
+  latest. The number of Gleaners in a wave is unchanged, and a wave still waits for all of
+  them.
+- **A least time to save a seized colonist.** A Gleaner that seizes a colonist close to the
+  wall drags it more slowly, so that the drag always takes at least the time below; if it is
+  pushed to the wall early it waits there. The pair always creeps toward the wall, so it never
+  looks merely held. This replaces the slower drag speed of refinement 3.
+
+| Gleaner wave | 2 | 4 | 7 | 9 | 10 | 11 | 12 | 13 | 14 on |
+|---|---|---|---|---|---|---|---|---|---|
+| First lands after the crowd, s | 10 | 9 | 8 | 6 | 4 | 2 | 1 | 0 | 0 |
+| Least time from seizure to loss, s | 8 | 7 | 6 | 5.5 | 5 | 4.5 | 4 | 3.5 | 3 |
+
+- **Spitters and Burrows ease by their own appearances**, not by wave number, like the
+  Gleaners. A kind's appearances are now read from the wave makeup itself.
+  - Spitters: 3 in their first wave (wave 3), 2 in their second (wave 4), then 6, 7 and 8.
+    Their first shots fly at 0.8 of full speed with half the lead, easing over three
+    appearances. Fire interval scale by Spitter wave: 2.0, 1.65, 0.91, 0.64, 0.58.
+  - Burrows: spawn interval scale 2.0, 1.35, 0.96 over their first three waves (5, 7, 9).
+- Undo: `RedoubtWaves.beforeGleanersThroughWave` restores the game before this change; the
+  older switches chain from it. Harness: `BEFORE6=1`.
+
+**Measured by the builder** (not yet independently checked)
+
+| | Before | After |
+|---|---|---|
+| Novice, 600 games: mean wave | 5.21 | 5.31 (median 5) |
+| Novice games over by wave 4 | 39% | 33% |
+| Competent: mean wave | 9.96 | 10.22 |
+| Wave 7, share of seizures in its first 10 s | 94 to 95% | 16 to 22% |
+| Wave 9, competent games losing 3 or more colonists in the first 20 s | 70% | 20% |
+| Shortest time from seizure to loss, any wave | 0 s | the least time above |
+| Wall circler / corner camper (mean wave) | 3.45 / 7.31 | 3.53 / 7.33 |
+
+**What it did not reach**
+
+- The novice mean is 5.31, under the 5.4 to 5.8 I asked for, and the median is 5, not 6. The
+  step in lives lost from wave 2 to wave 3 (the Spitters' debut) is 0.54, the largest.
+- Colonists lost still step up between wave 7 and wave 9 (13% to 32% for the competent bot).
+  The builder traced this to the orb being lost more often there, which scatters the line,
+  not to the Gleaners.
+- Novice Spitter shots go from 2.3 in wave 4 to 11.3 in wave 7, about five times. Easing wave
+  7 further let the corner camper reach wave 7.7, so it was left.
+- A lighter opening crowd would lift the novice to about 5.4 with a median of 6, at the cost
+  of about 0.1 wave to the wall circler and corner camper. The builder dropped it; I am
+  measuring it again on larger sets, because 0.1 wave on those two is within the noise.
+- Nothing here has been judged on screen: how the slow creep beside a wall reads, and the
+  slower first shots.
+
 ### What the independent check of sound, polish and balance found
 
 It passed with notes (before the easier early waves above, which were checked separately).
@@ -1667,3 +1731,57 @@ the next wave's start until a colonist is freed.
   measured; the independent check is asked to judge it.
 - Simplifications: opponents pass through one another; Gleaners fly through ledges; pods
   ignore vents.
+
+### What the independent check of the logic found (15a)
+
+Checked 2026-11-21 by a separate checker given the code and this design, not the builder's
+conclusions. Verdict: **pass with notes.** The rules mostly match the design, debug and
+release builds agree, and its own measurements match the builder's (novice 5.58 over 600
+games, median 6; competent about 10.5; no exploit bot near proper play). It found these, all
+being fixed in the tuning stage (15d):
+
+- **A rider standing still when the cavern shifts can fall into the Rift** during the break,
+  from three ledges, with under a second to react. The bots never stand still, so the harness
+  missed it.
+- **About half of all mid-air catches happen by themselves:** the pod appears within reach of
+  the rider who struck, and is caught a step later for double points.
+- **Score and events after game over:** if the last life goes in the step the wave clears, the
+  wave bonus is added after the game-over score is announced.
+- **The third breath of a wave reaches the roof and cannot be escaped,** about 100 s into any
+  wave, and the first warning comes 50 s into even wave 1. The design said "part of the way
+  up". A respawn while every ledge is under the gas dies again.
+- **Hovering pressed under a ledge can never lose a clash,** and hovering at the side join
+  stops anything arriving. Only the breath ends either.
+- **The novice bot flies far better than a person:** frame-perfect flapping, exact routing
+  round ledges, and none of about 2,400 lives lost to the Rift. The checker expects a person's
+  first game to end around wave 3 to 4 on these numbers, not 5 to 6. Pods are freed half a
+  second after landing, so hatching and Gleaners are hardly tested.
+- A Glider's pod can hatch into a Striker before the Strikers' debut wave.
+- Weak tests: the difficulty tests use 12 seeds and a wide band; two tests pass by luck of
+  their seed or check a number and not the behaviour.
+
+**My decisions from it (mine, for you to overrule):**
+
+- The novice bot is being remade to fly like a person (late reactions, a human tapping rate,
+  misjudged heights, falls into the Rift), and the game tuned until that bot reaches wave 5 to
+  6. This will make Riftwing easier than the numbers above describe.
+- The breath starts later in early waves (about 90 s in waves 1 and 2), grows over more steps
+  that can each be flown above, and fills the gallery only on its last step, with its own
+  warning. That last step stays, as the answer of last resort to hiding; it goes against the
+  design's "part of the way up", so say if you would sooner have a breath that can always be
+  survived.
+- No place where a rider can sit safe from clashes: a rig will not be able to cling to the
+  roof or the underside of a ledge.
+- Until a tougher kind has had its debut, a pod hatches into its own kind.
+- The bar for exploit bots is now "reaches no wave near the novice's, scores less, and cannot
+  survive without limit", in place of "survives less long than proper play".
+
+**For you to judge, on originality.** The checker noted that, taken together, several of
+Riftwing's rules resemble one well-known flap-to-fly game more than "the genre's mechanic and
+nothing else" suggests: a knocked-off opponent leaving something that turns into a tougher one
+if left, a collection score that rises through the wave with a bonus for a mid-air catch,
+opponent grades, and a threat that comes when a wave drags on. The cavern, cast, names, art,
+layouts, the dive, vents, Gleaners, mines, lamps out and the rescue story are Rimwatch's own.
+I have kept the design as you approved it. If you want more distance, the cheapest change is
+to drop hatching into a tougher grade (a pod left too long is simply lost, or draws a
+Gleaner).
