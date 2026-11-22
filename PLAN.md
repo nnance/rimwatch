@@ -1286,9 +1286,9 @@ chose to have that fixed before moving on. Commit `cfcbd8c`.
   not to the Gleaners.
 - Novice Spitter shots go from 2.3 in wave 4 to 11.3 in wave 7, about five times. Easing wave
   7 further let the corner camper reach wave 7.7, so it was left.
-- A lighter opening crowd would lift the novice to about 5.4 with a median of 6, at the cost
-  of about 0.1 wave to the wall circler and corner camper. The builder dropped it; I am
-  measuring it again on larger sets, because 0.1 wave on those two is within the noise.
+- A lighter opening crowd looked as if it would lift the novice to about 5.4. I measured four
+  settings of it on 600 games each: 5.31 (as pushed), 5.29, 5.43 and 5.38, in no order and
+  each ±0.05, so the difference is within the noise. Redoubt's numbers stay as pushed.
 - Nothing here has been judged on screen: how the slow creep beside a wall reads, and the
   slower first shots.
 
@@ -1828,6 +1828,3 @@ Built 2026-11-21 in `Rimwatch/Modes/Riftwing/`, with the look in a `RiftwingThem
   can overlap the rider.
 - **Not checked:** touch input (no tap could be made from the command line), a dive on the
   gamepad seen in a screenshot, sizes on any screen but the iPhone 18 Pro.
-- The opening-crowd ease in Redoubt, measured again on larger sets after refinement 6, is
-  within the noise (5.29 to 5.43 across four settings, each ±0.05), so Redoubt's numbers stay
-  as pushed.
