@@ -2315,3 +2315,30 @@ without another step. The competent bot reaches wave 13.7.
   clears under half a wave, so "a whole wave under the novice" cannot be measured; the test
   pins "clears fewer waves than the novice and scores less".
 - Lives lost in waves 1 and 2 are 0.5 to 0.6 a game, nearly all the bot's Rift falls.
+
+### The defect check of the third round (2026-11-22)
+
+A separate checker, asked for defects only. Verdict: **pass with notes.** The two removed
+rules are really gone, debug and release agree, no test bound was loosened beyond the two
+deleted rules' own, and its novice numbers are the builder's exactly (5.64, 5.65, 5.58;
+median 6; lives lost rising steadily).
+
+- **One defect, fixed the same day by me** (630 tests; novice unchanged at 5.62): in wave 1 an
+  opponent on the same ledge as a standing rider was thrown sideways only, landed straight
+  back and bounced off the rider every 0.35 s, with the sound and haptic repeating. It is now
+  thrown up as well and cannot meet the rider again for 1.2 s. This fix has not been
+  independently checked; it has a test that failed before it.
+- **How the hatching rule treats a slow beginner** (a bot that notices pods after 12 to 20 s):
+  in wave 1 about a quarter of its hatched rigs are at full strength, because the first hatch
+  of a run, before anything has been freed, always is; in waves 2 and 3, over nine in ten are
+  fully eased and none is at full strength.
+- **A pod that falls into the Rift before you could reach it counts against you** in that
+  rule, as does one a Gleaner carries off.
+- **An early Warden always misses a rider who stays still,** since it aims beside where the
+  rider is. The top-ledge sitter is killed by other things, so the exploit tests hold.
+- Early Wardens fall into the Rift a little more often after a missed dive (6 of 225 sent,
+  against 2 before): each is an opponent gone without a fight.
+- The weaker bar for exploit bots started at wave 7 has a thin margin on 20 seeds.
+
+With this, the bot work on Riftwing stops. Everything left is listed under "Not met" in the
+sections above, and is yours to judge by playing.
