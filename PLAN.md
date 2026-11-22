@@ -445,7 +445,10 @@ step is pushed so you can install it.
         be played with touch or a gamepad. No shell change. 544 tests. Pushed before any
         independent check; touch controls were laid out but could not be exercised from the
         command line. See "Decisions made while putting it on screen (15b)".
-  - [ ] 15c. Sounds, music and haptics
+  - [x] 15c. Sounds, music and haptics (2026-11-21): 54 patches, a sound director, music in
+        its own key with three moods, and haptic cues. 581 tests. Every patch was rendered and
+        measured; nothing has been heard or felt. Pushed before any independent check. See
+        "Decisions made for sound, music and haptics (15c)".
   - [ ] 15d. Waves and tuning
   - [ ] 15e. Polish
 - [ ] Gate: Riftwing played and refined
@@ -1886,3 +1889,40 @@ Built 2026-11-21 in `Rimwatch/Modes/Riftwing/`, with the look in a `RiftwingThem
   can overlap the rider.
 - **Not checked:** touch input (no tap could be made from the command line), a dive on the
   gamepad seen in a screenshot, sizes on any screen but the iPhone 18 Pro.
+
+### Decisions made for sound, music and haptics (15c)
+
+Built 2026-11-21 (`GameCore/Sources/RiftwingCore/Themes/RiftCavesSounds.swift`, `Audio/`).
+All mine. **Nobody has heard any of it:** every patch was rendered and measured (level,
+clipping, clicks, length, loss on a small speaker, how far each differs from the others), and
+the app's log was read to confirm each cue fires on its event. How it sounds is yours to judge.
+
+- **The flap** is the quietest sound in the game: a 68 ms puff of air in three pitches, never
+  the same twice running. A flap from a ledge is a scuff and a fuller beat.
+- **Clashes:** a crack and a bright struck fifth for a clash won; a stoop adds a low boom and
+  a chord struck down from high, in four sizes by how far you fell; a hard crunch and a
+  dissonant stab for a clash lost.
+- **Pods:** a two-note call when one drops; a chime when freed that climbs a scale with each
+  rescue in the wave; a quick sparkling climb for a mid-air catch; a shrill trill when a
+  Gleaner seizes one; three falling pings for the hatch warning; three sinking notes for a pod
+  lost.
+- **Alerts:** the Rift's warning is a deep breath drawn in under a pulsing alarm, the loudest
+  warning; the gas is a swelling hiss; lamps failing is the hum guttering out; the cavern
+  shift is a rumble and rockfall, held back half a second so the wave-cleared sting is heard.
+- **Left silent on purpose:** an opponent arriving (the glow already warned), wings fully
+  open, mines cleared by the wave ending, a mine struck (the life lost covers it).
+- **Rules for what plays:** one sound per kind of event per frame; at most four sounds a
+  frame; flaps on one voice; small sounds held for a quarter-second after an urgent cue; the
+  urgent cues (clash lost, rider lost, pod lost or seized, hatch warning, the Rift's warning,
+  lamps failing, game over) are never refused. In bot games every urgent cue was voiced.
+- **Music:** E Lydian at 96 beats a minute (Ridgeline is A minor at 84, Redoubt G Phrygian at
+  104), with a pulse in threes like a wingbeat during a wave, calm in the breaks, and a low
+  drone while the lamps are out.
+- **Haptics:** none for a flap or any of flight. A tap for a clash won, an impact for a stoop,
+  a rumble for a clash lost, a double tap for a pod freed, an impact for a pod lost, a warning
+  knock for a pod seized, the hatch warning and the Rift's warning, a rumble for the cavern
+  shift, lamps failing and game over.
+- **Not confirmed in the app, only in package tests:** the hatch warning, a pod seized and
+  carried, hatching, mines and game over (the bots free pods too fast for these to come up).
+- Events added after this stage (such as a separate warning for the breath's last step) are
+  silent and unfelt until given a cue; that is for the polish stage (15e).
