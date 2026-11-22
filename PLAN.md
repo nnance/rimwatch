@@ -437,7 +437,10 @@ step is pushed so you can install it.
         three sets of 200 games; the competent bot wave 10.3; no exploit bot outlasts or
         outscores proper play. Pushed before its independent check; see "Decisions made while
         building the logic (15a)" in the Riftwing design.
-  - [ ] 15b. On screen
+  - [x] 15b. On screen (2026-11-21): Riftwing is the third mode on the title screen and can
+        be played with touch or a gamepad. No shell change. 544 tests. Pushed before any
+        independent check; touch controls were laid out but could not be exercised from the
+        command line. See "Decisions made while putting it on screen (15b)".
   - [ ] 15c. Sounds, music and haptics
   - [ ] 15d. Waves and tuning
   - [ ] 15e. Polish
@@ -1785,3 +1788,46 @@ layouts, the dive, vents, Gleaners, mines, lamps out and the rescue story are Ri
 I have kept the design as you approved it. If you want more distance, the cheapest change is
 to drop hatching into a tougher grade (a pod left too long is simply lost, or draws a
 Gleaner).
+
+### Decisions made while putting it on screen (15b)
+
+Built 2026-11-21 in `Rimwatch/Modes/Riftwing/`, with the look in a `RiftwingTheme`
+(`GameCore/Sources/RiftwingCore/Theme.swift`). The shell did not change. All of these are mine.
+
+- **Size:** every figure is drawn at the size it collides at. The rig is 30 units across, 5%
+  of the gallery's height (about 17 points on an iPhone 18 Pro, where the gallery is 345
+  points high). It reads as a winged frame but is still small; this is the first thing to
+  judge on the Duo.
+- **Colours:** the rider is cyan and pods are mint, as the Watch and colonists are in the
+  other modes. Glider magenta, Striker red, Warden violet, Gleaner yellow, Sower orange, mines
+  pink, rock grey-blue, the Rift orange, the gas yellow-green.
+- **Shapes:** every rig is a side-on frame with two wings, the far wing dimmer. The Glider has
+  broad drooping wings; the Striker narrow swept wings and a nose spike; the Warden an armour
+  plate and crest, which it loses after one blow; the Sower a seed sac underneath. The Gleaner
+  is not a rig: a round drone with a hanging claw.
+- **The wing beat:** swept down just after a flap, raised, then spread; folded in a dive;
+  perched or striding on a ledge. The rig tilts with its climb or fall.
+- **States:** a protected rider strobes in a shield ring; a Warden that took a blow spins; a
+  hatched rig grows from half size before it flies; a held pod flashes red on a line to its
+  Gleaner; a pod near hatching turns red and flashes faster, and shows through the dark.
+- **Arrivals:** a glow in the kind's colour at the mouth with two chevrons pointing in.
+- **The breath:** the Rift pulses and a dashed line blinks where the gas will reach, with the
+  notice "THE RIFT IS BREATHING. CLIMB!"; then a band of gas rises, holds and sinks.
+- **Lamps out:** darkness with a pool of light round the rider. The Rift's edge, pods near
+  hatching, the gas and arrival glows show through.
+- **The cavern shift:** a shake and falling rock, then a cross-fade to the new ledges.
+- **The side join:** anything overlapping an edge is drawn on both sides.
+- **HUD:** score and wave on the left; lives (as small rigs) and colonists saved on the right.
+- **Touch:** the stick steers in its half; each tap in the other half is one flap (taps never
+  merge; at most two are queued); pulling the stick down past 0.6 dives, and a chevron under
+  the stick lights while diving. The handedness option swaps the halves.
+- **Bots in the app:** `-autopilot` takes `idle`, `novice`, `competent` and the exploit bots
+  by name; `shooter` flies the competent bot. The bot is asked once for each step, so it flies
+  in the app as it does in the harness.
+- **Not in this stage:** no sound, music or haptics (15c). Callouts are Redoubt's pattern and
+  can overlap the rider.
+- **Not checked:** touch input (no tap could be made from the command line), a dive on the
+  gamepad seen in a screenshot, sizes on any screen but the iPhone 18 Pro.
+- The opening-crowd ease in Redoubt, measured again on larger sets after refinement 6, is
+  within the noise (5.29 to 5.43 across four settings, each ±0.05), so Redoubt's numbers stay
+  as pushed.

@@ -5,8 +5,8 @@ vast crater, whose wall is the Rim. Rimwatch is the game; it is made of modes, e
 about saving colonists. The first mode, **Ridgeline**, is a side-scrolling rescue shooter inspired
 by the classic arcade game Defender (Williams Electronics, 1981). The second, **Redoubt**, is a
 twin-stick arena shooter in the spirit of Robotron: 2084 (Williams Electronics, 1982). A third,
-**Riftwing**, is a flap-to-fly duel of height in the caves of the crater wall; its game logic is
-built and it is not yet in the app.
+**Riftwing**, is a flap-to-fly duel of height in the caves of the crater wall; it is playable
+and still being built (no sound yet, and its balance is being tuned).
 
 Native iOS, written in Swift with SpriteKit. It has no third-party dependencies and no asset files:
 the art is drawn in code and the sound is synthesised. The one image in the app, its icon, is drawn
@@ -151,8 +151,9 @@ option.
 
 ## Riftwing
 
-Not yet playable: its game logic, bots and tuning harness are built (`GameCore/Sources/RiftwingCore/`),
-and the app, sound and effects come next. It takes the flap-to-fly genre's mechanic (flap to
+Playable, and still being built: its game logic, bots and tuning harness
+(`GameCore/Sources/RiftwingCore/`) and its screen (`Rimwatch/Modes/Riftwing/`) are in; sound,
+tuning and polish come next. DEBUG `-mode riftwing` starts in it. It takes the flap-to-fly genre's mechanic (flap to
 climb, the higher fighter wins) and nothing else: its cavern, cast, names and layouts are its own.
 
 - **The place:** one fixed screen, seen from the side: a gallery in the caves of the crater wall,
