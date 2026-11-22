@@ -386,9 +386,15 @@ import GameCore
                 let wall = try #require(r.entrySides.first)
                 #expect(r.entrySides.count == 1)
                 #expect(wall != nearest, "seed \(seed) wave \(wave): \(wall) is nearest \(orbAt)")
-                #expect(telegraphed.count == waves.floorCrowd(forWave: wave))
+                // The opening crowd but the Gleaners landing late (`RedoubtWaves.gleanerDebutDelay`),
+                // by index into the wave's spawns.
+                let opening = waves.spawns(forWave: wave).indices.filter {
+                    waves.landing(of: waves.spawns(forWave: wave)[$0], inWave: wave) <= r.tuning.telegraphTime
+                }
+                #expect(telegraphed.count == opening.count)
+                #expect(r.pending.count == waves.spawns(forWave: wave).count - opening.count)
                 let slack = r.tuning.orbMaxSpeed / 120 + 1e-6
-                for (index, spot) in telegraphed.enumerated() {
+                for (spot, index) in zip(telegraphed, opening) {
                     #expect(distance(spot, orbAt) >= r.tuning.safeDistance - slack)
                     if waves.isScattered(index, forWave: wave) {
                         #expect(distance(spot, orbAt) >= r.tuning.scatterClearance - slack, "\(spot) scattered too close")
@@ -413,6 +419,79 @@ import GameCore
         flat.spitterDebutSlowdown = 1
         #expect(abs(waves.spitterFireScale(forWave: 7, tuning: tuning) - flat.spitterFireScale(forWave: 7, tuning: tuning)) < 1e-9)
         #expect(abs(flat.spitterFireScale(forWave: 3, tuning: tuning) - 1) < 1e-9)
+    }
+
+    /// The Gleaners' ease (after the owner's third play): in their debut wave the opening
+    /// crowd's Gleaners land 7 s after the rest of it and drag six times more slowly, both easing
+    /// to nothing by wave 7. `beforeGleanerEase` turns it off.
+    @Test func gleanersArriveLateAndDragSlowlyInTheirFirstWaves() throws {
+        let waves = RedoubtWaves()
+        #expect(abs(waves.gleanerDelay(forWave: 2) - 7) < 1e-9)
+        #expect(abs(waves.gleanerDelay(forWave: 4) - 4.2) < 1e-9)
+        #expect(abs(waves.gleanerDragScale(forWave: 2) - 1.0 / 6) < 1e-9)
+        #expect(abs(waves.gleanerDragScale(forWave: 4) - 0.25) < 1e-9)
+        for wave in 7...20 {
+            #expect(waves.gleanerDelay(forWave: wave) == 0)
+            #expect(waves.gleanerDragScale(forWave: wave) == 1)
+        }
+        // Each wave a little harder than the last, never easier.
+        for wave in 2..<12 {
+            #expect(waves.gleanerDelay(forWave: wave + 1) < waves.gleanerDelay(forWave: wave) || waves.gleanerDelay(forWave: wave) == 0)
+            #expect(waves.gleanerDragScale(forWave: wave + 1) >= waves.gleanerDragScale(forWave: wave))
+        }
+        // Only Gleaners wait.
+        for spawn in waves.spawns(forWave: 4) {
+            let late = spawn.role == .gleaner ? waves.gleanerDelay(forWave: 4) : 0
+            #expect(waves.landing(of: spawn, inWave: 4) == spawn.delay + late)
+        }
+        let before = RedoubtWaves.beforeGleanerEase
+        for wave in 1...20 {
+            #expect(before.gleanerDelay(forWave: wave) == 0)
+            #expect(before.gleanerDragScale(forWave: wave) == 1)
+        }
+        #expect(RedoubtWaves.beforeFiguresGrew.gleanerDelay(forWave: 2) == 0)
+    }
+
+    /// Wave 2's Gleaners are telegraphed 6 s into the wave and land at 7 s. While they wait the
+    /// floor is topped up around them (they count toward the target), and the wave cannot end.
+    @Test func wave2sGleanersLandLateAndHoldTheWave() throws {
+        var (r, _) = waveOne(seed: 6)
+        r.orb.invulnerableTimer = 1e9
+        emptyTheFloor(&r)
+        run(&r, steps: seconds(3)) { $0.isWaveStarted }
+        try #require(r.wave == 2)
+        let gleaners = try #require(r.director.composition(forWave: 2).first { $0.role == .gleaner }).count
+        #expect(!r.arrivals.contains { $0.role == .gleaner })
+        #expect(r.pending.count - r.pendingIndex == gleaners)
+        #expect(r.pending.allSatisfy { $0.role == .gleaner })
+        // Shoot most of the crowd: the floor is made up to its target, the Gleaners counted.
+        run(&r, steps: seconds(1))
+        r.enemies.removeLast(15)
+        run(&r, steps: seconds(1.5))
+        let skitters = r.enemies.count { $0.role == .skitter } + r.arrivals.count { $0.role == .skitter }
+        #expect(skitters + gleaners == r.director.floorTarget(forWave: 2))
+        #expect(r.shootableOnFloor == r.director.floorTarget(forWave: 2))
+        // Everything else gone and the quota spent: the wave waits for its Gleaners.
+        r.quota = 0
+        r.arrivals.removeAll()
+        r.enemies.removeAll()
+        let start = r.tick - seconds(2.5)
+        var telegraphed: [Int] = []
+        var arrived: [Int] = []
+        for _ in 0..<seconds(6) {
+            for event in r.step(RedoubtInput()) {
+                if case .arrivalTelegraphed(_, .gleaner, _) = event { telegraphed.append(r.tick - start) }
+                if case .enemyArrived(_, .gleaner, _) = event { arrived.append(r.tick - start) }
+                #expect(!event.isWaveCleared)
+            }
+        }
+        #expect(telegraphed.count == gleaners)
+        #expect(arrived.count == gleaners)
+        let ripple = seconds(0.8) + 1
+        #expect(telegraphed.allSatisfy { (seconds(6)...(seconds(6) + ripple)).contains($0) }, "\(telegraphed)")
+        #expect(arrived.allSatisfy { (seconds(7)...(seconds(7) + ripple)).contains($0) }, "\(arrived)")
+        #expect(r.phase == .fighting)
+        #expect(r.enemies.count { $0.role == .gleaner } == gleaners)
     }
 
     @Test func theWallRunRuleCanBeTurnedOff() throws {

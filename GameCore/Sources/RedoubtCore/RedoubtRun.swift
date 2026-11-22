@@ -109,9 +109,11 @@ public struct RedoubtRun: Sendable {
         enemies.count { !$0.isDead && $0.role.holdsWave } + arrivals.count + (pending.count - pendingIndex) + quota
     }
 
-    /// Shootable enemies on the floor or telegraphed: what the floor target counts.
+    /// Shootable enemies on the floor, telegraphed or still to be telegraphed: what the floor
+    /// target counts.
     public var shootableOnFloor: Int {
         enemies.count { !$0.isDead && $0.role.holdsWave } + arrivals.count { $0.role.holdsWave }
+            + pending[pendingIndex...].count { $0.role.holdsWave }
     }
 
     public func enemy(_ id: Int) -> RedoubtEnemy? { enemies.first { $0.id == id } }
@@ -194,8 +196,17 @@ public struct RedoubtRun: Sendable {
         pendingIndex = 0
         chooseEntrySides(count: director.entrySides(forWave: next))
         for (index, spawn) in director.spawns(forWave: next).enumerated() {
+            // A spawn landing more than a telegraph's length into the wave (the early waves'
+            // Gleaners: `RedoubtWaves.gleanerDebutDelay`) is telegraphed from `pending` when the
+            // wave clock reaches it, so its marker shows for the usual time. It holds the wave
+            // and counts toward the floor target while it waits.
+            let lands = director.landing(of: spawn, inWave: next)
+            if lands > tuning.telegraphTime {
+                pending.append(RedoubtSpawn(delay: lands - tuning.telegraphTime, role: spawn.role))
+                continue
+            }
             let scattered = !entrySides.isEmpty && director.isScattered(index, forWave: next)
-            telegraph(spawn.role, showingFor: lead + spawn.delay, scattered: scattered)
+            telegraph(spawn.role, showingFor: lead + lands, scattered: scattered)
         }
     }
 
@@ -270,11 +281,11 @@ public struct RedoubtRun: Sendable {
 
     // MARK: Arrivals
 
-    /// Once the opening crowd is in, keeps the floor at its target: whenever the shootable count
-    /// falls short, a group of Skitters from the quota is telegraphed at once, from a random side.
+    /// Keeps the floor at its target (counting the opening crowd's Gleaners still to come):
+    /// whenever the shootable count falls short, a group of Skitters from the quota is telegraphed at once, from a random side.
     private mutating func topUpFloor(_ dt: Double) {
         groupCooldown -= dt
-        guard quota > 0, pendingIndex == pending.count, groupCooldown <= 0 else { return }
+        guard quota > 0, groupCooldown <= 0 else { return }
         let short = director.floorTarget(forWave: wave) - shootableOnFloor
         guard short > 0 else { return }
         let count = min(short, quota, RedoubtWaves.groupSize)

@@ -10,7 +10,8 @@ import RedoubtCore
 // were before it (see `redoubtWaves`). PUSH=0 turns off the main push and the scatter (the first
 // 13d entry exactly); SCATTER=0.2,0.25,... PUSHDEPTH FALLOFF ALONG SCATCLEAR WALLW GDRAWS tune it.
 // FIGURE=1 CROWD=1 QUOTA0=90 QUOTASTEP=25 EASE0=0.9 EASESTEP=0.015 SPITEASE=2 together restore
-// the game before the figures grew. SEEDBASE moves the seed set (default 1000) to check a result is not luck of the seeds.
+// the game before the figures grew. GLDELAY GLDRAG GLEASE tune the Gleaners' ease; GLDELAY=0
+// GLDRAG=1 restore the game before it. SEEDBASE moves the seed set (default 1000) to check a result is not luck of the seeds.
 
 private func redoubtTuning() -> RedoubtTuning {
     var t = RedoubtTuning()
@@ -60,6 +61,9 @@ private func redoubtWaves() -> RedoubtWaves {
     if let v = env["SPITWAVES"].flatMap(Double.init) { w.spitterEaseWaves = v }
     if let v = env["PUSH"].flatMap(Int.init) { w.pushAndScatter = v != 0 }
     if let v = env["SCATTER"] { w.scatterShare = v.split(separator: ",").compactMap { Double($0) } }
+    if let v = env["GLDELAY"].flatMap(Double.init) { w.gleanerDebutDelay = v }
+    if let v = env["GLDRAG"].flatMap(Double.init) { w.gleanerDebutDragSlowdown = v }
+    if let v = env["GLEASE"].flatMap(Double.init) { w.gleanerEaseWaves = v }
     return w
 }
 
@@ -113,6 +117,24 @@ private struct RedoubtStats {
     /// an enemy last landed within 250 of it.
     var deaths: [(wave: Int, near: Int, blocked: Int, sinceLanding: Double, cause: String)] = []
     var lastNearLanding = -1e9
+    /// Colonist pressure per wave (see `RedoubtSeizures`).
+    var seizures: [Int: RedoubtSeizures] = [:]
+    var seizedAt: [Int: Double] = [:]
+}
+
+/// How fast a wave's colonists were seized and lost, timed from the wave's start.
+private struct RedoubtSeizures {
+    var firstSeize: Double?
+    /// Distinct colonists seized, and colonists taken (by anything: a Gleaner's drag or a Skitter
+    /// or Husk at the end of the line), within 10 s, 20 s and by the wave's end.
+    var seized10 = 0, seized20 = 0, seizedAll = 0
+    var lost10 = 0, lost20 = 0, lostAll = 0
+    var byGleaner = 0
+    var crushed = 0
+    var freed = 0
+    /// Seconds from a seizure to the colonist being lost, for drags nobody broke.
+    var drags: [Double] = []
+    var seizedIDs: Set<Int> = []
 }
 
 /// Enemies within 120 and 200 of the orb, and the sectors of eight holding one within 150.
@@ -213,12 +235,39 @@ private func playRedoubt(skill: RedoubtPilot.Skill, seed: UInt64, maxMinutes: Do
                 let near = before.enemies.count { ($0.pos - before.orb.pos).length - $0.radius < 150 }
                 stats.deaths.append((run.wave, near, sectors, t - stats.lastNearLanding, redoubtCause(before)))
                 if stats.firstDeath == nil { stats.firstDeath = t }
-            case .colonistTaken(_, let by, _, _):
+            case .colonistTaken(let id, let by, _, _):
                 stats.taken[by.rawValue, default: 0] += 1
                 stats.lost += 1
-            case .colonistCrushed:
+                let since = t - (stats.waveStarts[run.wave] ?? t)
+                var s = stats.seizures[run.wave] ?? RedoubtSeizures()
+                if since <= 10 { s.lost10 += 1 }
+                if since <= 20 { s.lost20 += 1 }
+                s.lostAll += 1
+                if by == .gleaner {
+                    s.byGleaner += 1
+                    if let at = stats.seizedAt[id] { s.drags.append(t - at) }
+                }
+                stats.seizedAt[id] = nil
+                stats.seizures[run.wave] = s
+            case .colonistCrushed(let id, _, _):
                 stats.crushed += 1
                 stats.lost += 1
+                stats.seizures[run.wave, default: RedoubtSeizures()].crushed += 1
+                stats.seizedAt[id] = nil
+            case .colonistSeized(let id, _, _):
+                let since = t - (stats.waveStarts[run.wave] ?? t)
+                var s = stats.seizures[run.wave] ?? RedoubtSeizures()
+                if s.firstSeize == nil { s.firstSeize = since }
+                if s.seizedIDs.insert(id).inserted {
+                    if since <= 10 { s.seized10 += 1 }
+                    if since <= 20 { s.seized20 += 1 }
+                    s.seizedAll += 1
+                }
+                stats.seizedAt[id] = t
+                stats.seizures[run.wave] = s
+            case .colonistFreed(let id, _):
+                stats.seizures[run.wave, default: RedoubtSeizures()].freed += 1
+                stats.seizedAt[id] = nil
             case .powerCutBegan:
                 stats.powerCuts += 1
                 stats.powerCutWaves.append(run.wave)
@@ -436,6 +485,37 @@ func runRedoubt(_ args: [String]) {
                 + causes.sorted { $0.value > $1.value }.map { "\($0.key.prefix(4)):\($0.value)" }.joined(separator: ",") + "]"
         }
         print(dl)
+        // Colonist pressure, per wave, over the games that reached it: seconds to the first
+        // seizure (median, 10th percentile; a wave with none counts as its length), the share of
+        // its colonists seized and lost within 10 s, 20 s and by its end, the games losing 3 or
+        // more in its first 20 s, seize-to-lost seconds for unbroken drags (median, min), freed
+        // per game.
+        print("colonists by wave: first seize med/p10 | seized 10s/20s/end | lost 10s/20s/end (gleaner) | games lost>=3 in 20s | drag med/min s | freed/game | crushed/game")
+        for w in 1...min(lastWave, 10) {
+            let reached = all.filter { $0.wave >= w && $0.colonistsByWave[w] != nil }
+            guard !reached.isEmpty else { continue }
+            let total = Double(reached.reduce(0) { $0 + ($1.colonistsByWave[w] ?? 0) })
+            let s = reached.map { $0.seizures[w] ?? RedoubtSeizures() }
+            let firsts = zip(reached, s).map { g, x in x.firstSeize ?? g.waveSeconds[w] ?? (g.survival - (g.waveStarts[w] ?? 0)) }.sorted()
+            func pct(_ a: [Double], _ p: Double) -> Double { a.isEmpty ? .nan : a[min(Int(Double(a.count - 1) * p + 0.5), a.count - 1)] }
+            func share(_ f: (RedoubtSeizures) -> Int) -> Double { Double(s.reduce(0) { $0 + f($1) }) / total }
+            let drags = s.flatMap(\.drags).sorted()
+            let n = Double(reached.count)
+            print(String(format: "  w%-2d n%-3d %5.1f/%5.1f | %.2f/%.2f/%.2f | %.2f/%.2f/%.2f (%.2f) | %4.1f%% | %4.1f/%4.1f | %.2f | %.2f",
+                         w, reached.count, pct(firsts, 0.5), pct(firsts, 0.1),
+                         share(\.seized10), share(\.seized20), share(\.seizedAll),
+                         share(\.lost10), share(\.lost20), share(\.lostAll), share(\.byGleaner),
+                         100 * Double(s.count { $0.lost20 >= 3 }) / n,
+                         pct(drags, 0.5), drags.first ?? .nan,
+                         Double(s.reduce(0) { $0 + $1.freed }) / n, Double(s.reduce(0) { $0 + $1.crushed }) / n))
+        }
+        print(String(format: "delivered/game %.1f mean, charges earned %.2f mean, score %.0f mean",
+                     Double(all.reduce(0) { $0 + $1.delivered }) / Double(all.count),
+                     Double(all.reduce(0) { $0 + $1.delivered / tuning.colonistsPerCharge }) / Double(all.count),
+                     Double(all.reduce(0) { $0 + $1.score }) / Double(all.count)))
+        print(String(format: "mean wave %.2f, lives lost in w1+w2 %.2f mean",
+                     Double(all.reduce(0) { $0 + $1.wave }) / Double(all.count),
+                     Double(all.reduce(0) { $0 + ($1.deathsByWave[1] ?? 0) + ($1.deathsByWave[2] ?? 0) }) / Double(all.count)))
         let totalSteps = all.reduce(0) { $0 + $1.steps }
         let totalTime = all.reduce(0.0) { $0 + $1.stepSeconds }
         print(String(format: "step time          %.2f us mean over %d steps", totalTime / Double(max(totalSteps, 1)) * 1e6, totalSteps))

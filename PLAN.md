@@ -411,7 +411,11 @@ step is pushed so you can install it.
         day and said it was good and more natural.
   - [x] Refinement 2 (2026-11-21): the orb, enemies, colonists and shots are 50% bigger, in
         collision and in drawing, with the balance brought back. 416 tests. Pushed before its
-        independent check; see "Everything 50% bigger" in the Redoubt design.
+        independent check; see "Everything 50% bigger" in the Redoubt design. You played it and
+        called the size a good improvement.
+  - [x] Refinement 3 (2026-11-21): colonists are taken later and more slowly in the early
+        waves. 425 tests. Pushed before its independent check; see "Colonists taken later and
+        more slowly" in the Redoubt design.
 - [ ] 14. Riftwing design written here and approved
 - [ ] 15. Riftwing build
 - [ ] Gate: Riftwing played and refined
@@ -1021,6 +1025,57 @@ everything by 50%.
   - **Not changed yet.** The better trade is probably to put the Spitter slow-down back
     toward 2 and ease wave 5 instead. It waits for your verdict on the size, since a different
     size needs the balance re-run anyway.
+
+### Colonists taken later and more slowly (2026-11-21)
+
+After playing at the bigger size you said that twice nearly every colonist was taken very
+quickly when the stage started, that balance is also how quickly colonists are taken and not
+only how early the player dies, and that Ridgeline takes them much later in a stage and
+slowly in the early stages. Until now the bots measured only how the orb fared.
+
+- **Why it happened.** Gleaners first come in wave 2: four of them against six colonists, all
+  on the floor about two seconds in. Each went straight for the nearest colonist and dragged
+  it to the nearest wall at 60 units a second, and a colonist can stand 50 units from a wall.
+  The novice bot's first colonist was seized 2 seconds into wave 2 and gone 1.5 seconds later.
+- **Gleaners arrive later in the early waves.** In wave 2 the opening crowd's Gleaners land 7
+  seconds after the rest of the crowd (their markers show for the usual second). The delay is
+  4.2 seconds in wave 4 and gone by wave 7. The wave cannot end while they are on their way.
+- **They drag more slowly in the early waves.** Six times slower in wave 2 (10 units a
+  second), four times in wave 4, and the normal 60 from wave 7.
+- **The numbers** are in `WaveDirector.swift`: `gleanerDebutDelay` 7, `gleanerDebutDragSlowdown`
+  6, `gleanerEaseWaves` 5. `RedoubtWaves.beforeGleanerEase` gives exactly the previous game.
+  The Gleaners' count, their approach speed and where colonists stand are unchanged.
+- **Result for the novice over 80 seeds** (Gleaners come in waves 2, 4, 7, 9 and on; waves 3,
+  5 and 6 introduce other enemies and have none):
+
+  | Wave | First seizure, s (one game in ten is earlier than) | Colonists lost by the wave's end | Seizure to loss, s (shortest) |
+  |---|---|---|---|
+  | 2 | 2.0 (1.0) to 10.8 (8.3) | 23% to 3% | 1.5 (0.5) to 5.9 (3.4) |
+  | 4 | 1.5 (0.7) to 6.2 (5.1) | 29% to 13% | 1.7 (0.5) to 5.4 (1.4) |
+  | 7 | 1.2 (0.7) to 1.1 (0.7) | 37% to 39% | 1.9 (0.7) to 1.9 (0.4) |
+
+  Games losing three or more colonists in the first 20 seconds of wave 2: 14% to none; of
+  wave 4: 35% to 9%.
+- **The rest of the balance held:** novice wave 6 (mean 5.53; it was 5.46), survival 188 s,
+  lives lost in waves 1 and 2 together 0.20; competent 10 (9.90); wall circler 3 (3.46);
+  corner camper 7 (7.30). More colonists delivered means 0.6 more Shockwave charges a game
+  and about 4% more score.
+- **What it does not fix.**
+  - Every seizure still happens in one burst when the Gleaners land, because reinforcements
+    are Skitters only. The burst is later and slower in waves 2 and 4, but colonists are not
+    taken across the length of a wave the way Ridgeline's are.
+  - From wave 7 the Gleaners are as before: about 39% of colonists gone in the first seconds
+    of the wave.
+  - The shortest drags are still 1.4 to 3.4 seconds, when a colonist stands beside a wall.
+    A floor on that needs a rule (a hold before the drag starts), not a speed.
+  - A fuller answer would send Gleaners in through the wave in ones and twos and give every
+    seizure a minimum time. That is a design change and was not made here.
+- **Not judged on a screen:** a drag at 10 units a second may look like a crawl. The novice
+  bot ignores the alarm, so that a person will use the slower drag to shoot the Gleaner is
+  reasoned, not measured.
+- The harness now prints, per wave, the time to the first seizure, the share seized and lost
+  in the first 10 and 20 seconds and by the end, the time from seizure to loss, and how many
+  were freed.
 
 ### What the independent check of sound, polish and balance found
 

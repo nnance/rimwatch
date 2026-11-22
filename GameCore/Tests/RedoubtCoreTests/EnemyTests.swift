@@ -42,7 +42,9 @@ import GameCore
         var r = quietRun()
         let colonist = r.addColonist(at: Vec2(450, 80))
         let gleaner = r.addEnemy(.gleaner, at: Vec2(450, 150))
-        let events = run(&r, steps: seconds(6)) { $0.isHuskFormed }
+        // A quiet run is in wave 0, before the Gleaners' debut, so it drags at the debut's slow
+        // pace (`RedoubtWaves.gleanerDebutDragSlowdown`): about 9 s to the wall.
+        let events = run(&r, steps: seconds(12)) { $0.isHuskFormed }
         let kinds = events.map(\.kind)
         // Seized, dragged to the south wall, lost, and the Gleaner turns.
         #expect(kinds.contains("colonistSeized"))
@@ -66,6 +68,24 @@ import GameCore
         run(&r, steps: seconds(1))
         #expect(try r.req(enemy: gleaner).state == .hunting)
         #expect(try distance(r.req(enemy: gleaner).pos, r.orb.pos) < distance(held, r.orb.pos) - 40)
+    }
+
+    /// The Gleaners' ease: a seized colonist is dragged six times more slowly in wave 2, four
+    /// times in wave 4, and at the full `gleanerDragSpeed` from wave 7.
+    @Test func gleanersDragSlowlyInTheirFirstWaves() throws {
+        for (wave, scale) in [(2, 1.0 / 6), (4, 0.25), (7, 1.0), (9, 1.0)] {
+            var r = quietRun()
+            r.wave = wave
+            let colonist = r.addColonist(at: Vec2(450, 250))
+            let gleaner = r.addEnemy(.gleaner, at: Vec2(450, 290))
+            run(&r, steps: seconds(1)) { if case .colonistSeized = $0 { true } else { false } }
+            #expect(try r.req(colonist: colonist).state == .seized(by: gleaner))
+            run(&r, steps: 1)
+            let from = try r.req(enemy: gleaner).pos
+            run(&r, steps: seconds(0.5))
+            let speed = try distance(r.req(enemy: gleaner).pos, from) / 0.5
+            #expect(abs(speed - r.tuning.gleanerDragSpeed * scale) < 0.5, "wave \(wave): \(speed)")
+        }
     }
 
     @Test func aGleanerTakesItsColonistToTheNearestBurrow() throws {

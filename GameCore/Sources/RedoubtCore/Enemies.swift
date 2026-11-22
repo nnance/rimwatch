@@ -198,7 +198,7 @@ extension RedoubtRun {
                 becomeHusk(at: index)
                 return
             }
-            enemy.vel = dir * min(tuning.gleanerDragSpeed, dist / dt)
+            enemy.vel = dir * min(tuning.gleanerDragSpeed * director.gleanerDragScale(forWave: wave), dist / dt)
             // The colonist trails behind.
             colonists[c].pos = clampToFloor(enemy.pos - dir * (enemy.radius + tuning.colonistRadius - tuning.figure(2)),
                                             radius: tuning.colonistRadius)

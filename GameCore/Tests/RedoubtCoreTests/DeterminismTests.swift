@@ -45,7 +45,9 @@ import GameCore
     /// top-up groups, deliveries, Shockwaves, an extra life and the airlock moving. Debug and
     /// Release builds give the same values. If a deliberate change to the rules, the
     /// tuning, the wave makeup or the pilot breaks it, capture the new values from the printed
-    /// line and say so in the commit. Last captured when the figures grew by half
+    /// line and say so in the commit. Last captured for the Gleaners' ease (late-landing,
+    /// slow-dragging Gleaners in their first waves: `RedoubtWaves.gleanerDebutDelay`); before
+    /// that when the figures grew by half
     /// (`RedoubtTuning.figureScale` 1.5) with the balance that came with them; before that after
     /// the owner's second play, for the main push and the scatter (`RedoubtWaves.pushAndScatter`);
     /// before that in 13d for the early-game
@@ -54,6 +56,21 @@ import GameCore
     @Test func aScriptedRunReplaysExactly() throws {
         let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180)
         print("REDOUBT GOLDEN hash \(hash) events \(events) score \(r.score) wave \(r.wave) saved \(r.colonistsSaved) delivered \(r.colonistsDelivered) lives \(r.orb.lives) tick \(r.tick)")
+        #expect(hash == 15_480_360_641_026_318_134)
+        #expect(events == 7248)
+        #expect(r.score == 110_600)
+        #expect(r.wave == 6)
+        #expect(r.colonistsSaved == 42)
+        #expect(r.colonistsDelivered == 42)
+        #expect(r.orb.lives == 4)
+        #expect(r.tick == 21_600)
+    }
+
+    /// With `RedoubtWaves.beforeGleanerEase` the run is exactly the game before the Gleaners'
+    /// ease: the golden values captured when the figures grew.
+    @Test func turningOffTheGleanersEaseReplaysTheGameBeforeIt() throws {
+        let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180,
+                                                 waves: RedoubtWaves.beforeGleanerEase)
         #expect(hash == 10_641_542_555_866_601_042)
         #expect(events == 7290)
         #expect(r.score == 105_650)

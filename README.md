@@ -95,7 +95,9 @@ colonists still to save.
   each wave until, from wave 8, the crowd lands anywhere. So the opening waves can be read and
   met, and there is room to back away. The crowd starts a little smaller and grows to its full
   size by wave 7, and Spitters fire at about a quarter of their rate in the wave they first
-  appear, back to full rate by wave 7. Laps hugging the wall are no refuge: while the orb runs along a wall, new
+  appear, back to full rate by wave 7. In the Gleaners' first waves they land several seconds
+  after the rest of the crowd (7 in wave 2) and drag a seized colonist slowly, so there is time
+  to see the alarm and shoot them; by wave 7 they come with the crowd at full pace. Laps hugging the wall are no refuge: while the orb runs along a wall, new
   groups land on the path ahead of it.
 - **The loop:** colonists shelter around the floor. Touch one and they follow you in a line; lead
   the line to the airlock to deliver them all at once. Each colonist in the line is worth more than
@@ -195,7 +197,10 @@ The arguments are the number of seeds, a cap in minutes per game, and the bots t
 `idle novice competent wallCircler cornerCamper`. For each bot it prints survival, wave reached,
 score (and score a minute), games that reached the cap, colonists saved and lost, kills, power
 cuts, how close arrivals land to the orb, deaths by cause, and by wave the deaths, colonists saved,
-pressure on the orb (enemies within 120 and 200, blocked directions) and how each death happened.
+pressure on the orb (enemies within 120 and 200, blocked directions) and how each death happened,
+and how fast colonists go: by wave, seconds to the first seizure, the share seized and lost in
+the first 10 and 20 seconds and by the wave's end, seconds from a seizure to the loss, and how
+many were freed.
 `MAP=1000,8919 .build/release/Harness redoubt` instead prints, for each seed, a text map of where
 each of the first five waves' opening crowd lands (the novice bot plays in between, so the orb is
 where a player might leave it); `MAPWAVES` and `MAPBOT` change the waves shown and the bot.

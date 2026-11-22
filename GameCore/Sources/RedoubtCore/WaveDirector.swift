@@ -31,13 +31,22 @@ public struct RedoubtWaves: Sendable {
     /// The wave makeup as it was before the figures grew (`RedoubtTuning.figureScale` 1.5):
     /// with this and a figure scale of 1 the game is exactly the one before.
     public static var beforeFiguresGrew: RedoubtWaves {
-        var waves = RedoubtWaves()
+        var waves = RedoubtWaves.beforeGleanerEase
         waves.crowdScale = 1
         waves.quotaFirst = 90
         waves.quotaGrowth = 25
         waves.crowdEaseStart = 0.9
         waves.crowdEaseGrowth = 0.015
         waves.spitterDebutSlowdown = 2
+        return waves
+    }
+
+    /// The waves as they were before the Gleaners' ease: every Gleaner of the opening crowd lands
+    /// with the rest of it and drags at the full speed from its debut.
+    public static var beforeGleanerEase: RedoubtWaves {
+        var waves = RedoubtWaves()
+        waves.gleanerDebutDelay = 0
+        waves.gleanerDebutDragSlowdown = 1
         return waves
     }
 
@@ -86,6 +95,40 @@ public struct RedoubtWaves: Sendable {
     /// entry holds for every later wave). Only used while the wave has entry walls: from wave 8,
     /// the whole crowd is anywhere on the floor anyway.
     public var scatterShare: [Double] = [0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 1]
+
+    /// The Gleaners' ease (after the owner's third play: nearly every colonist of a wave was
+    /// taken in its first few seconds, where Ridgeline takes them late and slowly in its early
+    /// stages). In the Gleaners' debut wave the opening crowd's Gleaners land
+    /// `gleanerDebutDelay` seconds after the rest of it (their telegraphs start that much later),
+    /// and a seized colonist is dragged `gleanerDebutDragSlowdown` times more slowly; both ease
+    /// back to nothing over `gleanerEaseWaves` waves (by wave 8). `beforeGleanerEase` sets the
+    /// first two to 0 and 1, the game before.
+    public var gleanerDebutDelay = 7.0
+    public var gleanerDebutDragSlowdown = 6.0
+    public var gleanerEaseWaves = 5.0
+
+    /// How far a wave is into the Gleaners' ease: 1 in their debut wave (and before), easing to
+    /// 0 over `gleanerEaseWaves` waves.
+    private func gleanerEase(forWave wave: Int) -> Double {
+        let first = Self.debut.first { $0.role == .gleaner }?.wave ?? 1
+        return max(0, 1 - Double(max(wave - first, 0)) / max(gleanerEaseWaves, 1e-9))
+    }
+
+    /// Seconds after the rest of the opening crowd that its Gleaners land in a wave.
+    public func gleanerDelay(forWave wave: Int) -> Double {
+        max(gleanerDebutDelay, 0) * gleanerEase(forWave: wave)
+    }
+
+    /// Seconds after a wave begins that one of its opening spawns lands: its place in the
+    /// ripple, and the Gleaners' delay on top for a Gleaner.
+    public func landing(of spawn: RedoubtSpawn, inWave wave: Int) -> Double {
+        spawn.delay + (spawn.role == .gleaner ? gleanerDelay(forWave: wave) : 0)
+    }
+
+    /// Gleaners' drag speed in a wave, as a multiple of `RedoubtTuning.gleanerDragSpeed`.
+    public func gleanerDragScale(forWave wave: Int) -> Double {
+        1 / (1 + (max(gleanerDebutDragSlowdown, 1e-9) - 1) * gleanerEase(forWave: wave))
+    }
 
     /// Walls the crowd comes in from in a wave (4: anywhere).
     public func entrySides(forWave wave: Int) -> Int {
