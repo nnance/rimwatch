@@ -436,8 +436,8 @@ step is pushed so you can install it.
       flap plus a dive with no weapon, and told me to build while you were away; I took that
       as approval. My other choices are marked "mine" in "Riftwing design" for you to overrule.
 - [x] 15. Riftwing build (2026-11-22): all five stages are in and pushed, with three rounds of
-      corrections after independent checks. 629 tests. The third round is the last tuned
-      against bots; it is being checked for defects only.
+      corrections after independent checks. 630 tests. The third round was the last tuned
+      against bots; its defect check passed with notes, and the one defect it found is fixed.
   - [x] 15a. Game logic (2026-11-21): the `RiftwingCore` target, its tests, eight scripted
         bots and the `riftwing` harness. 521 tests. The novice bot reaches wave 5.5 to 5.6 on
         three sets of 200 games; the competent bot wave 10.3; no exploit bot outlasts or
