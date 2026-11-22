@@ -605,6 +605,53 @@ import GameCore
         #expect(!RedoubtWaves.beforeGleanersThroughWave.lateArrivalsScatter)
     }
 
+    /// The same for the game since Refinement 6: every Gleaner of waves 2 and 4, the first on
+    /// its clock and the rest through the wave, lands with the main push along the entry wall,
+    /// even one whose opening-crowd spawn is scattered, and keeps the clear distance from the orb
+    /// as it is when its marker appears, the orb flying about meanwhile.
+    @Test func lateGleanersLandWithTheMainPushAndKeepClearOfTheOrbThroughTheWave() throws {
+        let moves = [Vec2(1, 0.4), Vec2(-0.7, -1), Vec2(0.3, -1), Vec2(-1, 0.8)]
+        var fromScattered = 0
+        for (n, seed) in ([4, 9, 17, 33] as [UInt64]).enumerated() {
+            var (r, _) = waveOne(seed: seed)
+            r.orb.invulnerableTimer = 1e9
+            for wave in [2, 3, 4] {
+                emptyTheFloor(&r)
+                run(&r, steps: seconds(5)) { $0.isWaveStarted }
+                try #require(r.wave == wave)
+                guard wave != 3 else { continue }
+                let plan = r.director.arrivals(forWave: wave)
+                let late = plan.indices.filter { plan[$0].delay > r.tuning.telegraphTime }
+                try #require(late.count == r.director.crowdCount(of: .gleaner, inWave: wave))
+                #expect(late.allSatisfy { plan[$0].role == .gleaner })
+                #expect(late.dropFirst().allSatisfy { plan[$0].afterQuotaSpent != nil })
+                fromScattered += late.count { r.director.isScattered($0, forWave: wave) }
+                let wall = try #require(r.entrySides.first)
+                #expect(r.entrySides.count == 1)
+                var ids: Set<Int> = []
+                let slack = r.tuning.orbMaxSpeed / 120 + 1e-6
+                for step in 0..<seconds(40) {
+                    // Fly about, and keep the floor thin so nothing else is telegraphed.
+                    let input = RedoubtInput(move: moves[(n + step / 90) % moves.count])
+                    r.quota = 0
+                    r.enemies.removeAll { $0.role != .gleaner }
+                    let orbAt = r.orb.pos
+                    for event in r.step(input) {
+                        guard case .arrivalTelegraphed(let id, .gleaner, let at) = event, ids.insert(id).inserted else { continue }
+                        #expect(distance(at, orbAt) >= r.tuning.safeDistance - slack, "seed \(seed) wave \(wave)")
+                        #expect(gap(at, to: wall, r.tuning) <= r.tuning.pushDepth + 1e-9,
+                                "seed \(seed) wave \(wave): \(at) not along \(wall)")
+                    }
+                    if ids.count == late.count { break }
+                }
+                #expect(ids.count == late.count, "seed \(seed) wave \(wave)")
+                r.enemies.removeAll()
+                r.arrivals.removeAll()
+            }
+        }
+        #expect(fromScattered > 0)
+    }
+
     /// Before Refinement 6 (`beforeGleanersThroughWave`): the orb lost while wave 2's Gleaners
     /// are still to come: they are telegraphed and land as
     /// usual (clear of where it will respawn), and the wave still ends once they are shot.

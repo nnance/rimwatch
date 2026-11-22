@@ -27,6 +27,10 @@ import RedoubtCore
 // left in each appearance; SPITN=2,6,7,8 sets the Spitters after their debut by appearance (empty
 // for the old one more a wave); SPITSHOTE SPITLEAD set a debut Spitter's shot speed and lead
 // (as multiples); SPITRANGE=lo,hi and SPITWIND set the Spitters' holding range and wind-up.
+// GLMINGAP (least gap between Gleaners) and DRAGMIN (least drag speed) tune the 2026-11-21 fixes.
+// The "gleaner" lines print, per wave, Gleaner markers sharing a step with another, the largest
+// gap between consecutive ones, and seconds a wave was held open only by Gleaners still to come;
+// "drag speed" each drag's speed on its first step.
 // Each wave's colonist line also prints the share of its seizures in its first 10 s.
 
 private func redoubtTuning() -> RedoubtTuning {
@@ -101,6 +105,8 @@ private func redoubtWaves() -> RedoubtWaves {
     if let v = env["SPITN"] { w.spitterCounts = v.split(separator: ",").compactMap { Int($0) } }
     if let v = env["GLARRIVE"] { w.gleanerFirstArrival = v.split(separator: ",").compactMap { Double($0) } }
     if let v = env["SEIZEMIN"].flatMap(Double.init) { w.seizeTimeFloor = v }
+    if let v = env["GLMINGAP"].flatMap(Double.init) { w.gleanerLeastGap = v }
+    if let v = env["DRAGMIN"].flatMap(Double.init) { w.leastDragSpeed = v }
     if let v = env["APPEASE"].flatMap(Int.init) { w.easeByAppearance = v != 0 }
     if let v = env["SPITSTEPS"] { w.spitterRampEase = v.split(separator: ",").compactMap { Double($0) } }
     if let v = env["BURSTEPS"] { w.burrowRampEase = v.split(separator: ",").compactMap { Double($0) } }
@@ -165,6 +171,17 @@ private struct RedoubtStats {
     /// Colonist pressure per wave (see `RedoubtSeizures`).
     var seizures: [Int: RedoubtSeizures] = [:]
     var seizedAt: [Int: Double] = [:]
+    /// Gleaner telegraphs (first marker only), per wave: seconds from the wave's start, and how
+    /// many shared their step with another Gleaner's telegraph.
+    var gleanerMarks: [Int: [Double]] = [:]
+    var gleanerSameStep: [Int: Int] = [:]
+    var gleanerMarked: Set<Int> = []
+    /// Each drag's speed on its first step after the seizure (its own movement, units a second).
+    var dragSpeeds: [Double] = []
+    var dragging: [Int: Int] = [:]
+    /// Fighting steps with the quota spent and nothing on the floor or on its way: the wave held
+    /// open only by Gleaners still to come.
+    var gleanerStallSteps: [Int: Int] = [:]
 }
 
 /// How fast a wave's colonists were seized and lost, timed from the wave's start.
@@ -256,6 +273,32 @@ private func playRedoubt(skill: RedoubtPilot.Skill, seed: UInt64, maxMinutes: Do
                 bump(&stats.near120, w, a)
                 bump(&stats.near200, w, b)
                 bump(&stats.blocked, w, c)
+            }
+        }
+        do {
+            let w = run.phase == .fighting ? run.wave : run.wave + 1
+            var marks = 0
+            for event in events {
+                if case .arrivalTelegraphed(let id, .gleaner, _) = event, stats.gleanerMarked.insert(id).inserted {
+                    marks += 1
+                    // Shown with the opening crowd before the wave began: negative.
+                    let at: Double = if case .intermission(let left) = run.phase { -left } else { t - (stats.waveStarts[w] ?? t) }
+                    stats.gleanerMarks[w, default: []].append(at)
+                }
+            }
+            if marks >= 2 { stats.gleanerSameStep[w, default: 0] += marks }
+            for enemy in run.enemies where enemy.role == .gleaner {
+                if case .dragging = enemy.state {
+                    // The seizing step leaves it still; the next is its first drag step.
+                    stats.dragging[enemy.id, default: 0] += 1
+                    if stats.dragging[enemy.id] == 2 { stats.dragSpeeds.append(enemy.vel.length) }
+                } else {
+                    stats.dragging[enemy.id] = nil
+                }
+            }
+            if run.phase == .fighting, run.quota == 0, run.arrivals.isEmpty, run.enemiesHoldingWave > 0,
+               !run.enemies.contains(where: { $0.role.holdsWave }) {
+                stats.gleanerStallSteps[run.wave, default: 0] += 1
             }
         }
         for event in events {
@@ -576,6 +619,32 @@ func runRedoubt(_ args: [String]) {
                          pct(drags, 0.5), drags.first ?? .nan,
                          Double(s.reduce(0) { $0 + $1.freed }) / n, Double(s.reduce(0) { $0 + $1.crushed }) / n,
                          100 * Double(s.reduce(0) { $0 + $1.seized10 }) / Double(max(s.reduce(0) { $0 + $1.seizedAll }, 1))))
+        }
+        // Gleaners through the wave: per wave, telegraphs sharing a step with another / all, the
+        // largest gap between consecutive ones (s), and seconds per game the wave was held open
+        // only by Gleaners still to come.
+        var same = "gleaners same step ", gaps = "gleaner max gap s  ", stall = "gleaner stall s/gm "
+        var allGaps: [Double] = []
+        for w in 1...min(lastWave, 16) {
+            let marks = all.compactMap { $0.gleanerMarks[w] }
+            guard !marks.isEmpty else { continue }
+            let n = marks.reduce(0) { $0 + $1.count }
+            same += " w\(w):\(all.reduce(0) { $0 + ($1.gleanerSameStep[w] ?? 0) })/\(n)"
+            let g = marks.flatMap { m in zip(m, m.dropFirst()).map { $1 - $0 } }
+            allGaps += g
+            gaps += String(format: " w%d:%.1f", w, g.max() ?? 0)
+            let reached = all.filter { $0.wave >= w }
+            stall += String(format: " w%d:%.2f", w, Double(reached.reduce(0) { $0 + ($1.gleanerStallSteps[w] ?? 0) }) * RedoubtRun.timeStep / Double(max(reached.count, 1)))
+        }
+        print(same)
+        print(gaps, String(format: " all max %.2f, min %.2f", allGaps.max() ?? 0, allGaps.min() ?? 0))
+        print(stall)
+        let speeds = all.flatMap(\.dragSpeeds).sorted()
+        if !speeds.isEmpty {
+            func at(_ p: Double) -> Double { speeds[min(Int(Double(speeds.count) * p), speeds.count - 1)] }
+            print(String(format: "drag speed (first step) n%d  min %.2f  0.5%% %.2f  1%% %.2f  3%% %.2f  median %.1f   under 8: %.2f%%",
+                         speeds.count, speeds[0], at(0.005), at(0.01), at(0.03), at(0.5),
+                         100 * Double(speeds.count { $0 < 8 - 1e-6 }) / Double(speeds.count)))
         }
         print(String(format: "delivered/game %.1f mean, charges earned %.2f mean, score %.0f mean",
                      Double(all.reduce(0) { $0 + $1.delivered }) / Double(all.count),

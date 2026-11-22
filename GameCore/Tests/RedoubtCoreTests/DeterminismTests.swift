@@ -45,7 +45,9 @@ import GameCore
     /// top-up groups, deliveries, Shockwaves, an extra life and the airlock moving. Debug and
     /// Release builds give the same values. If a deliberate change to the rules, the
     /// tuning, the wave makeup or the pilot breaks it, capture the new values from the printed
-    /// line and say so in the commit. Last captured for Refinement 6 (Gleaners through the wave
+    /// line and say so in the commit. Last captured when the Gleaners through the wave got a least
+    /// gap between them, a fallback counted from the one before, and a least drag speed
+    /// (`RedoubtWaves.gleanerLeastGap`, `leastDragSpeed`); before that for Refinement 6 (Gleaners through the wave
     /// with a least seizure time, the Spitters' and Burrows' eases counted in their own
     /// appearances: `RedoubtWaves.gleanersThroughWave`); before that for the Gleaners' ramp (their
     /// ease counted in the waves that send them: `RedoubtWaves.gleanerRampEase`); before that for the Burrows' ease (one Burrow pouring
@@ -61,12 +63,12 @@ import GameCore
     @Test func aScriptedRunReplaysExactly() throws {
         let (hash, r, events) = Self.fingerprint(seed: 1, skill: .competent, seconds: 180)
         print("REDOUBT GOLDEN hash \(hash) events \(events) score \(r.score) wave \(r.wave) saved \(r.colonistsSaved) delivered \(r.colonistsDelivered) lives \(r.orb.lives) tick \(r.tick)")
-        #expect(hash == 6_031_587_515_073_249_023)
-        #expect(events == 7486)
-        #expect(r.score == 111_200)
+        #expect(hash == 17_141_592_255_113_881_112)
+        #expect(events == 7475)
+        #expect(r.score == 113_950)
         #expect(r.wave == 6)
         #expect(r.colonistsSaved == 42)
-        #expect(r.colonistsDelivered == 41)
+        #expect(r.colonistsDelivered == 42)
         #expect(r.orb.lives == 4)
         #expect(r.tick == 21_600)
     }

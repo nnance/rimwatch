@@ -107,6 +107,77 @@ import GameCore
         #expect(order.last!.clock - order[0].clock >= 5)
     }
 
+    /// The second of the run (`tick`) at which each Gleaner marker first showed, stepping `r`
+    /// until `count` have shown or `limit` seconds pass, `each` run before every step.
+    private func gleanerMarks(_ r: inout RedoubtRun, count: Int, limit: Double,
+                              each: (inout RedoubtRun) -> Void = { _ in }) -> [Double] {
+        var marks: [Double] = []
+        var marked: Set<Int> = []
+        for _ in 0..<seconds(limit) {
+            each(&r)
+            for event in r.step(still) {
+                if case .arrivalTelegraphed(let id, .gleaner, _) = event, marked.insert(id).inserted {
+                    marks.append(Double(r.tick) * RedoubtRun.timeStep)
+                }
+            }
+            if marks.count == count { break }
+        }
+        return marks
+    }
+
+    /// However fast the quota goes, no Gleaner is telegraphed sooner than `gleanerLeastGap` (4 s)
+    /// after the one before (a wave's first included, even one telegraphed with the opening
+    /// crowd), so a quick player still meets them one at a time, never two in a step. Here the
+    /// whole quota is sent in the moment the wave starts while the floor stays full.
+    @Test func gleanersKeepALeastGapHoweverFastTheQuotaGoes() throws {
+        #expect(RedoubtWaves().gleanerLeastGap == 4)
+        for wave in Self.gleanerWaves {
+            // From the end of the wave before, so the markers shown with the opening crowd count.
+            var r = try run(toWave: wave - 1)
+            r.pendingIndex = r.pending.count
+            r.quota = 0
+            r.arrivals.removeAll()
+            r.enemies.removeAll()
+            let count = r.director.crowdCount(of: .gleaner, inWave: wave)
+            let marks = gleanerMarks(&r, count: count, limit: 70) { r in
+                guard r.wave == wave, r.phase == .fighting else { return }
+                r.quota = 0
+                // Something always left to fight, so the wave is never held open by them alone.
+                if !r.enemies.contains(where: { $0.role == .skitter }) { _ = r.addEnemy(.skitter, at: Vec2(60, 60)) }
+            }
+            try #require(marks.count == count, "wave \(wave): \(marks)")
+            #expect(r.wave == wave)
+            for (a, b) in zip(marks, marks.dropFirst()) {
+                #expect(b - a >= 4 - 1e-9, "wave \(wave): \(marks)")
+            }
+        }
+    }
+
+    /// The clock fallback counts from the Gleaner before, not the wave's first: one brought in
+    /// early by the quota is followed 8 s later at the latest, however the quota goes after.
+    @Test func theClockFallbackCountsFromTheGleanerBefore() throws {
+        var r = try run(toWave: 9)
+        let plan = r.director.arrivals(forWave: 9).filter { $0.role == .gleaner }
+        try #require(plan.count == 6)
+        let shares = plan.dropFirst().map { $0.afterQuotaSpent ?? -1 }
+        var spentEarly = false
+        let marks = gleanerMarks(&r, count: plan.count, limit: 70) { r in
+            r.groupCooldown = 1e9
+            // Once the first has shown, enough of the quota is sent in for the second, and then
+            // no more.
+            if !spentEarly, r.pendingIndex == 1 {
+                spentEarly = true
+                r.quota = Int((Double(r.waveQuota) * (1 - (shares[0] + shares[1]) / 2)).rounded())
+            }
+        }
+        try #require(spentEarly)
+        try #require(marks.count == plan.count)
+        #expect(r.quotaSpent >= shares[0] && r.quotaSpent < shares[1])
+        for (a, b) in zip(marks, marks.dropFirst()) {
+            #expect(b - a <= 8 + RedoubtRun.timeStep + 1e-9, "\(marks)")
+        }
+    }
+
     /// A wave whose floor is not being cleared still gets its Gleaners, on the clock fallback.
     @Test func aStalledWaveStillGetsItsGleanersOnTheClock() throws {
         var r = try run(toWave: 2)
@@ -129,9 +200,10 @@ import GameCore
         }
     }
 
-    /// Everything shot and the quota spent: the wave waits only for its first Gleaner's time, the
-    /// rest come in straight after it (none is held back by a quota that is gone), and once they
-    /// are shot the wave ends.
+    /// Everything shot and the quota spent: the wave waits only for its first Gleaner's time;
+    /// after that, with nothing else left, the least gap is waived, so each of the rest is
+    /// telegraphed as soon as the one before is shot (none is held back by a quota that is gone,
+    /// and no two share a step), and once they are shot the wave ends.
     @Test func theWaveWaitsForItsGleanersAndNeverStalls() throws {
         var r = try run(toWave: 4)
         let plan = r.director.arrivals(forWave: 4).filter { $0.role == .gleaner }
@@ -140,20 +212,29 @@ import GameCore
         r.enemies.removeAll()
         #expect(r.enemiesHoldingWave == plan.count)
         var telegraphed: [Double] = []
-        for _ in 0..<seconds(12) {
+        var cleared = false
+        for _ in 0..<seconds(16) {
+            // Each Gleaner shot the moment it lands.
+            r.enemies.removeAll()
             let clock = r.waveClock
-            for event in r.step(still) {
+            let events = r.step(still)
+            for event in events {
                 if case .arrivalTelegraphed(_, .gleaner, _) = event { telegraphed.append(clock + RedoubtRun.timeStep) }
-                #expect(!event.isWaveCleared)
+            }
+            if events.contains(where: \.isWaveCleared) {
+                cleared = true
+                break
             }
         }
         try #require(telegraphed.count == plan.count)
         let first = plan[0].delay - r.tuning.telegraphTime
-        #expect(telegraphed.allSatisfy { abs($0 - first) <= RedoubtRun.timeStep + 1e-9 }, "\(telegraphed)")
-        #expect(r.enemies.count { $0.role == .gleaner } == plan.count)
-        r.enemies.removeAll()
-        let end = RedoubtCoreTests.run(&r, steps: seconds(1)) { $0.isWaveCleared }
-        #expect(end.contains { $0.isWaveCleared })
+        #expect(abs(telegraphed[0] - first) <= RedoubtRun.timeStep + 1e-9, "\(telegraphed)")
+        // Each next one as soon as the one before has landed and been shot: never in the same
+        // step, never waiting out the least gap.
+        for (a, b) in zip(telegraphed, telegraphed.dropFirst()) {
+            #expect(b - a > 0 && b - a <= r.tuning.telegraphTime + 2 * RedoubtRun.timeStep + 1e-9, "\(telegraphed)")
+        }
+        #expect(cleared)
     }
 
     /// Gleaners still to come through the wave do not count toward the floor target, so the floor
@@ -171,9 +252,9 @@ import GameCore
         let onFloor = r.enemies.count { $0.role.holdsWave } + r.arrivals.count { $0.role.holdsWave }
         #expect(onFloor + late == target)
         #expect(r.shootableOnFloor == target)
-        // Spend the quota: the rest come in on top of a full floor, one each.
+        // Spend the quota: the rest come in on top of a full floor, one each, the least gap apart.
         r.quota = 0
-        RedoubtCoreTests.run(&r, steps: seconds(10))
+        RedoubtCoreTests.run(&r, steps: seconds(10 + r.director.gleanerLeastGap * Double(waiting)))
         #expect(r.pendingIndex == r.pending.count)
         #expect(r.shootableOnFloor <= target + waiting + 1)
     }
@@ -187,15 +268,15 @@ import GameCore
         r.quota = 0
         r.arrivals.removeAll()
         r.enemies.removeAll()
-        // Lost just before the first one's marker shows (9 s in), so all are telegraphed while it
-        // is down.
+        // Lost just before the first one's marker shows (9 s in), so it and the next are
+        // telegraphed while it is down or just back.
         RedoubtCoreTests.run(&r, steps: seconds(8.6) - seconds(r.waveClock))
         try #require(r.pendingIndex == 0)
         r.orb.invulnerableTimer = 0
         r.destroyOrb(cause: .shot(id: 0))
         try #require(!r.orb.isAlive && !r.isGameOver)
         var arrived = 0
-        for _ in 0..<seconds(5) {
+        for _ in 0..<seconds(5 + r.director.gleanerLeastGap * Double(gleaners - 1)) {
             if r.orb.isAlive { r.orb.invulnerableTimer = 1e9 }
             for event in r.step(still) {
                 if case .arrivalTelegraphed(_, .gleaner, let at) = event {
@@ -259,16 +340,18 @@ import GameCore
 
     /// Seconds from a colonist's seizure to its loss, with the Gleaner starting `gap` above it and
     /// the colonist at `at`, in `wave`; and the fastest the Gleaner moved meanwhile.
-    private func drag(waves: RedoubtWaves = RedoubtWaves(), wave: Int, at: Vec2, gap: Double = 30) throws -> (time: Double, speed: Double) {
+    private func drag(waves: RedoubtWaves = RedoubtWaves(), wave: Int, at: Vec2, gap: Double = 30,
+                      from offset: Vec2? = nil) throws -> (time: Double, speed: Double, slowest: Double) {
         var r = quietRun()
         r.director = waves
         r.wave = wave
         let colonist = r.addColonist(at: at)
-        let gleaner = r.addEnemy(.gleaner, at: at + Vec2(0, gap))
+        let gleaner = r.addEnemy(.gleaner, at: at + (offset ?? Vec2(0, gap)))
         RedoubtCoreTests.run(&r, steps: seconds(2)) { if case .colonistSeized = $0 { true } else { false } }
         try #require(try r.req(colonist: colonist).state == .seized(by: gleaner))
         var steps = 0
         var fastest = 0.0
+        var slowest = Double.infinity
         var last = try r.req(enemy: gleaner).pos
         while steps < seconds(20) {
             steps += 1
@@ -276,9 +359,10 @@ import GameCore
             if events.contains(where: { if case .colonistTaken(colonist, .gleaner, gleaner, _) = $0 { true } else { false } }) { break }
             let now = try r.req(enemy: gleaner).pos
             fastest = max(fastest, distance(now, last) / RedoubtRun.timeStep)
+            slowest = min(slowest, distance(now, last) / RedoubtRun.timeStep)
             last = now
         }
-        return (Double(steps) * RedoubtRun.timeStep, fastest)
+        return (Double(steps) * RedoubtRun.timeStep, fastest, slowest)
     }
 
     /// A colonist beside a wall is held for the least time, the Gleaner creeping toward the wall
@@ -299,6 +383,30 @@ import GameCore
         // Before: lost in well under a second.
         let before = try drag(waves: .beforeGleanersThroughWave, wave: 11, at: Vec2(450, 20))
         #expect(before.time < 1)
+    }
+
+    /// A colonist seized right beside a wall (or in a corner) is not held still: the Gleaner
+    /// keeps at least `leastDragSpeed` (8 units a second) for the whole least time, taking a
+    /// longer path along the wall when the straight one is too short, and the least time is
+    /// unchanged.
+    @Test func aDragBesideAWallKeepsAVisibleLeastSpeed() throws {
+        let waves = RedoubtWaves()
+        #expect(waves.leastDragSpeed == 8)
+        let cases: [(at: Vec2, from: Vec2)] = [
+            (Vec2(450, 14), Vec2(0, 30)), (Vec2(450, 586), Vec2(0, -30)), (Vec2(14, 300), Vec2(30, 0)),
+            (Vec2(886, 200), Vec2(-30, 0)), (Vec2(16, 16), Vec2(22, 22)), (Vec2(884, 584), Vec2(-22, -22)),
+            (Vec2(300, 40), Vec2(0, 30)),
+        ]
+        for wave in [0, 2, 4, 7, 9, 10, 11, 12, 13, 14, 20] {
+            let least = waves.seizeTime(forWave: wave)
+            for c in cases {
+                let d = try drag(wave: wave, at: c.at, from: c.from)
+                #expect(abs(d.time - least) <= 2 * RedoubtRun.timeStep + 1e-9, "wave \(wave) at \(c.at): \(d.time) s")
+                #expect(d.slowest >= 8 - 1e-6, "wave \(wave) at \(c.at): \(d.slowest)")
+            }
+        }
+        // Before: none.
+        #expect(RedoubtWaves.beforeGleanersThroughWave.leastDragSpeed == 0)
     }
 
     // MARK: Eases by appearance

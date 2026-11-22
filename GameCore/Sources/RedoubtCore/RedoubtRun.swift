@@ -60,6 +60,9 @@ public struct RedoubtRun: Sendable {
     var pending: [RedoubtSpawn] = []
     var pendingIndex = 0
     var waveClock = 0.0
+    /// The second of the wave (`waveClock`) the wave's last Gleaner marker showed at (negative:
+    /// shown with the opening crowd before the wave began); nil before its first.
+    var lastGleanerMark: Double?
     /// Skitters this wave still has to send in to keep the floor full.
     public internal(set) var quota = 0
     /// The wave's whole Skitter quota as it began, for how much of it is spent.
@@ -173,6 +176,7 @@ public struct RedoubtRun: Sendable {
             waveClock += dt
             while pendingIndex < pending.count, isDue(pending[pendingIndex]) {
                 telegraph(pending[pendingIndex].role, scattered: pending[pendingIndex].scattered)
+                if pending[pendingIndex].role == .gleaner { lastGleanerMark = waveClock }
                 pendingIndex += 1
             }
             topUpFloor(dt)
@@ -184,13 +188,29 @@ public struct RedoubtRun: Sendable {
         waveQuota > 0 ? 1 - Double(max(quota, 0)) / Double(waveQuota) : 1
     }
 
-    /// A held-back spawn's telegraph is due: its time has come, or (a Gleaner coming in through
-    /// the wave) enough of the quota has been sent in. They are taken in order, so each waits for
-    /// the one before it.
+    /// A held-back spawn's telegraph is due. On the clock alone: its time has come. A Gleaner
+    /// coming in through the wave (`RedoubtSpawn.afterQuotaSpent`): no sooner than
+    /// `RedoubtWaves.gleanerLeastGap` after the Gleaner before it, and then once its share of the
+    /// quota has been sent in, or `RedoubtWaves.gleanerFallbackGap` after that Gleaner at the
+    /// latest. The least gap is waived only while the Gleaners still to come are all that holds
+    /// the wave open (`isHeldOnlyByPending`), so a cleared floor never waits on them; even then
+    /// the one telegraphed is on its way at once, so no two share a step. They are taken in
+    /// order, so each waits for the one before it.
     private func isDue(_ spawn: RedoubtSpawn) -> Bool {
-        if spawn.delay <= waveClock { return true }
-        guard let share = spawn.afterQuotaSpent else { return false }
-        return quotaSpent >= share
+        guard let share = spawn.afterQuotaSpent, let last = lastGleanerMark else {
+            if spawn.delay <= waveClock { return true }
+            guard let share = spawn.afterQuotaSpent else { return false }
+            return quotaSpent >= share
+        }
+        let since = waveClock - last + 1e-9
+        if since < director.gleanerLeastGap, !isHeldOnlyByPending { return false }
+        return quotaSpent >= share || since >= director.gleanerFallbackGap
+    }
+
+    /// Nothing holds the wave open but the spawns still to be telegraphed: the quota is spent and
+    /// nothing is on the floor or on its way.
+    private var isHeldOnlyByPending: Bool {
+        quota <= 0 && arrivals.isEmpty && !enemies.contains { !$0.isDead && $0.role.holdsWave }
     }
 
     /// Readies the next wave `startingIn` seconds before it begins: its colonists, the airlock at
@@ -212,6 +232,7 @@ public struct RedoubtRun: Sendable {
         waveLost = 0
         pending = []
         pendingIndex = 0
+        lastGleanerMark = nil
         chooseEntrySides(count: director.entrySides(forWave: next))
         for (index, spawn) in director.arrivals(forWave: next).enumerated() {
             // A spawn landing more than a telegraph's length into the wave (Gleaners: the first
@@ -229,6 +250,7 @@ public struct RedoubtRun: Sendable {
                 continue
             }
             telegraph(spawn.role, showingFor: lead + lands, scattered: scattered)
+            if spawn.role == .gleaner { lastGleanerMark = -lead }
         }
     }
 

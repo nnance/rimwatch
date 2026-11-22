@@ -205,9 +205,11 @@ extension RedoubtRun {
                 becomeHusk(at: index)
                 return
             }
+            // Never slower than `RedoubtWaves.leastDragSpeed`, so it never looks held still; its
+            // path was lengthened at the seizure to fill the least time at that speed.
             var speed = tuning.gleanerDragSpeed * director.gleanerDragScale(forWave: wave)
             let left = least - enemy.held
-            if left > dt { speed = min(speed, dist / left) }
+            if left > dt { speed = min(speed, max(dist / left, director.leastDragSpeed)) }
             enemy.vel = dir * min(speed, dist / dt)
             // The colonist trails behind.
             colonists[c].pos = clampToFloor(enemy.pos - dir * (enemy.radius + tuning.colonistRadius - tuning.figure(2)),
@@ -272,7 +274,9 @@ extension RedoubtRun {
         colonists[c].state = .seized(by: gleaner.id)
         colonists[c].claimedBy = gleaner.id
         colonists[c].vel = .zero
-        let destination = dragDestination(from: gleaner.pos, radius: gleaner.radius)
+        let least = director.seizeTime(forWave: wave)
+        let destination = dragDestination(from: gleaner.pos, radius: gleaner.radius,
+                                          leastPath: min(director.leastDragSpeed, tuning.gleanerDragSpeed) * least)
         gleaner.state = .dragging(colonist: colonists[c].id, destination: destination)
         gleaner.held = 0
         gleaner.vel = .zero
@@ -280,21 +284,28 @@ extension RedoubtRun {
     }
 
     /// The nearest Burrow, or the nearest point of the wall (as close as the Gleaner can get).
-    func dragDestination(from p: Vec2, radius: Double) -> Vec2 {
+    /// When the straight path there is shorter than `leastPath`, a point farther along the same
+    /// wall (toward its middle), or farther round the Burrow's rim (up to a quarter turn), that
+    /// far away instead, so a drag beside a wall keeps moving for the whole least time.
+    func dragDestination(from p: Vec2, radius: Double, leastPath: Double = 0) -> Vec2 {
         let w = tuning.arenaWidth, h = tuning.arenaHeight
         var best = Vec2(radius, p.y)
         var bestDistance = p.x - radius
+        // Along the wall, toward its middle.
+        var along = Vec2(0, p.y < h / 2 ? 1 : -1)
         let walls = [
-            (Vec2(w - radius, p.y), w - radius - p.x),
-            (Vec2(p.x, radius), p.y - radius),
-            (Vec2(p.x, h - radius), h - radius - p.y),
+            (Vec2(w - radius, p.y), w - radius - p.x, Vec2(0, p.y < h / 2 ? 1 : -1)),
+            (Vec2(p.x, radius), p.y - radius, Vec2(p.x < w / 2 ? 1 : -1, 0)),
+            (Vec2(p.x, h - radius), h - radius - p.y, Vec2(p.x < w / 2 ? 1 : -1, 0)),
         ]
-        for (point, d) in walls where d < bestDistance {
+        for (point, d, a) in walls where d < bestDistance {
             best = point
             bestDistance = d
+            along = a
         }
         best = clampToFloor(best, radius: radius)
         bestDistance = max(bestDistance, 0)
+        var burrow: (centre: Vec2, rim: Double)?
         for enemy in enemies where enemy.role == .burrow && !enemy.isDead {
             // Its rim, where the Gleaner can reach without the Burrow shoving it off.
             let rim = enemy.radius + radius
@@ -303,9 +314,21 @@ extension RedoubtRun {
                 let (dir, len) = direction(from: enemy.pos, to: p)
                 best = enemy.pos + (len > 0 ? dir : Vec2(1, 0)) * rim
                 bestDistance = d
+                burrow = (enemy.pos, rim)
             }
         }
-        return best
+        let straight = distance(p, best)
+        guard leastPath > straight else { return best }
+        if let burrow {
+            // Round the rim: the angle whose rim point is `leastPath` away, at most a quarter turn.
+            let d = max(distance(burrow.centre, p), burrow.rim)
+            let cosine = (d * d + burrow.rim * burrow.rim - leastPath * leastPath) / (2 * d * burrow.rim)
+            let turn = acos(min(max(cosine, 0), 1))
+            let base = atan2(best.y - burrow.centre.y, best.x - burrow.centre.x)
+            let options = [base + turn, base - turn].map { clampToFloor(burrow.centre + unitVector($0) * burrow.rim, radius: radius) }
+            return options.max { distance(p, $0) < distance(p, $1) } ?? best
+        }
+        return clampToFloor(best + along * (leastPath * leastPath - straight * straight).squareRoot(), radius: radius)
     }
 
     /// A Gleaner that got its colonist away turns into a Husk where it stands, keeping its id.

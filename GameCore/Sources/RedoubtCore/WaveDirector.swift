@@ -61,6 +61,8 @@ public struct RedoubtWaves: Sendable {
         waves.gleanersThroughWave = false
         waves.seizeTimes = []
         waves.seizeTimeFloor = 0
+        waves.gleanerLeastGap = 0
+        waves.leastDragSpeed = 0
         waves.gleanerDebutDragSlowdown = 6
         waves.easeByAppearance = false
         waves.spitterDebutShotSpeed = 1
@@ -221,9 +223,10 @@ public struct RedoubtWaves: Sendable {
     /// seconds). True: the first `gleanerFirstGroup` of a wave's Gleaners land `gleanerDelay`
     /// after the opening crowd; each of the rest is telegraphed once its share of the wave's
     /// Skitter quota has been sent in (spread evenly up to `gleanerSpreadEnd` of it), or at the
-    /// latest `gleanerFallbackGap` seconds after the one before it, so they come in ones and twos
-    /// through the wave, sooner for a player who clears the floor fast, and never hold a finished
-    /// wave open (with the quota spent, all of them are due). False
+    /// latest `gleanerFallbackGap` seconds after the one before it, but never sooner than
+    /// `gleanerLeastGap` after it, so they come one at a time through the wave, sooner for a
+    /// player who clears the floor fast, and never hold a finished wave open (with the quota
+    /// spent and the floor clear, each is due at once). False
     /// (`beforeGleanersThroughWave`): all of them land together.
     public var gleanersThroughWave = true
     /// How many of a wave's Gleaners land first, `gleanerDelay` after the opening crowd.
@@ -237,8 +240,22 @@ public struct RedoubtWaves: Sendable {
     public var gleanerSpreadStart = 0.35
     public var gleanerSpreadEnd = 0.8
     /// Most seconds between one Gleaner coming in through the wave and the next, however slowly
-    /// the quota goes, so a wave whose floor is not being cleared still gets them.
+    /// the quota goes, so a wave whose floor is not being cleared still gets them. Counted from
+    /// when the one before actually showed.
     public var gleanerFallbackGap = 8.0
+    /// Fewest seconds between one Gleaner's marker and the next within a wave, however fast the
+    /// quota goes (the wave's first counts, even one shown with the opening crowd), so a quick
+    /// player never meets two together. Waived only while the Gleaners still to come are all
+    /// that holds the wave open (quota spent, nothing on the floor or on its way), so a cleared
+    /// floor never waits on them: then each comes as soon as the one before is shot. 0
+    /// (`beforeGleanersThroughWave`): none.
+    public var gleanerLeastGap = 4.0
+    /// Slowest a seized colonist is dragged, units a second, so a drag beside a wall never looks
+    /// held still: when the straight path to the wall is too short to fill the least time
+    /// (`seizeTime`) at this speed, the Gleaner heads for a point farther along the wall (or
+    /// round a Burrow's rim). Shoved there early, it waits. 0 (`beforeGleanersThroughWave`):
+    /// none.
+    public var leastDragSpeed = 8.0
     /// The least time from a seizure to the colonist being lost, in seconds, in each of the
     /// Gleaners' appearances, first to last (waves 2, 4, 7, 9, 10 and on); after the last entry,
     /// and in a wave without Gleaners, `seizeTimeFloor`, which holds for good. A Gleaner closer
@@ -304,7 +321,9 @@ public struct RedoubtWaves: Sendable {
     /// A wave's opening spawns with the second each lands at (at the latest): the ripple, and
     /// for Gleaners their delay; with `gleanersThroughWave`, all but the first group of Gleaners
     /// are spread through the wave by the quota (`RedoubtSpawn.afterQuotaSpent`), on a clock
-    /// fallback.
+    /// fallback. The run counts that fallback (and `gleanerLeastGap`) from when the Gleaner before
+    /// actually showed (`RedoubtRun.isDue`); the `delay` here is the latest it can come, each one
+    /// before it having come at its latest.
     public func arrivals(forWave wave: Int) -> [RedoubtSpawn] {
         let opening = spawns(forWave: wave)
         guard gleanersThroughWave else {
