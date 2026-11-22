@@ -416,6 +416,9 @@ step is pushed so you can install it.
   - [x] Refinement 3 (2026-11-21): colonists are taken later and more slowly in the early
         waves. 425 tests. Pushed before its independent check; see "Colonists taken later and
         more slowly" in the Redoubt design.
+  - [x] Refinement 4 (2026-11-21): Spitters fire in their first wave again and the Burrows'
+        first wave is eased instead. 428 tests. Pushed before its independent check; see
+        "Spitters back, Burrows eased" in the Redoubt design.
 - [ ] 14. Riftwing design written here and approved
 - [ ] 15. Riftwing build
 - [ ] Gate: Riftwing played and refined
@@ -1097,6 +1100,47 @@ slowly in the early stages. Until now the bots measured only how the orb fared.
     Gleaner's marker appears.
   - No test covers where delayed Gleaners land, or the orb being lost while they are still to
     come (seen four times in its runs with nothing going wrong).
+
+### Spitters back, Burrows eased (2026-11-21)
+
+The check of the size change found that the balance had been held by making Spitters almost
+silent in their first wave, and that wave 5 had become the hardest step. You confirmed the
+50% size, so this puts the trade right.
+
+- **Spitters fire in their first wave again.** `spitterDebutSlowdown` is back to 2 (it was
+  3.8). The novice now sees 2.5 Spitter shots in wave 3 (it was 1.0) and none in 11% of games
+  (it was 45%). The biggest step in Spitter fire between two waves is 1.35 times (it was
+  1.83 between waves 6 and 7).
+- **The Burrows' first wave is eased.** Wave 5 sends one Burrow, not two (`burrowsAtDebut`
+  1; the other becomes a Skitter, so the crowd is the same size), and Burrows pour at half
+  rate in wave 5, back to full by wave 8 (`burrowDebutSlowdown` 2, `burrowEaseWaves` 3).
+  Slowing the pour alone was not enough; removing the second Burrow was what did it.
+- **To undo it:** `RedoubtWaves.beforeBurrowEase` gives exactly the previous game.
+- **Novice lives lost by wave** (per game that reached the wave, 80 seeds):
+
+  | Wave | Before | After | Games ending here, before to after |
+  |---|---|---|---|
+  | 1 | 0.10 | 0.10 | 0% to 0% |
+  | 2 | 0.10 | 0.10 | 0% to 0% |
+  | 3 (Spitters) | 0.45 | 0.70 | 4% to 8% |
+  | 4 | 0.82 | 0.95 | 15% to 28% |
+  | 5 (Burrows) | 1.48 | 0.88 | 31% to 10% |
+  | 6 (Threshers) | 1.27 | 1.66 | 25% to 31% |
+  | 7 | 1.50 | 1.47 | 25% to 24% |
+
+- **The balance:** novice wave 6 (mean 5.36; it was 5.53; 5.41 over 160 seeds), survival
+  190 s, lives lost in waves 1 and 2 together 0.20; competent 10 (10.06); wall circler 3
+  (3.42); corner camper 7 (7.16). The novice's mean is near the bottom of the range I aim for.
+- **What it leaves:**
+  - **Wave 6, the Threshers' first, is now the highest step** (about 0.6 to 0.8 lives above
+    wave 5). Partly this is because novices reach it with more lives to lose.
+  - **Wave 2 to 3 is a step of 0.6 lives.** Each Spitter shot ends about one novice life in
+    six, so Spitters that fire cost about half a life in wave 3. It cannot be both.
+  - **A Burrow in wave 5 may be too mild:** it pours about 6 Skitters a game, down from 23.
+    Whether it still feels worth destroying is yours to judge.
+  - More games now end in wave 4 (28%, up from 15%).
+- The harness now prints, per wave, Spitter shots, the share of games with none, Burrow
+  spawns, lives at the wave's start and the share of games ending there.
 
 ### What the independent check of sound, polish and balance found
 
