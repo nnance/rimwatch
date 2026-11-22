@@ -2059,3 +2059,39 @@ None survives without limit, and they now die to clashes more than to the breath
   only been reasoned. Nobody has played it.
 - Design lines above that this changes: a debut wave no longer sends a smaller mix (wave 6);
   Gliders do pay attention to a rider who camps; opponents are not lost to the fill.
+
+### What the independent check of the fixes and tuning found (15d)
+
+Checked 2026-11-22 by a separate checker with its own measurements. Verdict: **pass with
+notes.** The six fixes work by every route it tried, debug and release agree, and its numbers
+match the builder's: novice 5.59 to 5.75 over 600 games, median 6; competent 10.5; no exploit
+bot near the novice. It found these, all in a second round of corrections now being built:
+
+- **Pods fall through ledges.** The sideways drift given to early pods can carry one into the
+  side of a ledge, and it then drops through the rock. About a third of all pods lost to the
+  Rift are lost this way.
+- **The rule against clinging to a ceiling punishes holding height under the roof.** Flying
+  within 30 units of the roof for 1.5 s counted as camping, and a camper lost a clash to
+  anything 2 units above it. The competent bot spent a fifth of its fighting time in that
+  state, and 83% of its lost clashes happened there.
+- **Standing still is punished too hard.** A bot that does nothing loses all three lives to
+  wave-1 Gliders in 48 s (102 s before). A novice that rests on ledges for a few seconds
+  drops from wave 5.6 to 5.2. The count also runs through the break between waves.
+- **Each kind's threat steps up at its second appearance,** because in its first it can never
+  win a clash (lives lost per Striker: 0.01, then 0.20).
+- **Two exploit bots never did what they were named for:** the top-ledge sitter and the
+  ambusher hovered under the top ledge. The checker's own bots that do reach it are far below
+  the bar (wave 1.0 standing or pacing; 3.2 pacing and stooping).
+- **The difficulty tests are close to luck on their seeds,** and four of their bounds were
+  loosened by the last change.
+- **The novice bot:** it has lapses low over the Rift that a person would stop having within
+  a minute, and it ignores mines; against that, it still aims and times its flaps exactly. The
+  checker's estimate for a person's first game on these numbers is wave 4.5 to 5.5, about
+  half a wave under the bot, more if the person rests on ledges or holds height near the roof
+  (the two habits the faults above punish).
+
+**My decisions from it (mine):** resting on a ledge is not camping (a much longer time,
+generous in early waves, not counted in the break or while protected); being pinned or camping
+never changes the clash rule against you, it only draws opponents and removes the beginner's
+leniency; "pinned" means pressed against rock, not flying near it; a kind may win a little in
+its first wave so that its threat ramps.
