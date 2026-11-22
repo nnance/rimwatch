@@ -449,7 +449,10 @@ step is pushed so you can install it.
         its own key with three moods, and haptic cues. 581 tests. Every patch was rendered and
         measured; nothing has been heard or felt. Pushed before any independent check. See
         "Decisions made for sound, music and haptics (15c)".
-  - [ ] 15d. Waves and tuning
+  - [x] 15d. Fixes and tuning (2026-11-21): every defect the logic check found is fixed, the
+        breath is fairer, no place is safe to camp, and the game is tuned to a novice bot
+        remade to fly like a person, which reaches wave 5.5 to 5.6 (median 6) over 600 games.
+        602 tests. Pushed before its independent check; see "Fixes and tuning (15d)".
   - [ ] 15e. Polish
 - [ ] Gate: Riftwing played and refined
 - [ ] 16. Campaign design and planning, approved
@@ -1953,3 +1956,106 @@ Its opinions on the look, also given to the polish stage: figures are the right 
 small next to their glow; with the lamps out, threats outside the pool of light are nearly
 invisible; the touch controls at rest sit over the lowest ledges although the screen has wide
 black margins beside the gallery.
+
+### Fixes and tuning (15d)
+
+Built 2026-11-21, after the check of the logic. All mine. Commits `604e67a`, `c294c95` and
+`8e79833`. This replaces several numbers in "Decisions made while building the logic (15a)";
+where the two disagree, this section is the game as it is.
+
+**The defects, fixed** (each with a test that failed first)
+
+- **The cavern shift** never costs a life. Whoever is standing is put on the nearest ledge of
+  the new cavern; whoever is flying is moved clear of any rock.
+- **A mid-air catch needs pursuit.** A knocked pod is thrown clear and cannot be taken for
+  0.4 s. Catches within 0.4 s of the drop fell from 54% to none; about a third of pods are
+  still caught in the air.
+- **Nothing happens after game over,** so the score announced is the final score.
+- **A respawn is never lost to gas already in the gallery.**
+- **Camping the side join no longer stops arrivals:** after 2.5 s with no clear mouth, one
+  comes anyway at the farthest place, after a 2 s glow.
+- **A pod hatches into its own kind** until the tougher kind has had its debut.
+
+**The novice bot now flies like a person.** It sees the world a quarter of a second late, taps
+at a human rate, misjudges heights, bumps ledges and falls into the Rift: 15% of its lives go
+to the Rift (the old one lost none in 2,400), and pods lie about 4 s before it reaches them
+(the old one took half a second). The old bot is kept as `sharpNovice`; on the retuned game it
+reaches wave 10, which shows how much easier the game now is.
+
+**The game, retuned to that bot**
+
+| | Novice (3 x 200 games) |
+|---|---|
+| Mean wave | 5.52, 5.63, 5.62 |
+| Median | 6 |
+| Games ending in waves 1 to 7 | 0.2%, 2%, 7%, 12%, 23.5%, 27.5%, 21% |
+| Lives lost per wave, waves 1 to 7 | 0.2, 0.35, 0.45, 0.8, 1.2, 1.4, 2.0 |
+| Colonists lost per wave, waves 1 to 7 | 3%, 7%, 9%, 11%, 16%, 23%, 29% |
+
+Lives go to: Strikers 57%, the Rift 15%, Gliders 12%, the breath 13%, Wardens 3%, mines 1%.
+Colonists are now lost to hatching and Gleaners as well as the Rift, as the design meant. The
+competent bot reaches wave 10.1.
+
+What was changed to get there:
+
+- **The clash is more forgiving.** You bounce when within 11 units of level (was 8). To beat
+  you an opponent must be almost squarely on top (more than 27 units above, where contact
+  comes at about 29).
+- **Early opponents misjudge.** In a kind's early appearances, an opponent that would have won
+  a clash sometimes misjudges it and you both bounce: always at its debut, never once it is at
+  full strength, fading over twelve appearances. This is a seeded chance, so the same game
+  replays the same way. Say if you would sooner have a rule with no chance in it.
+- **A bounce is level:** it no longer throws either rig up or down.
+- **Pods are kinder early.** They last 20 s in wave 1 (was 15), 1.2 s less each wave, never
+  under 7 s. A pod from a kind still in its ease falls slowly, drifts toward a ledge it can
+  land on, and hangs above the Rift for up to 5 s before it falls in.
+- **Waves:** wave 5 sends 2 Gliders (was 3); wave 6 sends 3 Strikers (was 2).
+
+**The breath, fairer**
+
+- The first warning comes 90 s into waves 1 and 2, easing to 50 s by wave 7 (was 50 s in
+  every wave). It repeats every 18 s.
+- It rises in four low steps (to about a fifth, a third, under a half and over a half of the
+  gallery's height), each of which can be flown above. Only the fifth fills the gallery, after
+  its own 5 s warning ("THE RIFT ERUPTS"); then the cycle starts again. Opponents shelter from
+  the fill.
+- For the human-like novice, waves take 55 to 120 s, so a low step or two comes in most waves
+  from wave 3 on, and the fill takes 5% of its lives.
+
+**No safe place**
+
+- **No clinging to a ceiling.** Flying up into the roof or the underside of a ledge knocks a
+  rig downward.
+- **A rider pinned against rock for 1.5 s is hunted** there: Strikers and Wardens come up
+  under the same rock.
+- **A rider who stays within a small area for 6 s draws the Gliders,** and gets none of the
+  early leniency.
+- Exploit bots, 200 games each, against the novice's wave 5.5 and 7,150 points a minute:
+
+| Bot | Mean wave | Points a minute |
+|---|---|---|
+| Bouncing level, never committing | 4.3 | 3,160 |
+| Hiding, coming out only to strike below | 3.0 | 1,360 |
+| Hovering under the highest ledge | 2.6 | 1,650 |
+| Sitting on the top ledge | 1.6 | 1,520 |
+| Hovering under the roof | 1.5 | 320 |
+| Riding one vent | 1.3 | 1,250 |
+| Camping the side join | 1.2 | 430 |
+| Hiding low | 1.0 | 960 |
+
+None survives without limit, and they now die to clashes more than to the breath.
+
+**Not met, or borderline**
+
+- **Lives lost in waves 1 and 2 are 0.5 to 0.7 a game,** higher than the old bot's 0.3: about
+  0.4 of it is the human-like novice falling into the Rift while it learns nothing. A person
+  learns; watch whether the first two waves feel fair.
+- **The level bouncer** reaches wave 4.3, about 1.3 short of the novice: inside the bar I set
+  (one wave), but the closest of the exploits.
+- **Standing still for 6 s draws the Gliders.** That may be harsh on a person pausing on a
+  ledge to think; it is the first number I would relax.
+- A forced arrival can appear as close as 107 units to the rider (the safe distance is 220).
+- How the knock from a ceiling, the hunting of a camper and the misjudged clashes feel has
+  only been reasoned. Nobody has played it.
+- Design lines above that this changes: a debut wave no longer sends a smaller mix (wave 6);
+  Gliders do pay attention to a rider who camps; opponents are not lost to the fill.
