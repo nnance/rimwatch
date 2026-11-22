@@ -63,6 +63,6 @@ extension ModeDescriptor {
     /// Steer and flap: no gamepad button layout to choose. The stick side option swaps the
     /// steering stick and the flap side.
     public static let riftwing = ModeDescriptor(id: "riftwing", displayName: "Riftwing",
-                                                summary: "Win by height in the Rift caves and free the turned",
+                                                summary: "Win by height in the Rift caves",
                                                 optionRows: [.soundVolume, .musicVolume, .haptics, .handedness])
 }
