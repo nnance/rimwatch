@@ -290,8 +290,9 @@ extension RiftwingMode {
                     // when it brightens with a pop (`podBecameCatchable`).
                     alpha = 0.45
                     rotation = CGFloat(clock * 16)
-                } else if pod.hoverLeft > 0, pod.pos.y < tuning.riftLevel + 60 {
-                    // Held up over the Rift by its heat: it shimmers, and in its last two seconds
+                } else if pod.hoverLeft > 0, abs(pod.vel.y) < 0.001 {
+                    // Held up over the Rift by its heat (the run stops its fall while it holds
+                    // it, at whatever height that is): it shimmers, and in its last two seconds
                     // it shudders and flashes red, about to drop in.
                     offset = 0
                     rotation = 0
