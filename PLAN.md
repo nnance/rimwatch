@@ -1152,6 +1152,26 @@ The check of the first Gleaner ease found that it ended abruptly: Gleaners come 
 - Also fixed: a run with no waves (used only by tests) dragged at the debut crawl, and the
   test of a full-speed drag ending in a Husk had been stretched to fit; both are put right.
   New tests cover the orb being lost and the game ending while Gleaners are still to come.
+- **The independent check of this and of "Spitters back, Burrows eased" passed with notes**
+  (no code defect; every switch replays its old game exactly; 600 novice games at each point):
+  - **The novice really did get worse, by a third of a wave, and all of it came from the
+    Spitters firing again**, not from this ramp (which is neutral for the novice). Mean wave
+    5.54 before the Spitter change, 5.23 after it, 5.21 now; median 6 then 5. Games ending by
+    wave 4 went from 22% to 38%; Spitter shots are now the main cause of death in waves 3
+    and 4. The novice sits just under the range I aim for.
+  - **The same kind of cliff remains for Spitters and Burrows.** Their eases are counted in
+    wave numbers, but Spitters come in waves 3, 4 and then 7, so between waves 4 and 7 their
+    fire rate more than doubles while their number goes from 3 to 6. Wave 7 is the novice's
+    deadliest wave.
+  - **For Gleaners a cliff remains between waves 7 and 9**, seen by the competent bot:
+    colonists lost 19% then 37%, games losing three or more in the first 20 seconds 19% then
+    67%, and 84% in wave 10.
+  - The corner camper's gain is real but small (about 0.14 of a wave).
+  - Small slips in comments and one harness note.
+- **Decided by you on 2026-11-21:** fix the later-wave Gleaners before moving on, by sending
+  them in through the wave in ones and twos and giving every seizure a minimum time. That
+  pass also counts the Spitters' and Burrows' eases in their own appearances and brings the
+  novice back into range; see "Refinement 6" in the progress list when it lands.
 
 ### Spitters back, Burrows eased (2026-11-21)
 
