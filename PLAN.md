@@ -2254,3 +2254,64 @@ or 6). Resting on ledges now costs nothing measurable. It found:
 
 A third and last round of corrections for these is being built. After it I will stop tuning
 against bots: what remains is yours to judge by playing.
+
+### The third round of corrections (2026-11-22)
+
+Commit `265a33d`. 629 tests. Pushed before any independent check. It answers
+the check of the second round, above. All mine. This is the last round tuned against bots.
+
+- **The two-bounce rule and the harder knock for repeated bumps are gone.** Rock gives the
+  same plain knock every time.
+- **Hatched rigs are gentle for a rider who rescues.** A rig hatched from a pod keeps all of
+  its kind's early ease if you have freed 40% or more of the colonists settled in this wave
+  and the last, none if 20% or fewer, and in proportion between. A novice that only notices
+  pods after 12 to 20 s now reaches wave 4.6 (3.5 before); 21% of its games end in wave 3
+  (55% before). The level-bouncing bot, which never frees anyone, stays at 3.1.
+- **Resting starts afresh each wave.** In wave 1 a rider standing on a ledge keeps its footing
+  when an opponent bounces off it. A bot that does nothing now loses no lives to the Rift in
+  wave 1 (1.5 a game before) and lasts 283 s.
+- **The Warden's first appearances are gentler:** it misjudges its line and dives beside you.
+  Lives lost per Warden sent, by its appearances: about 0.13, 0.26, 0.3 (0.35, 0.44, 0.32
+  before).
+- **The novice bot** falls into the Rift now and then after wave 1 (the Rift takes about 9% of
+  its lives; 3% before).
+- **An extra life every 35,000 points again** (25,000 in the second round), to bring the
+  novice back down after the changes above made the game easier.
+
+**Measured by the builder** (not independently checked)
+
+| | Novice, 3 x 200 games |
+|---|---|
+| Mean wave | 5.64, 5.65, 5.58 |
+| Median | 6 |
+| Games ending in waves 1 to 9 | 0%, 3.5%, 7.5%, 14%, 19%, 25.5%, 16.5%, 10.5%, 3.5% |
+| Lives lost per wave, waves 1 to 8 | 0.30, 0.30, 0.46, 0.75, 1.07, 1.39, 1.57, 1.64 |
+| Colonists lost per wave, waves 1 to 7 | 4%, 4%, 9%, 12%, 15%, 22%, 31% |
+
+The step at wave 3 is now about 1.9 times (it was three to four times), and the curve rises
+without another step. The competent bot reaches wave 13.7.
+
+**Exploit bots, now run from each of the three caverns** (200 games each; mean wave reached)
+
+| Bot | From wave 1 | From wave 4 | From wave 7 |
+|---|---|---|---|
+| Novice, for comparison | 5.6 | 5.9 | 7.45 |
+| Bouncing level | 3.2 | 4.5 | 7.1 |
+| Pacing the top ledge and stooping | 3.0 | 4.1 | 7.3 |
+| Hovering under a ledge | 3.0 | 4.0 | 7.0 |
+| Riding a vent | 2.9 | 4.0 | 7.0 |
+| The rest (sitting, hiding, camping) | 1.0 to 2.8 | 4.0 | 7.0 to 7.1 |
+
+**Not met, and the main risk left**
+
+- **Bouncing level may pay in the second cavern.** The level bouncer as built clings to the
+  roof much of the time, which the game punishes. A version that holds a little under its
+  target and never presses the roof bounces truly level, and started at wave 4 it reaches
+  wave 5.1 to 6.1 against the novice's 5.9. So a patient player who only ever bounces, never
+  commits to a strike and never rescues could do about as well as a beginner who plays
+  properly, from wave 4 on. It scores far less (bounces score nothing), so it is not a way to
+  a high score; it is a way to survive.
+- **From wave 7 the bar is weaker than I set.** Started there with three lives, the novice
+  clears under half a wave, so "a whole wave under the novice" cannot be measured; the test
+  pins "clears fewer waves than the novice and scores less".
+- Lives lost in waves 1 and 2 are 0.5 to 0.6 a game, nearly all the bot's Rift falls.

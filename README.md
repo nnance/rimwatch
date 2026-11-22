@@ -172,13 +172,15 @@ higher fighter wins) and nothing else: its cavern, cast, names and layouts are i
   while diving is a stoop: it scores more the farther you fell and knocks a Warden off in one
   blow (it otherwise takes two). In each kind's first appearances an opponent that would have
   beaten you often misjudges it and you bounce instead; that fades to nothing by its eighth
-  appearance. Bouncing off the same opponent again and again stops being safe.
+  appearance.
 - **Rescue:** every opponent on a rig is a turned colonist; knock one off and its colonist drops
   in a pod, thrown clear of you. Reach the pod to free them (500, 1,000, 1,500 and so on in a
   wave), go after it and catch it in the air for double, and each freed scores 250 more when the
   wave ends. A pod lost in the Rift is gone; early pods fall slowly, drift toward a ledge and
   hang over the Rift for a few seconds first. A pod left on a ledge hatches into a rig one grade
-  tougher: after 20 seconds in wave 1, 1.2 seconds less each wave, never under 7. Lose every
+  tougher: after 20 seconds in wave 1, 1.2 seconds less each wave, never under 7. A hatched rig
+  is as gentle as the rest of its kind for a rider who has been freeing colonists, and at full
+  strength for one who has not. Lose every
   colonist of a wave and the next is flown in the dark until you free one.
 - **Opponents:** Glider (slow, lazy, wanders), Striker (climbs above you, then commits to a strike
   and has to recover), Warden (keeps height, dives, two blows), Gleaner (not on a rig: it carries
@@ -193,7 +195,7 @@ higher fighter wins) and nothing else: its cavern, cast, names and layouts are i
 - **A wave that drags on:** the Rift breathes. The first warning comes 90 seconds into the first
   waves (50 by wave 7), and gas rises in four low steps that can each be flown above. The fifth
   fills the whole gallery, after its own warning; then it starts again.
-- **Lives:** three, at most five, an extra one every 25,000 points; you come back on the ledge
+- **Lives:** three, at most five, an extra one every 35,000 points; you come back on the ledge
   farthest from the fight with a moment of protection.
 
 ## Fold behaviour
