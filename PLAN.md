@@ -427,6 +427,15 @@ step is pushed so you can install it.
       flap plus a dive with no weapon, and told me to build while you were away; I took that
       as approval. My other choices are marked "mine" in "Riftwing design" for you to overrule.
 - [ ] 15. Riftwing build
+  - [x] 15a. Game logic (2026-11-21): the `RiftwingCore` target, its tests, eight scripted
+        bots and the `riftwing` harness. 521 tests. The novice bot reaches wave 5.5 to 5.6 on
+        three sets of 200 games; the competent bot wave 10.3; no exploit bot outlasts or
+        outscores proper play. Pushed before its independent check; see "Decisions made while
+        building the logic (15a)" in the Riftwing design.
+  - [ ] 15b. On screen
+  - [ ] 15c. Sounds, music and haptics
+  - [ ] 15d. Waves and tuning
+  - [ ] 15e. Polish
 - [ ] Gate: Riftwing played and refined
 - [ ] 16. Campaign design and planning, approved
 - [ ] 17. Campaign build
@@ -1532,3 +1541,129 @@ checked independently afterwards (agreed 2026-11-21):
   lamps-out lighting.
 
 Then the gate: you play Riftwing and we refine it until you are happy to move on.
+
+### Decisions made while building the logic (15a)
+
+Built 2026-11-21 in `GameCore/Sources/RiftwingCore/`. The design left these open; all are
+mine, and every number is in `Tuning.swift` or `WaveDirector.swift`. Harness:
+`cd Tools/Harness && swift build -c release -Xswiftc -DDEBUG && .build/release/Harness riftwing 200 25 novice`.
+
+**Gallery and rider**
+
+- The gallery is 900 x 600 units, stepped at 120 Hz. Anything whose centre drops below
+  height 20 is in the Rift and lost; the Rift takes a life even from a protected rider.
+- One size factor, as in Redoubt. The rider is 30 units across (5% of the height). Gliders
+  and Strikers are 28, Wardens and Sowers 30, Gleaners 22, pods and mines 18.
+
+**Flight**
+
+- Gravity 430; falling with the wings open is capped at 290. A flap adds 165 upward (rising
+  speed capped at 250) and 45 along the steer. Steering accelerates at 300 up to 230 across;
+  with no steer the rig glides and loses 30% of its speed a second. Running on a ledge: 150.
+  Rigs land on ledge tops and bump their heads on the undersides.
+- The dive: gravity 1,000, falling up to 600, steering at 35%. The wings take 0.25 s to
+  reopen, with no flap until then. A dive starts with the stick down past 0.6, or B.
+
+**The clash**
+
+- Heights are compared; within 8 units both bounce apart. Against the roof every rig counts
+  as the same height, so sitting at the roof beside an opponent is level.
+- The winner springs up a little. A Warden takes two blows: the first makes it tumble for
+  0.7 s and scores 100.
+- **Added: clash leniency.** In a kind's first appearances it must be well above you (8 + 16
+  units, shrinking with its ease) to win; otherwise you bounce. Winning is unchanged. This was
+  the biggest single lever for gentle opening waves.
+- The stoop scores 2 points per unit fallen since the dive began, in 50s, up to 1,000.
+
+**Layouts** (original, uneven, open over the Rift)
+
+- Terraces (waves 1 to 3, then 10 to 12): five shelves, two vents. Spur (waves 4 to 6): four
+  shelves including one long one and a high bridge, three vents. Shelves (waves 7 to 9): six
+  short shelves scattered high and low, two vents. A shift adds 2 s to the break.
+- Vents are 52 units wide and lift rigs up to a set height. Pods ignore them. To go down
+  through a vent you dive or slip out sideways.
+
+**Pods**
+
+- A pod falls slowly (up to 150). **Added:** a pod from a kind still in its ease falls up to
+  80% more slowly; without this, 20 to 45% of early pods went into the Rift.
+- Life on a ledge: 15 s in wave 1, 0.8 s less each wave, 7 s from wave 11. The hatch warning
+  comes 4 s before. A hatched Glider pod becomes a Striker; everything else becomes a Warden.
+  The new rig stands for 0.8 s before it flies.
+- Rescue scores 500 times n for the nth in a wave, doubled for a mid-air catch, plus 250 for
+  each freed when the wave ends. Destroying a Gleaner that holds a pod frees the colonist.
+
+**Opponents** (each eased over its own first six appearances: 1, 0.7, 0.5, 0.35, 0.2, 0.1)
+
+- **Glider:** wanders, slow, skips some flaps. Eased: slower, lower, and it will not flap up
+  into a rider just above it.
+- **Striker:** climbs above you, then glides down at you for up to 1.4 s, then spends 1 s
+  flying off level, open to a blow. It breaks off after 3.5 s if it cannot get above (added to
+  end stalemates), and hangs back below a rider at the roof. Eased: slower, climbs less,
+  reaches less far, decides later, recovers for twice as long.
+- **Warden:** keeps 80 above you and dives when lined up. Eased: slower and far less likely
+  to dive.
+- **Gleaner:** ignores you; goes to the nearest resting pod, holds it 1 s, then carries it to
+  the nearer side in no less than 4 s. The first of a wave comes 22 s in at its debut (8 s
+  when fully ramped), then one at a time, and only while a pod rests. Eased: half speed, a
+  longer hold, a carry of at least 8 s.
+- **Sower:** drifts laying a tethered mine every 3.5 s, never within 110 of you, at most four
+  at once; mines time out after 18 s. Struck from above it takes its mines with it. Eased:
+  fewer mines, less often.
+- Arrivals glow for 1 s in a mouth and never appear within 220 of you.
+
+**Waves**
+
+| Wave | Sent |
+|---|---|
+| 1 | 4 Gliders |
+| 2 | 5 Gliders |
+| 3 | 3 Gliders, 2 Strikers (Striker debut) |
+| 4 | 2 Gliders, 3 Strikers, 1 Gleaner (Gleaner debut) |
+| 5 | 3 Gliders, 3 Strikers, 1 Gleaner |
+| 6 | 2 Gliders, 2 Strikers, 1 Warden, 1 Gleaner (Warden debut) |
+| 7 | 2 Gliders, 3 Strikers, 1 Warden, 1 Gleaner |
+| 8 | 2 Gliders, 3 Strikers, 1 Warden, 1 Sower, 1 Gleaner (Sower debut) |
+| 9 | 2 Gliders, 3 Strikers, 2 Wardens, 1 Gleaner |
+| 10 | 2 Gliders, 3 Strikers, 2 Wardens, 1 Sower, 2 Gleaners |
+| 11 on | grows to at most 5 Strikers, 4 Wardens, 2 Sowers, 3 Gleaners |
+
+- Two rigs fly at once in waves 1 and 2, rising to six by wave 12. A debut wave is not a wave
+  of the new kind alone, as the design said; it adds the new kind to a smaller mix.
+- Blows score: Glider 250, Striker 500, Warden 750, Gleaner 300, Sower 600. An extra life
+  every 35,000. Respawn after 1.5 s on the ledge farthest from danger, protected for 2.5 s.
+
+**The Rift's breath**
+
+- The first warning comes 50 s into a wave: 3 s of warning, then the gas rises for 1 s, holds
+  for 3 s and falls. It repeats 15 s later.
+- **Added: it grows.** The first breath reaches a little under a third of the way up; each
+  later one in the same wave reaches about a third of the gallery higher, up to the roof. This
+  is what ends every stall: before it, a bot hovering under the roof lived over 1,000 s.
+- Anything under the gas is lost: the rider, opponents (no pod, no points) and pods.
+
+**Lamps out:** a wave that dropped at least one pod and freed none puts the lamps out from
+the next wave's start until a colonist is freed.
+
+**Measured** (harness, novice on three sets of 200 seeds)
+
+- Novice: mean wave 5.50 to 5.59 (±0.10), median 5 or 6, about 218 s. Lives lost per wave,
+  waves 1 to 7: 0.10, 0.27, 0.53, 0.98, 1.29, 1.19, 1.74. Share of pods lost per wave: 4%,
+  11%, 11%, 12%, 16%, 19%, 19%.
+- Competent: mean wave 10.3, median 10, 401 s.
+- Exploit bots, 200 seeds each, against the competent bot's 401 s and 24,150 points a minute:
+  top-ledge sitter 229 s and 1,110; roof hoverer 253 s and 42; vent rider 183 s and 1,680;
+  low hider 79 s and 1,520; level bouncer 184 s and 5,230. A test pins all five.
+
+**Known weak points, for the tuning stage (15d) and for you**
+
+- Rescue pressure is weak. The bots reach a pod about half a second after it lands, so
+  hatching and Gleaners hardly bite: nearly every lost pod is lost to the Rift. A person will
+  be slower, so these may matter more in real play than the numbers show.
+- Lamps out never happens to the novice or competent bot by play.
+- Wave 5 ends the largest share of novice games (26 to 30%), and lives lost dip in wave 6.
+- The novice bot was improved while tuning (it routes round ledges, leads a moving opponent,
+  waits instead of chasing upward). How close it is to a first-time person is reasoned, not
+  measured; the independent check is asked to judge it.
+- Simplifications: opponents pass through one another; Gleaners fly through ledges; pods
+  ignore vents.
